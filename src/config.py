@@ -13,10 +13,14 @@ class Config:
     RAW_DIR: Path = BASE_DIR / "data" / "raw"
     REPORTS_DIR: Path = BASE_DIR / "output" / "reports"
     DB_PATH: Path = BASE_DIR / "data" / "tweets.db"
+    AUTH_STATE_PATH: Path = BASE_DIR / "data" / "auth_state.json"
 
     # X Credentials
     X_AUTH_TOKEN: str = os.getenv("X_AUTH_TOKEN", "").strip()
     X_CT0: str = os.getenv("X_CT0", "").strip()
+
+    # Network / Proxy Settings
+    HTTP_PROXY: str = os.getenv("HTTP_PROXY", os.getenv("ALL_PROXY", "http://127.0.0.1:8118")).strip()
 
     # LLM Settings
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
@@ -34,7 +38,7 @@ class Config:
 
     @classmethod
     def validate_x_credentials(cls) -> bool:
-        return bool(cls.X_AUTH_TOKEN and cls.X_CT0)
+        return cls.AUTH_STATE_PATH.exists() or bool(cls.X_AUTH_TOKEN and cls.X_CT0)
 
     @classmethod
     def validate_gemini_credentials(cls) -> bool:

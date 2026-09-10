@@ -1,38 +1,78 @@
-from unittest.mock import MagicMock
-from src.client import extract_tweet_data
+from src.client import parse_tweet_result, parse_timeline_instructions
 
 
-def test_extract_tweet_data():
-    mock_user = MagicMock()
-    mock_user.id = "42"
-    mock_user.name = "Ada Lovelace"
-    mock_user.screen_name = "adalovelace"
+def test_parse_tweet_result():
+    mock_tweet_result = {
+        "rest_id": "1234567890",
+        "core": {
+            "user_results": {
+                "result": {
+                    "rest_id": "987",
+                    "legacy": {
+                        "name": "Sam Altman",
+                        "screen_name": "sama"
+                    }
+                }
+            }
+        },
+        "legacy": {
+            "full_text": "Shipping new models today.",
+            "created_at": "Thu Sep 10 08:00:00 +0000 2026",
+            "favorite_count": 9999,
+            "retweet_count": 1200,
+            "reply_count": 500,
+            "entities": {
+                "urls": [{"expanded_url": "https://openai.com"}],
+                "media": [{"media_url_https": "https://pbs.twimg.com/media/test.jpg"}]
+            }
+        },
+        "views": {"count": "150000"}
+    }
 
-    mock_tweet = MagicMock()
-    mock_tweet.id = 99999
-    mock_tweet.user = mock_user
-    mock_tweet.full_text = "This is a full tweet text with #ai"
-    mock_tweet.created_at = "Thu Sep 10 01:00:00 +0000 2026"
-    mock_tweet.retweeted_tweet = None
-    mock_tweet.is_quote_status = False
-    mock_tweet.quote = None
-    mock_tweet.favorite_count = 88
-    mock_tweet.retweet_count = 12
-    mock_tweet.reply_count = 5
-    mock_tweet.view_count = 1200
-    mock_tweet.urls = [{"expanded_url": "https://anthropic.com"}]
-    mock_tweet.media = [{"media_url_https": "https://pbs.twimg.com/media/test.jpg"}]
+    parsed = parse_tweet_result(mock_tweet_result)
+    assert parsed is not None
+    assert parsed["tweet_id"] == "1234567890"
+    assert parsed["author_name"] == "Sam Altman"
+    assert parsed["author_username"] == "sama"
+    assert parsed["text"] == "Shipping new models today."
+    assert parsed["like_count"] == 9999
+    assert parsed["view_count"] == 150000
+    assert parsed["urls"] == ["https://openai.com"]
+    assert parsed["media_urls"] == ["https://pbs.twimg.com/media/test.jpg"]
 
-    data = extract_tweet_data(mock_tweet)
 
-    assert data["tweet_id"] == "99999"
-    assert data["author_id"] == "42"
-    assert data["author_name"] == "Ada Lovelace"
-    assert data["author_username"] == "adalovelace"
-    assert data["text"] == "This is a full tweet text with #ai"
-    assert data["like_count"] == 88
-    assert data["retweet_count"] == 12
-    assert data["urls"] == ["https://anthropic.com"]
-    assert data["media_urls"] == ["https://pbs.twimg.com/media/test.jpg"]
-    assert not data["is_retweet"]
-    assert not data["is_quote"]
+def test_parse_timeline_instructions():
+    instructions = [
+        {
+            "type": "TimelineAddEntries",
+            "entries": [
+                {
+                    "content": {
+                        "itemContent": {
+                            "tweet_results": {
+                                "result": {
+                                    "rest_id": "88888",
+                                    "core": {
+                                        "user_results": {
+                                            "result": {
+                                                "legacy": {"name": "Test", "screen_name": "test"}
+                                            }
+                                        }
+                                    },
+                                    "legacy": {
+                                        "full_text": "Sample tweet in timeline",
+                                        "created_at": "Thu Sep 10 08:30:00 +0000 2026",
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+
+    tweets = parse_timeline_instructions(instructions)
+    assert len(tweets) == 1
+    assert tweets[0]["tweet_id"] == "88888"
+    assert tweets[0]["text"] == "Sample tweet in timeline"

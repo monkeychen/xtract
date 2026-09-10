@@ -1,141 +1,301 @@
 import asyncio
+import json
 import logging
+import re
+from pathlib import Path
 from typing import Any
-from twikit import Client
+from playwright.async_api import async_playwright, BrowserContext, Page, Response
+from rich.console import Console
 from .config import Config
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 
-def extract_tweet_data(tweet: Any) -> dict[str, Any]:
-    author = getattr(tweet, "user", None)
-    author_id = getattr(author, "id", "") if author else ""
-    author_name = getattr(author, "name", "") if author else ""
-    author_username = getattr(author, "screen_name", "") if author else ""
+def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
+    """Extracts clean tweet dictionary from a tweet_results GraphQL node."""
+    if not tweet_result:
+        return None
 
-    is_retweet = bool(getattr(tweet, "retweeted_tweet", None))
+    # Handle TweetWithVisibilityResults wrapper
+    if tweet_result.get("__typename") == "TweetWithVisibilityResults":
+        tweet_result = tweet_result.get("tweet", {})
+
+    legacy = tweet_result.get("legacy")
+    if not legacy:
+        return None
+
+    # Author info
+    user_results = tweet_result.get("core", {}).get("user_results", {}).get("result", {})
+    user_legacy = user_results.get("legacy", {})
+    author_id = user_results.get("rest_id", "")
+    author_name = user_legacy.get("name", "")
+    author_username = user_legacy.get("screen_name", "")
+
+    # Check for long-form note tweet (X Articles / Long Tweets)
+    note_tweet = tweet_result.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
+    full_text = note_tweet.get("text") or legacy.get("full_text", "")
+
+    # Retweet info
+    is_retweet = "retweeted_status_result" in legacy
     retweeted_author = ""
     retweeted_text = ""
-    if is_retweet and tweet.retweeted_tweet:
-        rt_user = getattr(tweet.retweeted_tweet, "user", None)
-        retweeted_author = getattr(rt_user, "screen_name", "") if rt_user else ""
-        retweeted_text = getattr(tweet.retweeted_tweet, "full_text", None) or getattr(
-            tweet.retweeted_tweet, "text", ""
-        )
+    if is_retweet:
+        rt_result = legacy.get("retweeted_status_result", {}).get("result", {})
+        if rt_result.get("__typename") == "TweetWithVisibilityResults":
+            rt_result = rt_result.get("tweet", {})
+        rt_legacy = rt_result.get("legacy", {})
+        rt_user = rt_result.get("core", {}).get("user_results", {}).get("result", {}).get("legacy", {})
+        retweeted_author = rt_user.get("screen_name", "")
+        retweeted_text = rt_legacy.get("full_text", "")
 
-    is_quote = bool(getattr(tweet, "is_quote_status", False)) and bool(getattr(tweet, "quote", None))
+    # Quote info
+    is_quote = legacy.get("is_quote_status", False)
     quoted_author = ""
     quoted_text = ""
-    if is_quote and tweet.quote:
-        q_user = getattr(tweet.quote, "user", None)
-        quoted_author = getattr(q_user, "screen_name", "") if q_user else ""
-        quoted_text = getattr(tweet.quote, "full_text", None) or getattr(tweet.quote, "text", "")
+    if is_quote and "quoted_status_result" in tweet_result:
+        q_result = tweet_result.get("quoted_status_result", {}).get("result", {})
+        if q_result.get("__typename") == "TweetWithVisibilityResults":
+            q_result = q_result.get("tweet", {})
+        q_legacy = q_result.get("legacy", {})
+        q_user = q_result.get("core", {}).get("user_results", {}).get("result", {}).get("legacy", {})
+        quoted_author = q_user.get("screen_name", "")
+        quoted_text = q_legacy.get("full_text", "")
 
+    # Media & URLs
     media_urls = []
-    if getattr(tweet, "media", None):
-        for m in tweet.media:
-            if isinstance(m, dict) and "media_url_https" in m:
-                media_urls.append(m["media_url_https"])
-            elif hasattr(m, "media_url_https"):
-                media_urls.append(getattr(m, "media_url_https"))
+    entities = legacy.get("entities", {})
+    for m in entities.get("media", []):
+        if "media_url_https" in m:
+            media_urls.append(m["media_url_https"])
 
     urls = []
-    if getattr(tweet, "urls", None):
-        for u in tweet.urls:
-            if isinstance(u, dict) and "expanded_url" in u:
-                urls.append(u["expanded_url"])
-            elif isinstance(u, str):
-                urls.append(u)
-
-    full_text = getattr(tweet, "full_text", None) or getattr(tweet, "text", "")
+    for u in entities.get("urls", []):
+        expanded = u.get("expanded_url")
+        if expanded:
+            urls.append(expanded)
 
     return {
-        "tweet_id": str(tweet.id),
+        "tweet_id": str(tweet_result.get("rest_id", "")),
         "author_id": str(author_id),
         "author_name": author_name,
         "author_username": author_username,
         "text": full_text,
-        "created_at": getattr(tweet, "created_at", ""),
+        "created_at": legacy.get("created_at", ""),
         "is_retweet": is_retweet,
         "retweeted_author": retweeted_author,
         "retweeted_text": retweeted_text,
         "is_quote": is_quote,
         "quoted_author": quoted_author,
         "quoted_text": quoted_text,
-        "like_count": getattr(tweet, "favorite_count", 0) or 0,
-        "retweet_count": getattr(tweet, "retweet_count", 0) or 0,
-        "reply_count": getattr(tweet, "reply_count", 0) or 0,
-        "view_count": getattr(tweet, "view_count", 0) or 0,
+        "like_count": legacy.get("favorite_count", 0),
+        "retweet_count": legacy.get("retweet_count", 0),
+        "reply_count": legacy.get("reply_count", 0),
+        "view_count": int(tweet_result.get("views", {}).get("count", 0) or 0),
         "urls": urls,
         "media_urls": media_urls,
     }
 
 
+def parse_timeline_instructions(instructions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extracts tweets from timeline GraphQL instructions entries."""
+    parsed_tweets = []
+    for instruction in instructions:
+        type_ = instruction.get("type")
+        entries = []
+        if type_ == "TimelineAddEntries":
+            entries = instruction.get("entries", [])
+        elif type_ == "TimelineAddToModule":
+            entries = instruction.get("moduleItems", [])
+
+        for entry in entries:
+            content = entry.get("content", {})
+            item_content = content.get("itemContent", {})
+            tweet_results = item_content.get("tweet_results", {}).get("result")
+            if tweet_results:
+                tweet_data = parse_tweet_result(tweet_results)
+                if tweet_data and tweet_data["tweet_id"]:
+                    parsed_tweets.append(tweet_data)
+
+            # Handle threads / items nested in modules
+            items = content.get("items", [])
+            for sub_item in items:
+                sub_ic = sub_item.get("item", {}).get("itemContent", {})
+                sub_tr = sub_ic.get("tweet_results", {}).get("result")
+                if sub_tr:
+                    sub_data = parse_tweet_result(sub_tr)
+                    if sub_data and sub_data["tweet_id"]:
+                        parsed_tweets.append(sub_data)
+    return parsed_tweets
+
+
 class XClient:
     def __init__(self) -> None:
-        self.client = Client(language="zh-CN")
-        self._authenticated = False
+        self.proxy_dict = None
+        if Config.HTTP_PROXY:
+            self.proxy_dict = {"server": Config.HTTP_PROXY}
 
-    def setup_cookies(self) -> None:
-        if not Config.validate_x_credentials():
-            raise ValueError("X_AUTH_TOKEN or X_CT0 is missing in .env configuration.")
-        self.client.set_cookies({
-            "auth_token": Config.X_AUTH_TOKEN,
-            "ct0": Config.X_CT0,
-        })
-        self._authenticated = True
+    async def _setup_context(self, browser: Any) -> BrowserContext:
+        """Sets up browser context with cookies or storage state."""
+        if Config.AUTH_STATE_PATH.exists():
+            context = await browser.new_context(
+                storage_state=str(Config.AUTH_STATE_PATH),
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 900}
+            )
+            return context
+
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 900}
+        )
+        if Config.X_AUTH_TOKEN:
+            cookies = [
+                {"name": "auth_token", "value": Config.X_AUTH_TOKEN, "domain": ".x.com", "path": "/"},
+            ]
+            if Config.X_CT0:
+                cookies.append({"name": "ct0", "value": Config.X_CT0, "domain": ".x.com", "path": "/"})
+            await context.add_cookies(cookies)
+        return context
+
+    async def login_interactive(self) -> None:
+        """Opens a visible browser window for the user to log in and saves auth_state.json."""
+        console.print("[bold cyan]🚀 正在启动交互式浏览器，请在弹出的窗口中登录 X (Twitter)...[/bold cyan]")
+        Config.ensure_dirs()
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=False,
+                proxy=self.proxy_dict
+            )
+            context = await self._setup_context(browser)
+            page = await context.new_page()
+
+            await page.goto("https://x.com/login", wait_until="domcontentloaded")
+            console.print("[yellow]⏳ 请在浏览器中完成登录。检测到登录跳转至首页后将自动保存凭证并退出...[/yellow]")
+
+            # Wait until user reaches /home or auth_token cookie is created
+            for _ in range(300):  # 5 minutes timeout
+                await asyncio.sleep(1)
+                current_url = page.url
+                if "x.com/home" in current_url:
+                    await asyncio.sleep(2)  # Wait for session cookies to flush
+                    await context.storage_state(path=str(Config.AUTH_STATE_PATH))
+                    console.print(f"[bold green]🎉 登录成功！会话凭证已持久化至: {Config.AUTH_STATE_PATH}[/bold green]")
+                    await browser.close()
+                    return
+
+            await browser.close()
+            raise TimeoutError("登录超时（5分钟未完成登录）。")
 
     async def verify_auth(self) -> dict[str, str]:
-        """
-        Verifies if credentials are valid by querying the current user.
-        Returns basic user info if successful.
-        """
-        if not self._authenticated:
-            self.setup_cookies()
-        try:
-            current_user = await self.client.user()
-            return {
-                "id": str(current_user.id),
-                "name": current_user.name,
-                "screen_name": current_user.screen_name,
-            }
-        except Exception as e:
-            raise RuntimeError(f"X authentication failed: {e}. Check if auth_token or ct0 expired.") from e
+        """Verifies authentication status in headless mode."""
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 python main.py --login 登录。")
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                proxy=self.proxy_dict
+            )
+            context = await self._setup_context(browser)
+            page = await context.new_page()
+
+            try:
+                response = await page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+                await page.wait_for_timeout(3000)
+                current_url = page.url
+
+                if "login" in current_url or "i/flow" in current_url:
+                    raise RuntimeError("会话失效（被重定向至登录页）。请重新配置 auth_token 或执行 python main.py --login。")
+
+                cookies = await context.cookies()
+                cookie_names = {c["name"] for c in cookies}
+                if "auth_token" not in cookie_names:
+                    raise RuntimeError("未检测到有效 auth_token Cookie。")
+
+                # Try to get screen name from page or return success
+                title = await page.title()
+                return {
+                    "id": "Authenticated",
+                    "name": title.replace("/ X", "").strip() or "X User",
+                    "screen_name": "logged_in",
+                }
+            finally:
+                await browser.close()
 
     async def fetch_following_timeline(
         self,
         max_pages: int = 3,
-        page_delay: float = 2.0
+        page_delay: float = 2.5
     ) -> list[dict[str, Any]]:
         """
-        Fetches tweets from Following timeline (HomeLatestTimeline).
+        Intercepts real GraphQL responses for HomeLatestTimeline via headless Playwright.
         """
-        if not self._authenticated:
-            self.setup_cookies()
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
 
+        captured_raw_instructions: list[list[dict[str, Any]]] = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if ("HomeLatestTimeline" in url or "HomeTimeline" in url) and response.status == 200:
+                try:
+                    data = await response.json()
+                    instructions = (
+                        data.get("data", {})
+                        .get("home", {})
+                        .get("home_timeline_urt", {})
+                        .get("instructions", [])
+                    )
+                    if instructions:
+                        captured_raw_instructions.append(instructions)
+                except Exception as e:
+                    logger.debug(f"Failed to parse intercepted response: {e}")
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                proxy=self.proxy_dict
+            )
+            context = await self._setup_context(browser)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            console.print("[cyan]🌐 正在无头打开 x.com/home 并挂载网络监听器...[/cyan]")
+            await page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(3000)
+
+            # Check if redirected to login
+            if "login" in page.url or "i/flow" in page.url:
+                await browser.close()
+                raise RuntimeError("X 认证失败：页面被重定向至登录页。请检查 auth_token 是否过期。")
+
+            # Click "Following" tab to ensure we are receiving Following timeline
+            try:
+                following_tab = page.locator("a[role='tab']", has_text=re.compile(r"Following|正在关注|关注", re.I)).first
+                if await following_tab.is_visible(timeout=3000):
+                    await following_tab.click()
+                    await page.wait_for_timeout(2000)
+            except Exception as e:
+                logger.debug(f"Could not click following tab directly: {e}")
+
+            # Scroll down to trigger pagination and collect more pages
+            for page_idx in range(1, max_pages):
+                console.print(f"[cyan]📜 正在向下滚动加载第 {page_idx + 1} 页推文...[/cyan]")
+                await page.evaluate("window.scrollBy(0, 1800)")
+                await page.wait_for_timeout(int(page_delay * 1000))
+
+            await browser.close()
+
+        # Parse all captured instructions
         all_tweets: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
-
-        batch = await self.client.get_latest_timeline(count=20)
-        pages_fetched = 0
-
-        while batch and pages_fetched < max_pages:
-            pages_fetched += 1
-            current_batch_tweets = []
-            for item in batch:
-                tweet_data = extract_tweet_data(item)
-                t_id = tweet_data["tweet_id"]
-                if t_id not in seen_ids:
-                    seen_ids.add(t_id)
-                    all_tweets.append(tweet_data)
-                    current_batch_tweets.append(tweet_data)
-
-            if pages_fetched < max_pages:
-                await asyncio.sleep(page_delay)
-                try:
-                    batch = await batch.next()
-                except Exception as e:
-                    logger.warning(f"Error fetching next page of timeline: {e}")
-                    break
+        for inst_list in captured_raw_instructions:
+            batch_tweets = parse_timeline_instructions(inst_list)
+            for t in batch_tweets:
+                if t["tweet_id"] not in seen_ids:
+                    seen_ids.add(t["tweet_id"])
+                    all_tweets.append(t)
 
         return all_tweets
