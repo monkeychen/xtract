@@ -1,16 +1,101 @@
-# Environments & Dependencies
-.venv/
-__pycache__/
-*.pyc
-
-# Local Data & Secrets
+# ==============================================================================
+# 1. 认证凭据与敏感数据 (Security & Secrets - 严禁提交)
+# ==============================================================================
 .env
+.env.*
+!.env.example
+cookies.json
+data/auth_state.json
+*.pem
+*.key
+
+# ==============================================================================
+# 2. 本地数据库、运行缓存与日志 (Local Storage, DB & Logs)
+# ==============================================================================
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 data/tweets.db
 data/raw/*
 !data/raw/.gitkeep
-cookies.json
+data/*.log
+*.log
 
-# IDE / OS
+# 导出的推文阅读归档 (早报 reports 纳入版本控制或按需忽略)
+output/tweets_*.md
+
+# ==============================================================================
+# 3. Python 虚拟环境与依赖 (Environments & Packages)
+# ==============================================================================
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# ==============================================================================
+# 4. Python 字节码与构建产物 (Bytecode & Build Artifacts)
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==============================================================================
+# 5. 测试与代码质量工具缓存 (Testing & Linter Caches)
+# ==============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+test-results/
+playwright-report/
+
+# ==============================================================================
+# 6. 操作系统与编辑器配置 (OS & IDE Artifacts)
+# ==============================================================================
+# macOS
 .DS_Store
-.vscode/
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# VS Code / Cursor
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (PyCharm / IntelliJ)
 .idea/
+
+# Vim / Sublime / Windows
+*.swp
+*.swo
+*~
+Thumbs.db
+ehthumbs.db
+Desktop.ini
