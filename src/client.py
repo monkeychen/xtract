@@ -134,23 +134,42 @@ class XClient:
         self.timeout_seconds = timeout or Config.FETCH_TIMEOUT
         self.timeout_ms = self.timeout_seconds * 1000
         self.proxy_dict = None
-        if Config.HTTP_PROXY:
-            self.proxy_dict = {"server": Config.HTTP_PROXY}
+    async def _launch_browser(self, p: Any, headless: bool = True) -> Any:
+        args = [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-infobars",
+        ]
+        try:
+            # Prefer actual Google Chrome installation for authentic fingerprint
+            return await p.chromium.launch(
+                channel="chrome",
+                headless=headless,
+                proxy=self.proxy_dict,
+                args=args,
+            )
+        except Exception:
+            return await p.chromium.launch(
+                headless=headless,
+                proxy=self.proxy_dict,
+                args=args,
+            )
 
     async def _setup_context(self, browser: Any, timeout_ms: int | None = None) -> BrowserContext:
         """Sets up browser context with cookies, timeouts, or storage state."""
         effective_timeout_ms = timeout_ms or self.timeout_ms
+        context_kwargs: dict[str, Any] = {
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "viewport": {"width": 1280, "height": 900},
+            "locale": "zh-CN",
+            "timezone_id": "Asia/Shanghai",
+        }
+
         if Config.AUTH_STATE_PATH.exists():
-            context = await browser.new_context(
-                storage_state=str(Config.AUTH_STATE_PATH),
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 900}
-            )
+            context_kwargs["storage_state"] = str(Config.AUTH_STATE_PATH)
+            context = await browser.new_context(**context_kwargs)
         else:
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 900}
-            )
+            context = await browser.new_context(**context_kwargs)
             if Config.X_AUTH_TOKEN:
                 cookies = [
                     {"name": "auth_token", "value": Config.X_AUTH_TOKEN, "domain": ".x.com", "path": "/"},
@@ -159,6 +178,8 @@ class XClient:
                     cookies.append({"name": "ct0", "value": Config.X_CT0, "domain": ".x.com", "path": "/"})
                 await context.add_cookies(cookies)
 
+        # Remove navigator.webdriver automation flag
+        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         context.set_default_navigation_timeout(effective_timeout_ms)
         context.set_default_timeout(effective_timeout_ms)
         return context
@@ -167,14 +188,11 @@ class XClient:
         """Opens a visible browser window for the user to log in and saves auth_state.json."""
         timeout_s = timeout or self.timeout_seconds
         timeout_ms = timeout_s * 1000
-        console.print(f"[bold cyan]🚀 正在启动交互式浏览器（超时阈值: {timeout_s} 秒），请在弹出的窗口中登录 X (Twitter)...[/bold cyan]")
+        console.print(f"[bold cyan]🚀 正在启动真实 Chrome 浏览器（超时阈值: {timeout_s} 秒），请在窗口中登录 X...[/bold cyan]")
         Config.ensure_dirs()
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=False,
-                proxy=self.proxy_dict
-            )
+            browser = await self._launch_browser(p, headless=False)
             context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
 
@@ -213,10 +231,7 @@ class XClient:
         timeout_ms = timeout_s * 1000
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                proxy=self.proxy_dict
-            )
+            browser = await self._launch_browser(p, headless=True)
             context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
 
@@ -276,10 +291,7 @@ class XClient:
                     logger.debug(f"Failed to parse intercepted response: {e}")
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                proxy=self.proxy_dict
-            )
+            browser = await self._launch_browser(p, headless=True)
             context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
             page.on("response", handle_response)
