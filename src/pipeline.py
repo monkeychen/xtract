@@ -17,7 +17,11 @@ class Pipeline:
         self.storage = Storage()
         self.client = XClient()
 
-    async def fetch_and_store(self, max_pages: int | None = None) -> tuple[int, int, int]:
+    async def fetch_and_store(
+        self,
+        max_pages: int | None = None,
+        timeout: int | None = None
+    ) -> tuple[int, int, int]:
         """
         Fetches tweets from Following timeline and stores in SQLite.
         Returns: (fetched_count, inserted_count, skipped_count)
@@ -25,7 +29,7 @@ class Pipeline:
         pages = max_pages or Config.FETCH_MAX_PAGES
         console.print(f"[bold cyan]⏳ 开始从 X (Following 时间线) 抓取推文，计划拉取 {pages} 页...[/bold cyan]")
 
-        tweets = await self.client.fetch_following_timeline(max_pages=pages)
+        tweets = await self.client.fetch_following_timeline(max_pages=pages, timeout=timeout)
         fetched_count = len(tweets)
         console.print(f"[green]✓ 成功拉取到 {fetched_count} 条推文[/green]")
 
@@ -68,9 +72,14 @@ class Pipeline:
         console.print(f"[bold green]🎉 早报已生成：{report_file}[/bold green]")
         return report_file
 
-    async def run_daily(self, max_pages: int | None = None, hours: int = 24) -> Path | None:
+    async def run_daily(
+        self,
+        max_pages: int | None = None,
+        hours: int = 24,
+        timeout: int | None = None
+    ) -> Path | None:
         """
         Runs the end-to-end workflow: Fetch -> Store -> Summarize.
         """
-        await self.fetch_and_store(max_pages=max_pages)
+        await self.fetch_and_store(max_pages=max_pages, timeout=timeout)
         return self.generate_report(hours=hours)

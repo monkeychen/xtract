@@ -130,37 +130,44 @@ def parse_timeline_instructions(instructions: list[dict[str, Any]]) -> list[dict
 
 
 class XClient:
-    def __init__(self) -> None:
+    def __init__(self, timeout: int | None = None) -> None:
+        self.timeout_seconds = timeout or Config.FETCH_TIMEOUT
+        self.timeout_ms = self.timeout_seconds * 1000
         self.proxy_dict = None
         if Config.HTTP_PROXY:
             self.proxy_dict = {"server": Config.HTTP_PROXY}
 
-    async def _setup_context(self, browser: Any) -> BrowserContext:
-        """Sets up browser context with cookies or storage state."""
+    async def _setup_context(self, browser: Any, timeout_ms: int | None = None) -> BrowserContext:
+        """Sets up browser context with cookies, timeouts, or storage state."""
+        effective_timeout_ms = timeout_ms or self.timeout_ms
         if Config.AUTH_STATE_PATH.exists():
             context = await browser.new_context(
                 storage_state=str(Config.AUTH_STATE_PATH),
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 900}
             )
-            return context
+        else:
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 900}
+            )
+            if Config.X_AUTH_TOKEN:
+                cookies = [
+                    {"name": "auth_token", "value": Config.X_AUTH_TOKEN, "domain": ".x.com", "path": "/"},
+                ]
+                if Config.X_CT0:
+                    cookies.append({"name": "ct0", "value": Config.X_CT0, "domain": ".x.com", "path": "/"})
+                await context.add_cookies(cookies)
 
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 900}
-        )
-        if Config.X_AUTH_TOKEN:
-            cookies = [
-                {"name": "auth_token", "value": Config.X_AUTH_TOKEN, "domain": ".x.com", "path": "/"},
-            ]
-            if Config.X_CT0:
-                cookies.append({"name": "ct0", "value": Config.X_CT0, "domain": ".x.com", "path": "/"})
-            await context.add_cookies(cookies)
+        context.set_default_navigation_timeout(effective_timeout_ms)
+        context.set_default_timeout(effective_timeout_ms)
         return context
 
-    async def login_interactive(self) -> None:
+    async def login_interactive(self, timeout: int | None = None) -> None:
         """Opens a visible browser window for the user to log in and saves auth_state.json."""
-        console.print("[bold cyan]🚀 正在启动交互式浏览器，请在弹出的窗口中登录 X (Twitter)...[/bold cyan]")
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        console.print(f"[bold cyan]🚀 正在启动交互式浏览器（超时阈值: {timeout_s} 秒），请在弹出的窗口中登录 X (Twitter)...[/bold cyan]")
         Config.ensure_dirs()
 
         async with async_playwright() as p:
@@ -168,41 +175,53 @@ class XClient:
                 headless=False,
                 proxy=self.proxy_dict
             )
-            context = await self._setup_context(browser)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
 
-            await page.goto("https://x.com/login", wait_until="domcontentloaded")
-            console.print("[yellow]⏳ 请在浏览器中完成登录。检测到登录跳转至首页后将自动保存凭证并退出...[/yellow]")
+            try:
+                # Use commit wait_until so page displays immediately even on slow proxy networks
+                await page.goto("https://x.com/login", wait_until="commit", timeout=timeout_ms)
+            except Exception as e:
+                console.print(f"[yellow]⚠️ 页面加载较慢或有重试: {e}，窗口已打开，可直接在浏览器中操作...[/yellow]")
 
-            # Wait until user reaches /home or auth_token cookie is created
-            for _ in range(300):  # 5 minutes timeout
+            console.print("[yellow]⏳ 请在浏览器窗口中完成登录。检测到成功跳转至首页后将自动保存凭证并退出...[/yellow]")
+
+            # Wait until user reaches /home or auth_token cookie is created (up to 5 minutes)
+            for _ in range(300):
                 await asyncio.sleep(1)
-                current_url = page.url
-                if "x.com/home" in current_url:
-                    await asyncio.sleep(2)  # Wait for session cookies to flush
-                    await context.storage_state(path=str(Config.AUTH_STATE_PATH))
-                    console.print(f"[bold green]🎉 登录成功！会话凭证已持久化至: {Config.AUTH_STATE_PATH}[/bold green]")
-                    await browser.close()
-                    return
+                try:
+                    current_url = page.url
+                    if "x.com/home" in current_url:
+                        await asyncio.sleep(2)  # Wait for session cookies to flush
+                        await context.storage_state(path=str(Config.AUTH_STATE_PATH))
+                        console.print(f"[bold green]🎉 登录成功！会话凭证已持久化至: {Config.AUTH_STATE_PATH}[/bold green]")
+                        await browser.close()
+                        return
+                except Exception:
+                    # In case page is navigating or closed
+                    pass
 
             await browser.close()
             raise TimeoutError("登录超时（5分钟未完成登录）。")
 
-    async def verify_auth(self) -> dict[str, str]:
+    async def verify_auth(self, timeout: int | None = None) -> dict[str, str]:
         """Verifies authentication status in headless mode."""
         if not Config.validate_x_credentials():
             raise ValueError("未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 python main.py --login 登录。")
+
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
                 proxy=self.proxy_dict
             )
-            context = await self._setup_context(browser)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
 
             try:
-                response = await page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+                await page.goto("https://x.com/home", wait_until="commit", timeout=timeout_ms)
                 await page.wait_for_timeout(3000)
                 current_url = page.url
 
@@ -227,7 +246,8 @@ class XClient:
     async def fetch_following_timeline(
         self,
         max_pages: int = 3,
-        page_delay: float = 2.5
+        page_delay: float = 2.5,
+        timeout: int | None = None
     ) -> list[dict[str, Any]]:
         """
         Intercepts real GraphQL responses for HomeLatestTimeline via headless Playwright.
@@ -235,6 +255,8 @@ class XClient:
         if not Config.validate_x_credentials():
             raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
 
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
         captured_raw_instructions: list[list[dict[str, Any]]] = []
 
         async def handle_response(response: Response) -> None:
@@ -258,12 +280,12 @@ class XClient:
                 headless=True,
                 proxy=self.proxy_dict
             )
-            context = await self._setup_context(browser)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
             page = await context.new_page()
             page.on("response", handle_response)
 
-            console.print("[cyan]🌐 正在无头打开 x.com/home 并挂载网络监听器...[/cyan]")
-            await page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
+            console.print(f"[cyan]🌐 正在无头打开 x.com/home 并挂载网络监听器（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto("https://x.com/home", wait_until="commit", timeout=timeout_ms)
             await page.wait_for_timeout(3000)
 
             # Check if redirected to login

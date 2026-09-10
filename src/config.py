@@ -28,7 +28,7 @@ class Config:
 
     # Scraping Settings
     FETCH_MAX_PAGES: int = int(os.getenv("FETCH_MAX_PAGES", "3"))
-    FETCH_TIMEOUT: int = int(os.getenv("FETCH_TIMEOUT", "30"))
+    FETCH_TIMEOUT: int = int(os.getenv("FETCH_TIMEOUT", "60"))
 
     @classmethod
     def ensure_dirs(cls) -> None:

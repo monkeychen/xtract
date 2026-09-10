@@ -10,7 +10,7 @@ from src.pipeline import Pipeline
 console = Console()
 
 
-async def check_auth_cmd() -> None:
+async def check_auth_cmd(timeout: int | None = None) -> None:
     console.print("[cyan]🔍 正在验证 X 登录状态与 Cookie 有效性...[/cyan]")
     if not Config.validate_x_credentials():
         console.print(
@@ -21,9 +21,9 @@ async def check_auth_cmd() -> None:
         )
         sys.exit(1)
 
-    client = XClient()
+    client = XClient(timeout=timeout)
     try:
-        user_info = await client.verify_auth()
+        user_info = await client.verify_auth(timeout=timeout)
         console.print(Panel(
             f"[bold green]认证成功！[/bold green]\n"
             f"状态: 会话有效\n"
@@ -74,22 +74,28 @@ async def main() -> None:
         default=24,
         help="早报统计回溯时间窗口（默认近 24 小时）"
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="网络请求与页面加载超时时间（秒，默认 60 秒）"
+    )
 
     args = parser.parse_args()
 
     if args.login:
-        client = XClient()
-        await client.login_interactive()
+        client = XClient(timeout=args.timeout)
+        await client.login_interactive(timeout=args.timeout)
         return
 
     if args.check_auth:
-        await check_auth_cmd()
+        await check_auth_cmd(timeout=args.timeout)
         return
 
     pipeline = Pipeline()
 
     if args.fetch_only:
-        await pipeline.fetch_and_store(max_pages=args.pages)
+        await pipeline.fetch_and_store(max_pages=args.pages, timeout=args.timeout)
         return
 
     if args.report_only:
@@ -97,7 +103,7 @@ async def main() -> None:
         return
 
     # Default: Run full pipeline
-    await pipeline.run_daily(max_pages=args.pages, hours=args.hours)
+    await pipeline.run_daily(max_pages=args.pages, hours=args.hours, timeout=args.timeout)
 
 
 if __name__ == "__main__":
