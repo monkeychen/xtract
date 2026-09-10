@@ -112,3 +112,72 @@ class Storage:
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM tweets")
             return cursor.fetchone()[0]
+
+    def get_recent_tweets(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        """Retrieves recent tweets ordered by created_at DESC."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT * FROM tweets
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """, (limit, offset))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    def get_tweet_by_id(self, tweet_id: str) -> dict[str, Any] | None:
+        """Retrieves a single tweet by its tweet_id."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT * FROM tweets
+                WHERE tweet_id = ?
+            """, (tweet_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def export_markdown(self, output_file: Path | None = None, limit: int = 200) -> Path:
+        """Exports stored tweets to a structured, human-readable Markdown file."""
+        tweets = self.get_recent_tweets(limit=limit)
+        today = datetime.now().strftime("%Y-%m-%d")
+        file_path = output_file or (Config.PROJECT_ROOT / "output" / f"tweets_{today}.md")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        lines = [
+            f"# 📚 X 关注流推文存档 ({today})",
+            f"\n> 本地数据库共计 **{self.get_total_count()}** 条推文，本文件展示最近 **{len(tweets)}** 条。\n",
+            "---\n",
+        ]
+
+        for idx, t in enumerate(tweets, 1):
+            name = t.get("author_name") or "Unknown"
+            username = t.get("author_username") or "unknown"
+            t_id = t.get("tweet_id")
+            time_str = t.get("created_at") or ""
+            likes = t.get("like_count", 0)
+            rts = t.get("retweet_count", 0)
+            views = t.get("view_count", 0)
+            text = t.get("text", "").strip()
+
+            url_twitter = f"https://x.com/{username}/status/{t_id}"
+
+            lines.append(f"### {idx}. [{name} (@{username})]({url_twitter})")
+            lines.append(f"- **发布时间**: `{time_str}` | **互动**: ❤️ `{likes}`  🔁 `{rts}`  👁️ `{views}` | **ID**: `{t_id}`")
+            lines.append(f"\n{text}\n")
+
+            if t.get("is_retweet"):
+                lines.append(f"> 🔁 **转推自 @{t.get('retweeted_author')}**:\n> {t.get('retweeted_text')}\n")
+            elif t.get("is_quote"):
+                lines.append(f"> 💬 **引用推文 @{t.get('quoted_author')}**:\n> {t.get('quoted_text')}\n")
+
+            try:
+                urls = json.loads(t.get("urls") or "[]")
+                if urls:
+                    lines.append("- 🔗 包含链接: " + ", ".join([f"[{u}]({u})" for u in urls]))
+            except Exception:
+                pass
+
+            lines.append("\n---\n")
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        return file_path

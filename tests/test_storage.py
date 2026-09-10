@@ -75,3 +75,21 @@ def test_storage_init_and_deduplication():
         assert "1001" in ids
         assert "1002" in ids
         assert "1003" in ids
+
+        # Test get_recent_tweets with limit
+        paged = storage.get_recent_tweets(limit=2)
+        assert len(paged) == 2
+
+        # Test get_tweet_by_id
+        t = storage.get_tweet_by_id("1001")
+        assert t is not None
+        assert t["author_name"] == "Alice"
+        assert storage.get_tweet_by_id("non_existent") is None
+
+        # Test export_markdown
+        out_file = Path(tmpdir) / "test_export.md"
+        exported_path = storage.export_markdown(output_file=out_file)
+        assert exported_path.exists()
+        content = exported_path.read_text(encoding="utf-8")
+        assert "Alice" in content
+        assert "1001" in content
