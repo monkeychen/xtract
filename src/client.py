@@ -25,12 +25,13 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
     if not legacy:
         return None
 
-    # Author info
+    # Author info (Supports both latest user.core and legacy schema)
     user_results = tweet_result.get("core", {}).get("user_results", {}).get("result", {})
+    user_core = user_results.get("core", {})
     user_legacy = user_results.get("legacy", {})
     author_id = user_results.get("rest_id", "")
-    author_name = user_legacy.get("name", "")
-    author_username = user_legacy.get("screen_name", "")
+    author_name = user_core.get("name") or user_legacy.get("name", "")
+    author_username = user_core.get("screen_name") or user_legacy.get("screen_name", "")
 
     # Check for long-form note tweet (X Articles / Long Tweets)
     note_tweet = tweet_result.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
@@ -45,8 +46,8 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
         if rt_result.get("__typename") == "TweetWithVisibilityResults":
             rt_result = rt_result.get("tweet", {})
         rt_legacy = rt_result.get("legacy", {})
-        rt_user = rt_result.get("core", {}).get("user_results", {}).get("result", {}).get("legacy", {})
-        retweeted_author = rt_user.get("screen_name", "")
+        rt_user = rt_result.get("core", {}).get("user_results", {}).get("result", {})
+        retweeted_author = rt_user.get("core", {}).get("screen_name") or rt_user.get("legacy", {}).get("screen_name", "")
         retweeted_text = rt_legacy.get("full_text", "")
 
     # Quote info
@@ -58,8 +59,8 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
         if q_result.get("__typename") == "TweetWithVisibilityResults":
             q_result = q_result.get("tweet", {})
         q_legacy = q_result.get("legacy", {})
-        q_user = q_result.get("core", {}).get("user_results", {}).get("result", {}).get("legacy", {})
-        quoted_author = q_user.get("screen_name", "")
+        q_user = q_result.get("core", {}).get("user_results", {}).get("result", {})
+        quoted_author = q_user.get("core", {}).get("screen_name") or q_user.get("legacy", {}).get("screen_name", "")
         quoted_text = q_legacy.get("full_text", "")
 
     # Media & URLs
@@ -98,7 +99,7 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def parse_timeline_instructions(instructions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Extracts tweets from timeline GraphQL instructions entries."""
+    """Extracts tweets from timeline GraphQL instructions entries, filtering ads."""
     parsed_tweets = []
     for instruction in instructions:
         type_ = instruction.get("type")
@@ -109,6 +110,11 @@ def parse_timeline_instructions(instructions: list[dict[str, Any]]) -> list[dict
             entries = instruction.get("moduleItems", [])
 
         for entry in entries:
+            entry_id = entry.get("entryId", "")
+            # Skip promoted / ad tweets and cursors
+            if "promoted" in entry_id.lower() or entry_id.startswith("cursor-"):
+                continue
+
             content = entry.get("content", {})
             item_content = content.get("itemContent", {})
             tweet_results = item_content.get("tweet_results", {}).get("result")
@@ -276,7 +282,7 @@ class XClient:
 
         async def handle_response(response: Response) -> None:
             url = response.url
-            if ("HomeLatestTimeline" in url or "HomeTimeline" in url) and response.status == 200:
+            if "/graphql/" in url and ("HomeLatestTimeline" in url or "HomeTimeline" in url) and response.status == 200:
                 try:
                     data = await response.json()
                     instructions = (
@@ -296,9 +302,15 @@ class XClient:
             page = await context.new_page()
             page.on("response", handle_response)
 
-            console.print(f"[cyan]🌐 正在无头打开 x.com/home 并挂载网络监听器（超时阈值: {timeout_s} 秒）...[/cyan]")
+            console.print(f"[cyan]🌐 正在打开 x.com/home 并挂载网络监听器（超时阈值: {timeout_s} 秒）...[/cyan]")
             await page.goto("https://x.com/home", wait_until="commit", timeout=timeout_ms)
-            await page.wait_for_timeout(3000)
+
+            # Wait briefly for tablist to appear (signals React app has finished rendering)
+            console.print("[cyan]⏳ 正在等待时间线导航就绪...[/cyan]")
+            try:
+                await page.wait_for_selector('div[role="tablist"], [role="tab"]', timeout=15000)
+            except Exception:
+                pass
 
             # Check if redirected to login
             if "login" in page.url or "i/flow" in page.url:
@@ -307,19 +319,22 @@ class XClient:
 
             # Click "Following" tab to ensure we are receiving Following timeline
             try:
-                following_tab = page.locator("a[role='tab']", has_text=re.compile(r"Following|正在关注|关注", re.I)).first
-                if await following_tab.is_visible(timeout=3000):
+                following_tab = page.locator('[role="tab"]', has_text=re.compile(r"Following|正在关注|关注", re.I)).first
+                if await following_tab.is_visible(timeout=5000):
+                    console.print("[cyan]📌 切换至「正在关注 (Following)」时间线...[/cyan]")
                     await following_tab.click()
-                    await page.wait_for_timeout(2000)
+                    await page.wait_for_timeout(4000)
             except Exception as e:
                 logger.debug(f"Could not click following tab directly: {e}")
 
             # Scroll down to trigger pagination and collect more pages
             for page_idx in range(1, max_pages):
                 console.print(f"[cyan]📜 正在向下滚动加载第 {page_idx + 1} 页推文...[/cyan]")
-                await page.evaluate("window.scrollBy(0, 1800)")
+                await page.evaluate("window.scrollBy(0, 2500)")
                 await page.wait_for_timeout(int(page_delay * 1000))
 
+            # Brief pause to ensure last in-flight responses complete
+            await page.wait_for_timeout(2000)
             await browser.close()
 
         # Parse all captured instructions
