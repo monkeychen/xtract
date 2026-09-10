@@ -1,0 +1,16 @@
+# Environments & Dependencies
+.venv/
+__pycache__/
+*.pyc
+
+# Local Data & Secrets
+.env
+data/tweets.db
+data/raw/*
+!data/raw/.gitkeep
+cookies.json
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/

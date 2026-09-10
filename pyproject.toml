@@ -1,0 +1,19 @@
+[project]
+name = "x-digest"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "google-genai>=2.22.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
+    "rich>=15.0.0",
+    "twikit>=2.3.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
