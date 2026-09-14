@@ -49,6 +49,28 @@ class Pipeline:
             console.print("[yellow]⚠️ 未拉取到推文，请检查网络或账号状态[/yellow]")
             return 0, 0, 0
 
+    async def fetch_user_and_store(
+        self,
+        username: str,
+        limit: int = 20,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Fetches recent tweets for a specific user and stores them in SQLite.
+        """
+        clean_user = username.lstrip("@").strip()
+        console.print(f"[bold cyan]⏳ 开始抓取博主 @{clean_user} 的最新推文（目标 {limit} 篇）...[/bold cyan]")
+        tweets = await self.client.fetch_user_timeline(clean_user, limit=limit, timeout=timeout)
+        fetched_count = len(tweets)
+        console.print(f"[green]✓ 成功拉取到 {fetched_count} 条 @{clean_user} 的推文[/green]")
+
+        if fetched_count > 0:
+            inserted, skipped = self.storage.save_tweets(tweets)
+            console.print(
+                f"[bold green]✓ 本地库更新完毕：新增入库 {inserted} 条，跳过重复 {skipped} 条 (库内总计 {self.storage.get_total_count()} 条)[/bold green]"
+            )
+        return tweets
+
     def generate_report(self, hours: int = 24, date_str: str | None = None) -> Path | None:
         """
         Retrieves recent tweets from SQLite and generates an AI summary report.

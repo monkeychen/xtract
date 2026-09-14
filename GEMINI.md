@@ -61,6 +61,8 @@
 - 执行全量流水线：`uv run python main.py`
 - 仅拉取推文：`uv run python main.py --fetch-only`
 - 仅生成今日报告：`uv run python main.py --report-only`
+- 在线抓取指定博主推文：`uv run python main.py --user <博主用户名> [--limit N]`
+- 本地检索指定博主推文：`uv run python main.py --list [数量] --user <博主用户名>`
 - 查看已抓取推文列表：`uv run python main.py --list [数量]`
 - 查看单篇推文全文详情：`uv run python main.py --view <tweet_id>`
 - 导出已抓取推文为 Markdown 文档：`uv run python main.py --export`

@@ -86,6 +86,19 @@ def test_storage_init_and_deduplication():
         assert t["author_name"] == "Alice"
         assert storage.get_tweet_by_id("non_existent") is None
 
+        # Test get_tweets_by_user
+        alice_tweets = storage.get_tweets_by_user("alice")
+        assert len(alice_tweets) == 1
+        assert alice_tweets[0]["author_username"] == "alice"
+
+        # Case-insensitive and leading @ symbol handling
+        alice_tweets_at = storage.get_tweets_by_user("@ALICE")
+        assert len(alice_tweets_at) == 1
+        assert alice_tweets_at[0]["tweet_id"] == "1001"
+
+        non_user_tweets = storage.get_tweets_by_user("unknown_user")
+        assert len(non_user_tweets) == 0
+
         # Test export_markdown
         out_file = Path(tmpdir) / "test_export.md"
         exported_path = storage.export_markdown(output_file=out_file)

@@ -43,16 +43,8 @@ async def check_auth_cmd(timeout: int | None = None) -> None:
         sys.exit(1)
 
 
-def list_tweets_cmd(limit: int = 20) -> None:
-    storage = Storage()
-    total = storage.get_total_count()
-    tweets = storage.get_recent_tweets(limit=limit)
-
-    if not tweets:
-        console.print("[yellow]⚠️ 数据库中暂无推文，请先运行 `uv run python main.py --fetch-only` 进行抓取。[/yellow]")
-        return
-
-    table = Table(title=f"X Following 时间线推文列表 (库内共 {total} 条，展示最近 {len(tweets)} 条)", show_lines=True)
+def render_tweets_table(tweets: list[dict], title: str) -> None:
+    table = Table(title=title, show_lines=True)
     table.add_column("#", style="dim", width=4, justify="center")
     table.add_column("作者", style="cyan", width=20, no_wrap=True)
     table.add_column("推文摘要", style="white", min_width=35)
@@ -73,6 +65,24 @@ def list_tweets_cmd(limit: int = 20) -> None:
         "• 查看单篇推文全文及多媒体：`uv run python main.py --view <推文ID>`\n"
         "• 导出全量推文为 Markdown 查阅：`uv run python main.py --export`[/dim]"
     )
+
+
+def list_tweets_cmd(limit: int = 20, username: str | None = None) -> None:
+    storage = Storage()
+    if username:
+        clean_user = username.lstrip("@").strip()
+        tweets = storage.get_tweets_by_user(clean_user, limit=limit)
+        if not tweets:
+            console.print(f"[yellow]⚠️ 本地数据库暂无博主 @{clean_user} 的推文。可使用 `uv run python main.py --user {clean_user}` 在线抓取。[/yellow]")
+            return
+        render_tweets_table(tweets, f"博主 @{clean_user} 的推文列表 (展示最近 {len(tweets)} 条)")
+    else:
+        total = storage.get_total_count()
+        tweets = storage.get_recent_tweets(limit=limit)
+        if not tweets:
+            console.print("[yellow]⚠️ 数据库中暂无推文，请先运行 `uv run python main.py --fetch-only` 进行抓取。[/yellow]")
+            return
+        render_tweets_table(tweets, f"X Following 时间线推文列表 (库内共 {total} 条，展示最近 {len(tweets)} 条)")
 
 
 def view_tweet_cmd(tweet_id: str) -> None:
@@ -145,12 +155,25 @@ async def main() -> None:
         help="仅根据本地已有推文生成今日早报，不发起网络请求"
     )
     parser.add_argument(
+        "--user",
+        type=str,
+        metavar="USERNAME",
+        help="指定博主用户名（如 --user elonmusk 或 @elonmusk）进行针对性抓取或本地检索"
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        metavar="N",
+        help="限制获取或展示的推文条数（默认 20 条）"
+    )
+    parser.add_argument(
         "--list",
         nargs="?",
         const=20,
         type=int,
         metavar="N",
-        help="查看已抓取推文列表（默认最近 20 条，可指定数量，如 --list 50）"
+        help="查看已抓取推文列表（默认最近 20 条，可指定数量，如 --list 50；可配合 --user 查看特定博主）"
     )
     parser.add_argument(
         "--view",
@@ -197,7 +220,8 @@ async def main() -> None:
         return
 
     if args.list is not None:
-        list_tweets_cmd(limit=args.list)
+        limit = args.list if args.list != 20 else args.limit
+        list_tweets_cmd(limit=limit, username=args.user)
         return
 
     if args.view:
@@ -209,6 +233,15 @@ async def main() -> None:
         return
 
     pipeline = Pipeline()
+
+    if args.user:
+        clean_user = args.user.lstrip("@").strip()
+        tweets = await pipeline.fetch_user_and_store(clean_user, limit=args.limit, timeout=args.timeout)
+        if tweets:
+            render_tweets_table(tweets, f"博主 @{clean_user} 最新推文 (共拉取 {len(tweets)} 条)")
+        else:
+            console.print(f"[yellow]⚠️ 未能获取到 @{clean_user} 的推文，请确认账号名是否正确或该账号是否有公开推文。[/yellow]")
+        return
 
     if args.fetch_only:
         await pipeline.fetch_and_store(max_pages=args.pages, timeout=args.timeout)

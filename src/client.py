@@ -348,3 +348,76 @@ class XClient:
                     all_tweets.append(t)
 
         return all_tweets
+
+    async def fetch_user_timeline(
+        self,
+        username: str,
+        limit: int = 20,
+        page_delay: float = 2.0,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Intercepts GraphQL responses for a specific user's timeline (UserOriginalsTimeline / UserTweets).
+        """
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
+
+        clean_user = username.lstrip("@").strip()
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        captured_raw_instructions: list[list[dict[str, Any]]] = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if "/graphql/" in url and ("UserOriginalsTimeline" in url or "UserTweets" in url) and response.status == 200:
+                try:
+                    data = await response.json()
+                    user_data = data.get("data", {}).get("user", {}).get("result", {})
+                    timeline = user_data.get("timeline", {})
+                    if "timeline" in timeline:
+                        timeline = timeline.get("timeline", {})
+                    elif "timeline_v2" in user_data:
+                        timeline = user_data.get("timeline_v2", {}).get("timeline", {})
+
+                    instructions = timeline.get("instructions", [])
+                    if instructions:
+                        captured_raw_instructions.append(instructions)
+                except Exception as e:
+                    logger.debug(f"Failed to parse user timeline response: {e}")
+
+        async with async_playwright() as p:
+            browser = await self._launch_browser(p, headless=True)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            user_url = f"https://x.com/{clean_user}"
+            console.print(f"[cyan]🌐 正在打开博主主页 {user_url} 并监听推文流（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto(user_url, wait_until="commit", timeout=timeout_ms)
+
+            # Wait for first response to land
+            for _ in range(20):
+                await asyncio.sleep(1)
+                if captured_raw_instructions:
+                    break
+
+            # If user requests more than ~20 tweets, scroll down to paginate
+            pages_needed = max(1, (limit + 19) // 20)
+            for page_idx in range(1, pages_needed):
+                console.print(f"[cyan]📜 正在向下滚动加载第 {page_idx + 1} 页...[/cyan]")
+                await page.evaluate("window.scrollBy(0, 2500)")
+                await page.wait_for_timeout(int(page_delay * 1000))
+
+            await page.wait_for_timeout(2000)
+            await browser.close()
+
+        all_tweets: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for inst_list in captured_raw_instructions:
+            batch_tweets = parse_timeline_instructions(inst_list)
+            for t in batch_tweets:
+                if t["tweet_id"] not in seen_ids:
+                    seen_ids.add(t["tweet_id"])
+                    all_tweets.append(t)
+
+        return all_tweets[:limit]

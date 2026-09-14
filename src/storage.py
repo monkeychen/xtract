@@ -134,6 +134,19 @@ class Storage:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def get_tweets_by_user(self, username: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Retrieves recent tweets by author username (case-insensitive)."""
+        clean_name = username.lstrip("@").strip()
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT * FROM tweets
+                WHERE LOWER(author_username) = LOWER(?)
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (clean_name, limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
     def export_markdown(self, output_file: Path | None = None, limit: int = 200) -> Path:
         """Exports stored tweets to a structured, human-readable Markdown file."""
         tweets = self.get_recent_tweets(limit=limit)
