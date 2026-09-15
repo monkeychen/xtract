@@ -190,6 +190,13 @@ class Storage:
             except Exception:
                 pass
 
+            try:
+                media = json.loads(t.get("media_urls") or "[]")
+                if media:
+                    lines.append("- 🖼️ 媒体附件: " + ", ".join([f"[附件 {i}]({m})" for i, m in enumerate(media, 1)]))
+            except Exception:
+                pass
+
             lines.append("\n---\n")
 
         with open(file_path, "w", encoding="utf-8") as f:

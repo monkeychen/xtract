@@ -41,6 +41,53 @@ def test_parse_tweet_result():
     assert parsed["media_urls"] == ["https://pbs.twimg.com/media/test.jpg"]
 
 
+def test_parse_tweet_long_form_and_video():
+    long_tweet_payload = {
+        "rest_id": "77777",
+        "core": {
+            "user_results": {
+                "result": {
+                    "core": {"name": "Builder", "screen_name": "builder"}
+                }
+            }
+        },
+        "legacy": {
+            "full_text": "Short truncated preview... https://t.co/xyz",
+            "created_at": "Thu Sep 10 08:00:00 +0000 2026",
+            "extended_entities": {
+                "media": [
+                    {
+                        "type": "video",
+                        "media_url_https": "https://pbs.twimg.com/video_thumb/123.jpg",
+                        "video_info": {
+                            "variants": [
+                                {"content_type": "application/x-mpegURL", "url": "https://video.twimg.com/stream.m3u8"},
+                                {"bitrate": 832000, "content_type": "video/mp4", "url": "https://video.twimg.com/vid_low.mp4"},
+                                {"bitrate": 2176000, "content_type": "video/mp4", "url": "https://video.twimg.com/vid_high.mp4"},
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "note_tweet": {
+            "note_tweet_results": {
+                "result": {
+                    "text": "This is a very long post with thousands of words explaining the entire engineering architecture..."
+                }
+            }
+        }
+    }
+
+    parsed = parse_tweet_result(long_tweet_payload)
+    assert parsed is not None
+    # 1. Full text is extracted from note_tweet, not the truncated legacy text
+    assert parsed["text"] == "This is a very long post with thousands of words explaining the entire engineering architecture..."
+    # 2. Both video thumbnail and highest-bitrate MP4 direct link are extracted
+    assert "https://pbs.twimg.com/video_thumb/123.jpg" in parsed["media_urls"]
+    assert "https://video.twimg.com/vid_high.mp4" in parsed["media_urls"]
+
+
 def test_parse_timeline_instructions():
     instructions = [
         {

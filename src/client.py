@@ -63,15 +63,22 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
         quoted_author = q_user.get("core", {}).get("screen_name") or q_user.get("legacy", {}).get("screen_name", "")
         quoted_text = q_legacy.get("full_text", "")
 
-    # Media & URLs
+    # Media & URLs (Supports multiple images and direct MP4 video streams)
     media_urls = []
-    entities = legacy.get("entities", {})
-    for m in entities.get("media", []):
-        if "media_url_https" in m:
+    media_items = legacy.get("extended_entities", {}).get("media", []) or legacy.get("entities", {}).get("media", [])
+    for m in media_items:
+        if "media_url_https" in m and m["media_url_https"] not in media_urls:
             media_urls.append(m["media_url_https"])
+        if m.get("type") in ("video", "animated_gif"):
+            variants = m.get("video_info", {}).get("variants", [])
+            mp4_variants = [v for v in variants if v.get("content_type") == "video/mp4"]
+            if mp4_variants:
+                best_video = max(mp4_variants, key=lambda v: v.get("bitrate", 0))
+                if best_video.get("url") and best_video["url"] not in media_urls:
+                    media_urls.append(best_video["url"])
 
     urls = []
-    for u in entities.get("urls", []):
+    for u in legacy.get("entities", {}).get("urls", []):
         expanded = u.get("expanded_url")
         if expanded:
             urls.append(expanded)
