@@ -76,3 +76,35 @@ def test_parse_timeline_instructions():
     assert len(tweets) == 1
     assert tweets[0]["tweet_id"] == "88888"
     assert tweets[0]["text"] == "Sample tweet in timeline"
+
+
+def test_extract_timeline_instructions():
+    from src.client import extract_timeline_instructions
+
+    # List structure
+    list_payload = {
+        "data": {
+            "list": {
+                "tweets_timeline": {
+                    "timeline": {
+                        "instructions": [{"type": "TimelineAddEntries", "entries": []}]
+                    }
+                }
+            }
+        }
+    }
+    extracted = extract_timeline_instructions(list_payload)
+    assert len(extracted) == 1
+    assert extracted[0]["type"] == "TimelineAddEntries"
+
+    # Fallback arbitrary nested structure
+    fallback_payload = {
+        "random_key": {
+            "nested": {
+                "instructions": [{"type": "TimelinePinEntry"}]
+            }
+        }
+    }
+    extracted_fallback = extract_timeline_instructions(fallback_payload)
+    assert len(extracted_fallback) == 1
+    assert extracted_fallback[0]["type"] == "TimelinePinEntry"

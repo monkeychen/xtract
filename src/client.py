@@ -135,11 +135,46 @@ def parse_timeline_instructions(instructions: list[dict[str, Any]]) -> list[dict
     return parsed_tweets
 
 
+def extract_timeline_instructions(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Recursively locates 'instructions' array in arbitrary X GraphQL response payloads."""
+    d = data.get("data", {})
+    if "list" in d:
+        list_obj = d["list"]
+        if isinstance(list_obj, dict):
+            tl = list_obj.get("tweets_timeline", {}).get("timeline", {})
+            if "instructions" in tl and isinstance(tl["instructions"], list):
+                return tl["instructions"]
+    if "user" in d:
+        user_obj = d["user"].get("result", {})
+        tl = user_obj.get("timeline", {}).get("timeline", {}) or user_obj.get("timeline_v2", {}).get("timeline", {})
+        if "instructions" in tl and isinstance(tl["instructions"], list):
+            return tl["instructions"]
+    if "home" in d:
+        tl = d["home"].get("home_timeline_urt", {})
+        if "instructions" in tl and isinstance(tl["instructions"], list):
+            return tl["instructions"]
+
+    # Fallback search
+    stack = [data]
+    while stack:
+        curr = stack.pop()
+        if isinstance(curr, dict):
+            if "instructions" in curr and isinstance(curr["instructions"], list):
+                return curr["instructions"]
+            stack.extend(curr.values())
+        elif isinstance(curr, list):
+            stack.extend(curr)
+    return []
+
+
 class XClient:
     def __init__(self, timeout: int | None = None) -> None:
         self.timeout_seconds = timeout or Config.FETCH_TIMEOUT
         self.timeout_ms = self.timeout_seconds * 1000
         self.proxy_dict = None
+        if Config.HTTP_PROXY:
+            self.proxy_dict = {"server": Config.HTTP_PROXY}
+
     async def _launch_browser(self, p: Any, headless: bool = True) -> Any:
         args = [
             "--disable-blink-features=AutomationControlled",
@@ -394,6 +429,77 @@ class XClient:
             user_url = f"https://x.com/{clean_user}"
             console.print(f"[cyan]🌐 正在打开博主主页 {user_url} 并监听推文流（超时阈值: {timeout_s} 秒）...[/cyan]")
             await page.goto(user_url, wait_until="commit", timeout=timeout_ms)
+
+            # Wait for first response to land
+            for _ in range(20):
+                await asyncio.sleep(1)
+                if captured_raw_instructions:
+                    break
+
+            # If user requests more than ~20 tweets, scroll down to paginate
+            pages_needed = max(1, (limit + 19) // 20)
+            for page_idx in range(1, pages_needed):
+                console.print(f"[cyan]📜 正在向下滚动加载第 {page_idx + 1} 页...[/cyan]")
+                await page.evaluate("window.scrollBy(0, 2500)")
+                await page.wait_for_timeout(int(page_delay * 1000))
+
+            await page.wait_for_timeout(2000)
+            await browser.close()
+
+        all_tweets: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for inst_list in captured_raw_instructions:
+            batch_tweets = parse_timeline_instructions(inst_list)
+            for t in batch_tweets:
+                if t["tweet_id"] not in seen_ids:
+                    seen_ids.add(t["tweet_id"])
+                    all_tweets.append(t)
+
+        return all_tweets[:limit]
+
+    async def fetch_list_timeline(
+        self,
+        list_id_or_url: str,
+        limit: int = 20,
+        page_delay: float = 2.0,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Intercepts GraphQL responses for a specific X List (ListLatestTweetsTimeline / ListTweetsTimeline).
+        Accepts full URL or numeric list ID.
+        """
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
+
+        match = re.search(r"(\d{5,})", list_id_or_url)
+        if not match:
+            raise ValueError(f"无效的列表 ID 或 URL：'{list_id_or_url}'。X 列表 URL 形如 https://x.com/i/lists/1838848123456789012 或直接输入数字 ID。")
+
+        list_id = match.group(1)
+        target_url = f"https://x.com/i/lists/{list_id}"
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        captured_raw_instructions: list[list[dict[str, Any]]] = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if "/graphql/" in url and ("ListLatestTweetsTimeline" in url or "ListTweetsTimeline" in url or "List" in url) and response.status == 200:
+                try:
+                    data = await response.json()
+                    instructions = extract_timeline_instructions(data)
+                    if instructions:
+                        captured_raw_instructions.append(instructions)
+                except Exception as e:
+                    logger.debug(f"Failed to parse list timeline response: {e}")
+
+        async with async_playwright() as p:
+            browser = await self._launch_browser(p, headless=True)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            console.print(f"[cyan]🌐 正在打开 X 列表主页 {target_url} 并监听推文流（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
 
             # Wait for first response to land
             for _ in range(20):

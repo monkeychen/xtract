@@ -161,6 +161,12 @@ async def main() -> None:
         help="指定博主用户名（如 --user elonmusk 或 @elonmusk）进行针对性抓取或本地检索"
     )
     parser.add_argument(
+        "--x-list",
+        type=str,
+        metavar="LIST_ID_OR_URL",
+        help="指定 X 列表 ID 或 URL（如 --x-list 1838848123456789012 或完整链接），抓取该列表的最新推文"
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=20,
@@ -241,6 +247,17 @@ async def main() -> None:
             render_tweets_table(tweets, f"博主 @{clean_user} 最新推文 (共拉取 {len(tweets)} 条)")
         else:
             console.print(f"[yellow]⚠️ 未能获取到 @{clean_user} 的推文，请确认账号名是否正确或该账号是否有公开推文。[/yellow]")
+        return
+
+    if args.x_list:
+        try:
+            tweets = await pipeline.fetch_list_and_store(args.x_list, limit=args.limit, timeout=args.timeout)
+            if tweets:
+                render_tweets_table(tweets, f"X 列表推文 (共拉取 {len(tweets)} 条)")
+            else:
+                console.print(f"[yellow]⚠️ 未能获取到该列表推文。请确认列表 ID/URL 是否正确，且当前账号有权访问（如为私有列表需属于当前登录账号）。[/yellow]")
+        except Exception as e:
+            console.print(f"[bold red]❌ 列表抓取失败: {e}[/bold red]")
         return
 
     if args.fetch_only:
