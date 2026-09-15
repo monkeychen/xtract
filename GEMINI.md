@@ -66,5 +66,5 @@
 - 本地检索指定博主推文：`uv run python main.py --list [数量] --user <博主用户名>`
 - 查看已抓取推文列表：`uv run python main.py --list [数量]`
 - 查看单篇推文全文详情：`uv run python main.py --view <tweet_id>`
-- 导出已抓取推文为 Markdown 文档：`uv run python main.py --export`
+- 导出已抓取推文为 Markdown 文档：`uv run python main.py --export [数量] [-o 目标路径]`
 - 运行测试：`uv run pytest`

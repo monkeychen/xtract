@@ -267,14 +267,23 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 * **基本语法**：
   ```bash
-  # 默认导出最近 200 条
+  # 默认导出最近 200 条至 output/tweets_YYYY-MM-DD.md
   uv run python main.py --export
 
-  # 指定导出最近 N 条（如 500 条）
-  uv run python main.py --export 500
+  # 指定导出条数（如 50 条）
+  uv run python main.py --export 50
+
+  # 自定义导出文件路径或目标目录（配合 -o / --output）
+  uv run python main.py --export 50 -o my_notes.md
+  uv run python main.py --export 100 -o ~/Documents/ObsidianVault/
+
+  # 抓取时自动连带导出（链式组合）
+  uv run python main.py --x-list 1903106960452620743 --limit 10 --export
+  uv run python main.py --user elonmusk --limit 10 --export -o output/elon.md
   ```
 * **导出文件路径**：
-  `output/tweets_YYYY-MM-DD.md`
+  * 默认路径：`output/tweets_YYYY-MM-DD.md`
+  * 自定义路径：通过 `-o` / `--output` 指定的具体文件路径或目录。
 * **Markdown 特性**：
   * 每篇推文附带可点击的原作者主页直达链接与原文链接。
   * 包含点赞/转推/浏览等核心量化指标。

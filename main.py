@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -125,11 +126,13 @@ def view_tweet_cmd(tweet_id: str) -> None:
     console.print(Panel(content, title=f"推文详情: {t.get('tweet_id')}", expand=False))
 
 
-def export_cmd(limit: int = 200) -> None:
+def export_cmd(limit: int = 200, output_path: str | None = None) -> Path:
     storage = Storage()
-    file_path = storage.export_markdown(limit=limit)
+    target_path = Path(output_path).expanduser().resolve() if output_path else None
+    file_path = storage.export_markdown(output_file=target_path, limit=limit)
     console.print(f"[bold green]🎉 推文清单已导出为 Markdown 文档: {file_path}[/bold green]")
     console.print(f"[dim]已归档最近 {min(limit, storage.get_total_count())} 条推文。可在编辑器或 Markdown 阅读器中点击直接阅读。[/dim]")
+    return file_path
 
 
 async def main() -> None:
@@ -193,7 +196,13 @@ async def main() -> None:
         const=200,
         type=int,
         metavar="N",
-        help="将已抓取的推文导出为结构化 Markdown 文档（输出至 output/tweets_YYYY-MM-DD.md）"
+        help="将已抓取的推文导出为结构化 Markdown 文档（默认输出至 output/tweets_YYYY-MM-DD.md，可配合 -o/--output 指定路径）"
+    )
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        metavar="PATH",
+        help="自定义导出 Markdown 文件的路径或目标目录（配合 --export 使用，如 -o my_notes.md 或 -o ~/Notes/）"
     )
     parser.add_argument(
         "--pages",
@@ -234,8 +243,9 @@ async def main() -> None:
         view_tweet_cmd(args.view)
         return
 
-    if args.export is not None:
-        export_cmd(limit=args.export)
+    # Standalone export (without crawl)
+    if args.export is not None and not (args.user or args.x_list or args.fetch_only or args.report_only):
+        export_cmd(limit=args.export, output_path=args.output)
         return
 
     pipeline = Pipeline()
@@ -247,6 +257,8 @@ async def main() -> None:
             render_tweets_table(tweets, f"博主 @{clean_user} 最新推文 (共拉取 {len(tweets)} 条)")
         else:
             console.print(f"[yellow]⚠️ 未能获取到 @{clean_user} 的推文，请确认账号名是否正确或该账号是否有公开推文。[/yellow]")
+        if args.export is not None:
+            export_cmd(limit=args.export, output_path=args.output)
         return
 
     if args.x_list:
@@ -258,10 +270,14 @@ async def main() -> None:
                 console.print(f"[yellow]⚠️ 未能获取到该列表推文。请确认列表 ID/URL 是否正确，且当前账号有权访问（如为私有列表需属于当前登录账号）。[/yellow]")
         except Exception as e:
             console.print(f"[bold red]❌ 列表抓取失败: {e}[/bold red]")
+        if args.export is not None:
+            export_cmd(limit=args.export, output_path=args.output)
         return
 
     if args.fetch_only:
         await pipeline.fetch_and_store(max_pages=args.pages, timeout=args.timeout)
+        if args.export is not None:
+            export_cmd(limit=args.export, output_path=args.output)
         return
 
     if args.report_only:
@@ -270,6 +286,8 @@ async def main() -> None:
 
     # Default: Run full pipeline
     await pipeline.run_daily(max_pages=args.pages, hours=args.hours, timeout=args.timeout)
+    if args.export is not None:
+        export_cmd(limit=args.export, output_path=args.output)
 
 
 if __name__ == "__main__":

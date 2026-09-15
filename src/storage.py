@@ -152,6 +152,8 @@ class Storage:
         tweets = self.get_recent_tweets(limit=limit)
         today = datetime.now().strftime("%Y-%m-%d")
         file_path = output_file or (Config.PROJECT_ROOT / "output" / f"tweets_{today}.md")
+        if file_path.is_dir():
+            file_path = file_path / f"tweets_{today}.md"
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         lines = [
