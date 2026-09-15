@@ -431,7 +431,7 @@ class XClient:
             await page.goto(user_url, wait_until="commit", timeout=timeout_ms)
 
             # Wait for first response to land
-            for _ in range(20):
+            for _ in range(max(30, timeout_s)):
                 await asyncio.sleep(1)
                 if captured_raw_instructions:
                     break
@@ -502,7 +502,7 @@ class XClient:
             await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
 
             # Wait for first response to land
-            for _ in range(20):
+            for _ in range(max(30, timeout_s)):
                 await asyncio.sleep(1)
                 if captured_raw_instructions:
                     break
