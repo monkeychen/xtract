@@ -534,3 +534,68 @@ class XClient:
                     all_tweets.append(t)
 
         return all_tweets[:limit]
+
+    async def fetch_tweet_thread(
+        self,
+        tweet_id_or_url: str,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Fetches a single tweet and its author thread from X by tweet ID or URL.
+        Intercepts TweetDetail and TweetResultByRestId GraphQL responses.
+        """
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
+
+        match = re.search(r"(\d{5,})", tweet_id_or_url)
+        if not match:
+            raise ValueError(f"无效的推文 ID 或 URL：'{tweet_id_or_url}'。")
+
+        clean_id = match.group(1)
+        target_url = f"https://x.com/i/status/{clean_id}"
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        captured_tweets: list[dict[str, Any]] = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if "/graphql/" in url and response.status == 200:
+                if "TweetDetail" in url or "TweetResult" in url:
+                    try:
+                        data = await response.json()
+                        if "data" in data and "tweetResult" in data["data"]:
+                            t = parse_tweet_result(data["data"]["tweetResult"].get("result", {}))
+                            if t and t["tweet_id"]:
+                                captured_tweets.append(t)
+                        instructions = extract_timeline_instructions(data)
+                        if instructions:
+                            inst_tweets = parse_timeline_instructions(instructions)
+                            captured_tweets.extend(inst_tweets)
+                    except Exception as e:
+                        logger.debug(f"Failed to parse tweet response: {e}")
+
+        async with async_playwright() as p:
+            browser = await self._launch_browser(p, headless=True)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            console.print(f"[cyan]🌐 正在打开推文页面 {target_url} 并获取内容（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
+
+            for _ in range(max(30, timeout_s)):
+                await asyncio.sleep(1)
+                if captured_tweets:
+                    await asyncio.sleep(2)
+                    break
+
+            await browser.close()
+
+        seen_ids = set()
+        unique_tweets = []
+        for t in captured_tweets:
+            if t["tweet_id"] not in seen_ids:
+                seen_ids.add(t["tweet_id"])
+                unique_tweets.append(t)
+
+        return unique_tweets

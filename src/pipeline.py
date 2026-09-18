@@ -92,6 +92,26 @@ class Pipeline:
             )
         return tweets
 
+    async def fetch_tweet_and_store(
+        self,
+        tweet_id_or_url: str,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Fetches a single tweet and its thread from X and stores them in SQLite.
+        """
+        console.print(f"[bold cyan]⏳ 开始抓取推文 ({tweet_id_or_url})...[/bold cyan]")
+        tweets = await self.client.fetch_tweet_thread(tweet_id_or_url, timeout=timeout)
+        fetched_count = len(tweets)
+        console.print(f"[green]✓ 成功从 X 拉取到 {fetched_count} 条相关推文[/green]")
+
+        if fetched_count > 0:
+            inserted, skipped = self.storage.save_tweets(tweets)
+            console.print(
+                f"[bold green]✓ 本地库更新完毕：新增入库 {inserted} 条，跳过重复 {skipped} 条 (库内总计 {self.storage.get_total_count()} 条)[/bold green]"
+            )
+        return tweets
+
     def generate_report(self, hours: int = 24, date_str: str | None = None) -> Path | None:
         """
         Retrieves recent tweets from SQLite and generates an AI summary report.

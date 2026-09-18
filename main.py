@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from rich.console import Console
@@ -86,11 +87,24 @@ def list_tweets_cmd(limit: int = 20, username: str | None = None) -> None:
         render_tweets_table(tweets, f"X Following 时间线推文列表 (库内共 {total} 条，展示最近 {len(tweets)} 条)")
 
 
-def view_tweet_cmd(tweet_id: str) -> None:
+async def view_tweet_cmd(tweet_id_or_url: str, timeout: int | None = None) -> None:
     storage = Storage()
-    t = storage.get_tweet_by_id(tweet_id)
+    match = re.search(r"(\d{5,})", tweet_id_or_url)
+    clean_id = match.group(1) if match else tweet_id_or_url.strip()
+
+    t = storage.get_tweet_by_id(clean_id)
     if not t:
-        console.print(f"[bold red]❌ 未找到 ID 为 `{tweet_id}` 的推文。请确认 ID 是否正确。[/bold red]")
+        console.print(f"[cyan]🔍 本地数据库未检索到推文 `{clean_id}`，正在从 X 实时抓取...[/cyan]")
+        pipeline = Pipeline()
+        try:
+            await pipeline.fetch_tweet_and_store(clean_id, timeout=timeout)
+            t = storage.get_tweet_by_id(clean_id)
+        except Exception as e:
+            console.print(f"[bold red]❌ 抓取推文失败: {e}[/bold red]")
+            return
+
+    if not t:
+        console.print(f"[bold red]❌ 未能获取到 ID 为 `{clean_id}` 的推文。请确认链接或 ID 是否有效。[/bold red]")
         return
 
     author = f"{t.get('author_name')} (@{t.get('author_username')})"
@@ -240,7 +254,9 @@ async def main() -> None:
         return
 
     if args.view:
-        view_tweet_cmd(args.view)
+        await view_tweet_cmd(args.view, timeout=args.timeout)
+        if args.export is not None:
+            export_cmd(limit=args.export, output_path=args.output)
         return
 
     # Standalone export (without crawl)

@@ -229,16 +229,20 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 ---
 
-### 4.5 查看单篇推文全文详情 (`--view`)
-当你在列表或早报中发现某条高价值推文时，可通过该命令在终端调出单篇推文的完整卡片面板。
+### 4.5 查看/抓取单篇推文全文详情 (`--view`)
+支持传入**推文 ID** 或 **X 原文链接**。如果本地数据库已有则秒级展示；如果本地未检索到，系统会**自动从 X 在线实时抓取**、解析其连帖 Thread 并落库保存后展示。
 
 * **基本语法**：
   ```bash
+  # 通过推文 ID 查看
   uv run python main.py --view <TWEET_ID>
+
+  # 直接传入推文完整 URL 在线抓取与查看
+  uv run python main.py --view https://x.com/username/status/2086710313219727862
   ```
 * **使用示例**：
   ```bash
-  uv run python main.py --view 2097814698204832116
+  uv run python main.py --view https://x.com/ChenshuoAI/status/2086710313219727862
   ```
 * **终端输出示例**：
   ```text
