@@ -87,7 +87,12 @@ def list_tweets_cmd(limit: int = 20, username: str | None = None) -> None:
         render_tweets_table(tweets, f"X Following 时间线推文列表 (库内共 {total} 条，展示最近 {len(tweets)} 条)")
 
 
-async def view_tweet_cmd(tweet_id_or_url: str, timeout: int | None = None) -> None:
+async def view_tweet_cmd(
+    tweet_id_or_url: str,
+    timeout: int | None = None,
+    export_md: bool = True,
+    output_path: str | None = None
+) -> None:
     storage = Storage()
     match = re.search(r"(\d{5,})", tweet_id_or_url)
     clean_id = match.group(1) if match else tweet_id_or_url.strip()
@@ -138,6 +143,21 @@ async def view_tweet_cmd(tweet_id_or_url: str, timeout: int | None = None) -> No
         pass
 
     console.print(Panel(content, title=f"推文详情: {t.get('tweet_id')}", expand=False))
+
+    if export_md:
+        console.print("[cyan]💾 正在导出单篇推文 Markdown 文档并下载图片资源...[/cyan]")
+        try:
+            md_file, dl_count = storage.export_single_tweet_markdown(
+                clean_id,
+                output_path=output_path,
+                download_images=True
+            )
+            console.print(f"[bold green]🎉 推文已导出为 Markdown 文档: {md_file}[/bold green]")
+            if dl_count > 0:
+                console.print(f"[green]🖼️ 已同步下载 {dl_count} 张图片至: {md_file.parent / 'images'}[/green]")
+            console.print("[dim]可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。[/dim]\n")
+        except Exception as e:
+            console.print(f"[bold red]❌ 导出 Markdown 失败: {e}[/bold red]")
 
 
 def export_cmd(limit: int = 200, output_path: str | None = None) -> Path:
@@ -202,7 +222,13 @@ async def main() -> None:
         "--view",
         type=str,
         metavar="TWEET_ID",
-        help="查看指定 ID 的推文全文详情及互动数据"
+        help="查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档"
+    )
+    parser.add_argument(
+        "--export-md",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="获取单篇推文时是否自动导出为独立 Markdown 文档（默认开启；使用 --no-export-md 可关闭仅在终端查看）"
     )
     parser.add_argument(
         "--export",
@@ -216,7 +242,7 @@ async def main() -> None:
         "-o", "--output",
         type=str,
         metavar="PATH",
-        help="自定义导出 Markdown 文件的路径或目标目录（配合 --export 使用，如 -o my_notes.md 或 -o ~/Notes/）"
+        help="自定义导出 Markdown 文件的路径或目标目录（单篇推文默认为当前目录下的 output 子目录，图片保存在 output/images/）"
     )
     parser.add_argument(
         "--pages",
@@ -254,7 +280,12 @@ async def main() -> None:
         return
 
     if args.view:
-        await view_tweet_cmd(args.view, timeout=args.timeout)
+        await view_tweet_cmd(
+            args.view,
+            timeout=args.timeout,
+            export_md=args.export_md,
+            output_path=args.output
+        )
         if args.export is not None:
             export_cmd(limit=args.export, output_path=args.output)
         return

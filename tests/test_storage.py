@@ -106,3 +106,17 @@ def test_storage_init_and_deduplication():
         content = exported_path.read_text(encoding="utf-8")
         assert "Alice" in content
         assert "1001" in content
+
+        # Test export_single_tweet_markdown without downloading images
+        single_md, dl_count = storage.export_single_tweet_markdown(
+            "1002",
+            output_path=Path(tmpdir) / "single.md",
+            download_images=False
+        )
+        assert single_md.exists()
+        assert dl_count == 0
+        single_content = single_md.read_text(encoding="utf-8")
+        assert "Bob" in single_content
+        assert "1002" in single_content
+        assert "转推自 @charlie" in single_content
+        assert "https://example.com/img.jpg" in single_content

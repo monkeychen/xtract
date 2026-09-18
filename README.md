@@ -229,39 +229,49 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 ---
 
-### 4.5 查看/抓取单篇推文全文详情 (`--view`)
+### 4.5 查看/抓取单篇推文并导出 Markdown (`--view`)
 支持传入**推文 ID** 或 **X 原文链接**。如果本地数据库已有则秒级展示；如果本地未检索到，系统会**自动从 X 在线实时抓取**、解析其连帖 Thread 并落库保存后展示。
+
+系统**默认自动导出为单篇独立 Markdown 文档**（受参数 `--export-md` 控制，默认开启）：
+- **图片自动回传本地**：正文及连帖所有图片会自动下载保存在 Markdown 文档所在目录的 `images/` 子目录下，文档中自动转换为本地相对路径 `![图片](images/...)`，离线阅读或迁移知识库无损展示。
+- **视频提供在线直链**：视频不会占用海量带宽下载大体积文件，而是保留高清 MP4 播放与下载链接。
+- **完整连帖展开**：若目标推文是作者的多条连帖（Thread），自动合并整理为结构化各章节展开。
+- **灵活目录配置**：默认输出至 `output/`（图片存 `output/images/`），可配合 `-o / --output` 指定存放目录或自定义文件名。
 
 * **基本语法**：
   ```bash
-  # 通过推文 ID 查看
-  uv run python main.py --view <TWEET_ID>
-
-  # 直接传入推文完整 URL 在线抓取与查看
+  # 抓取/查看单篇推文（默认自动导出 Markdown 并下载图片至 output/images/）
   uv run python main.py --view https://x.com/username/status/2086710313219727862
-  ```
-* **使用示例**：
-  ```bash
-  uv run python main.py --view https://x.com/ChenshuoAI/status/2086710313219727862
+
+  # 指定自定义存放目录（文档存入 my_folder/，图片自动存入 my_folder/images/）
+  uv run python main.py --view <推文ID或URL> -o my_folder/
+
+  # 指定自定义文件名（图片存入 custom_notes/images/）
+  uv run python main.py --view <推文ID或URL> -o custom_notes/article.md
+
+  # 仅在终端查看卡片，不导出 Markdown 也不下载图片
+  uv run python main.py --view <推文ID或URL> --no-export-md
   ```
 * **终端输出示例**：
   ```text
-  ╭─────────────────────── 推文详情: 2097814698204832116 ────────────────────────╮
-  │ 作者: Vox (@Voxyz_ai)                                                        │
-  │ 发布时间: Wed Sep 09 22:29:34 +0000 2026                                     │
-  │ 原文链接: https://x.com/Voxyz_ai/status/2097814698204832116                  │
-  │ 互动数据: ❤️ 赞: 1764  |  🔁 转发: 115  |  💬 回复: 85  |  👁️ 浏览: 150847   │
+  ╭─────────────────────── 推文详情: 2097871610414067757 ────────────────────────╮
+  │ 作者: Miles Ma (@miles_mazy)                                                 │
+  │ 发布时间: Thu Sep 10 02:15:43 +0000 2026                                     │
+  │ 原文链接: https://x.com/miles_mazy/status/2097871610414067757                │
+  │ 互动数据: ❤️ 赞: 26  |  🔁 转发: 0  |  💬 回复: 36  |  👁️ 浏览: 4877         │
   │ ────────────────────────────────────────────────────────────                 │
   │ 正文:                                                                        │
-  │ Codex tip: A cost-efficient Luna + Sol agent tree, orchestrated by Astra.    │
+  │ 19K 了🎉🎉 冲 2W！！                                                         │
   │                                                                              │
-  │ Effort levels chosen by weighing DeepSWE’s pass rates, average cost per      │
-  │ task, and agent steps. Hand this to Codex to set it up 👇                    │
-  │ https://t.co/1s0YC8zkps                                                      │
+  │ 今天写篇啥文章好？大家来评论区许愿吧🤣 https://t.co/KucU7AdasM               │
   │                                                                              │
   │ 🖼️ 媒体附件:                                                                 │
-  │   - https://pbs.twimg.com/media/HRzuKfFa0AA3OV0.png                          │
+  │   - https://pbs.twimg.com/media/HR0i8iNaUAAYrrW.jpg                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
+  💾 正在导出单篇推文 Markdown 文档并下载图片资源...
+  🎉 推文已导出为 Markdown 文档: output/tweet_2097871610414067757_miles_mazy.md
+  🖼️ 已同步下载 1 张图片至: output/images
+  可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。
   ```
 
 ---
