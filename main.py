@@ -154,7 +154,7 @@ async def view_tweet_cmd(
             )
             console.print(f"[bold green]🎉 推文已导出为 Markdown 文档: {md_file}[/bold green]")
             if dl_count > 0:
-                console.print(f"[green]🖼️ 已同步下载 {dl_count} 张图片至: {md_file.parent / 'images'}[/green]")
+                console.print(f"[green]🖼️ 已同步下载 {dl_count} 张图片至: {md_file.parent / 'images' / clean_id}[/green]")
             console.print("[dim]可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。[/dim]\n")
         except Exception as e:
             console.print(f"[bold red]❌ 导出 Markdown 失败: {e}[/bold red]")

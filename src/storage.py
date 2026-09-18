@@ -311,13 +311,14 @@ class Storage:
             md_file = md_dir / f"tweet_{primary_tweet['tweet_id']}_{author_user}.md"
 
         md_dir.mkdir(parents=True, exist_ok=True)
-        images_dir = md_dir / "images"
+        primary_id = str(primary_tweet["tweet_id"])
+        tweet_images_dir = md_dir / "images" / primary_id
         if download_images:
-            images_dir.mkdir(parents=True, exist_ok=True)
+            tweet_images_dir.mkdir(parents=True, exist_ok=True)
 
         downloaded_count = 0
 
-        def process_media(t_item: dict[str, Any], client: httpx.Client | None) -> tuple[list[str], list[str]]:
+        def process_media(t_item: dict[str, Any], client: httpx.Client | None, is_primary: bool = True) -> tuple[list[str], list[str]]:
             nonlocal downloaded_count
             media_list = []
             try:
@@ -327,7 +328,7 @@ class Storage:
 
             img_md_links = []
             vid_links = []
-            t_id = t_item.get("tweet_id", "media")
+            t_id = str(t_item.get("tweet_id", "media"))
 
             for idx, m_url in enumerate(media_list, 1):
                 if is_video_url(m_url):
@@ -346,12 +347,15 @@ class Storage:
                                 ext = ".jpg"
                         raw_stem = Path(orig_name).stem
                         clean_stem = re.sub(r"[^\w\-_\.]", "_", raw_stem)[:30] or f"img_{idx}"
-                        local_name = f"{t_id}_{idx}_{clean_stem}{ext}"
-                        local_path = images_dir / local_name
+                        if is_primary:
+                            local_name = f"{idx}_{clean_stem}{ext}"
+                        else:
+                            local_name = f"{t_id}_{idx}_{clean_stem}{ext}"
+                        local_path = tweet_images_dir / local_name
 
                         if download_image(m_url, local_path, client=client):
                             downloaded_count += 1
-                            img_md_links.append(f"![图片 {idx}](images/{local_name})")
+                            img_md_links.append(f"![图片 {idx}](images/{primary_id}/{local_name})")
                         else:
                             img_md_links.append(f"![图片 {idx} (远程)]({m_url})")
                     else:
@@ -387,7 +391,7 @@ class Storage:
         }
 
         with httpx.Client(proxy=Config.HTTP_PROXY or None, headers=headers, timeout=15.0, follow_redirects=True) as client:
-            p_imgs, p_vids = process_media(primary_tweet, client if download_images else None)
+            p_imgs, p_vids = process_media(primary_tweet, client if download_images else None, is_primary=True)
 
             if primary_tweet.get("is_retweet"):
                 doc_lines.extend([
@@ -440,7 +444,7 @@ class Storage:
                         ot.get("text", "").strip(),
                         "",
                     ])
-                    ot_imgs, ot_vids = process_media(ot, client if download_images else None)
+                    ot_imgs, ot_vids = process_media(ot, client if download_images else None, is_primary=False)
                     if ot_imgs:
                         doc_lines.append("#### 🖼️ 附图")
                         doc_lines.extend(ot_imgs)

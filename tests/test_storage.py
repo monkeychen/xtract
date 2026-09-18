@@ -120,3 +120,19 @@ def test_storage_init_and_deduplication():
         assert "1002" in single_content
         assert "转推自 @charlie" in single_content
         assert "https://example.com/img.jpg" in single_content
+
+        # Test export_single_tweet_markdown with pre-existing local image in per-tweet subdirectory
+        sub_img_dir = Path(tmpdir) / "images" / "1002"
+        sub_img_dir.mkdir(parents=True, exist_ok=True)
+        local_img = sub_img_dir / "1_img.jpg"
+        local_img.write_bytes(b"mock_image_bytes")
+
+        single_md2, dl_count2 = storage.export_single_tweet_markdown(
+            "1002",
+            output_path=Path(tmpdir) / "single2.md",
+            download_images=True
+        )
+        assert single_md2.exists()
+        assert dl_count2 == 1
+        single_content2 = single_md2.read_text(encoding="utf-8")
+        assert "images/1002/1_img.jpg" in single_content2
