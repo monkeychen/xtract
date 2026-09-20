@@ -144,6 +144,22 @@ def test_extract_timeline_instructions():
     assert len(extracted) == 1
     assert extracted[0]["type"] == "TimelineAddEntries"
 
+    # Search structure
+    search_payload = {
+        "data": {
+            "search_by_raw_query": {
+                "search_timeline": {
+                    "timeline": {
+                        "instructions": [{"type": "TimelineAddEntries", "entries": []}]
+                    }
+                }
+            }
+        }
+    }
+    extracted_search = extract_timeline_instructions(search_payload)
+    assert len(extracted_search) == 1
+    assert extracted_search[0]["type"] == "TimelineAddEntries"
+
     # Fallback arbitrary nested structure
     fallback_payload = {
         "random_key": {

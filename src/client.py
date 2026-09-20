@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import urllib.parse
 from pathlib import Path
 from typing import Any
 from playwright.async_api import async_playwright, BrowserContext, Page, Response
@@ -158,6 +159,10 @@ def extract_timeline_instructions(data: dict[str, Any]) -> list[dict[str, Any]]:
             return tl["instructions"]
     if "home" in d:
         tl = d["home"].get("home_timeline_urt", {})
+        if "instructions" in tl and isinstance(tl["instructions"], list):
+            return tl["instructions"]
+    if "search_by_raw_query" in d:
+        tl = d["search_by_raw_query"].get("search_timeline", {}).get("timeline", {})
         if "instructions" in tl and isinstance(tl["instructions"], list):
             return tl["instructions"]
 
@@ -506,6 +511,80 @@ class XClient:
             page.on("response", handle_response)
 
             console.print(f"[cyan]🌐 正在打开 X 列表主页 {target_url} 并监听推文流（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
+
+            # Wait for first response to land
+            for _ in range(max(30, timeout_s)):
+                await asyncio.sleep(1)
+                if captured_raw_instructions:
+                    break
+
+            # If user requests more than ~20 tweets, scroll down to paginate
+            pages_needed = max(1, (limit + 19) // 20)
+            for page_idx in range(1, pages_needed):
+                console.print(f"[cyan]📜 正在向下滚动加载第 {page_idx + 1} 页...[/cyan]")
+                await page.evaluate("window.scrollBy(0, 2500)")
+                await page.wait_for_timeout(int(page_delay * 1000))
+
+            await page.wait_for_timeout(2000)
+            await browser.close()
+
+        all_tweets: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for inst_list in captured_raw_instructions:
+            batch_tweets = parse_timeline_instructions(inst_list)
+            for t in batch_tweets:
+                if t["tweet_id"] not in seen_ids:
+                    seen_ids.add(t["tweet_id"])
+                    all_tweets.append(t)
+
+        return all_tweets[:limit]
+
+    async def fetch_search_timeline(
+        self,
+        query: str,
+        search_type: str = "live",
+        limit: int = 20,
+        page_delay: float = 2.0,
+        timeout: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Intercepts GraphQL responses for an X Search query (SearchTimeline).
+        Supports search_type='live' (latest) or 'top' (top results).
+        """
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
+
+        clean_q = query.strip()
+        encoded_q = urllib.parse.quote(clean_q)
+        if search_type.lower() == "top":
+            target_url = f"https://x.com/search?q={encoded_q}"
+        else:
+            target_url = f"https://x.com/search?q={encoded_q}&f=live"
+
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        captured_raw_instructions: list[list[dict[str, Any]]] = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if "/graphql/" in url and ("SearchTimeline" in url or "Search" in url) and response.status == 200:
+                try:
+                    data = await response.json()
+                    instructions = extract_timeline_instructions(data)
+                    if instructions:
+                        captured_raw_instructions.append(instructions)
+                except Exception as e:
+                    logger.debug(f"Failed to parse search timeline response: {e}")
+
+        async with async_playwright() as p:
+            browser = await self._launch_browser(p, headless=True)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            type_label = "实时最新" if search_type.lower() != "top" else "热门"
+            console.print(f"[cyan]🌐 正在打开 X 搜索 ({type_label}: '{clean_q}') 并监听推文流（超时阈值: {timeout_s} 秒）...[/cyan]")
             await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
 
             # Wait for first response to land

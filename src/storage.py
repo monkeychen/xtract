@@ -150,18 +150,25 @@ class Storage:
 
         return inserted, skipped
 
-    def get_unsummarized_tweets(self, hours: int = 24, limit: int = 150) -> list[dict[str, Any]]:
+    def get_unsummarized_tweets(
+        self,
+        hours: int = 24,
+        limit: int = 150,
+        min_likes: int = 0,
+        min_retweets: int = 0
+    ) -> list[dict[str, Any]]:
         """
         Retrieves tweets fetched within the last N hours for summarization.
+        Supports filtering by minimum like and retweet thresholds.
         """
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         with self._get_connection() as conn:
             cursor = conn.execute("""
                 SELECT * FROM tweets
-                WHERE fetched_at >= ?
+                WHERE fetched_at >= ? AND like_count >= ? AND retweet_count >= ?
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (cutoff, limit))
+            """, (cutoff, min_likes, min_retweets, limit))
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -170,14 +177,21 @@ class Storage:
             cursor = conn.execute("SELECT COUNT(*) FROM tweets")
             return cursor.fetchone()[0]
 
-    def get_recent_tweets(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """Retrieves recent tweets ordered by created_at DESC."""
+    def get_recent_tweets(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        min_likes: int = 0,
+        min_retweets: int = 0
+    ) -> list[dict[str, Any]]:
+        """Retrieves recent tweets ordered by created_at DESC with optional engagement filters."""
         with self._get_connection() as conn:
             cursor = conn.execute("""
                 SELECT * FROM tweets
+                WHERE like_count >= ? AND retweet_count >= ?
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
-            """, (limit, offset))
+            """, (min_likes, min_retweets, limit, offset))
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -191,31 +205,50 @@ class Storage:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def get_tweets_by_user(self, username: str, limit: int = 50) -> list[dict[str, Any]]:
-        """Retrieves recent tweets by author username (case-insensitive)."""
+    def get_tweets_by_user(
+        self,
+        username: str,
+        limit: int = 50,
+        min_likes: int = 0,
+        min_retweets: int = 0
+    ) -> list[dict[str, Any]]:
+        """Retrieves recent tweets by author username (case-insensitive) with engagement filters."""
         clean_name = username.lstrip("@").strip()
         with self._get_connection() as conn:
             cursor = conn.execute("""
                 SELECT * FROM tweets
-                WHERE LOWER(author_username) = LOWER(?)
+                WHERE LOWER(author_username) = LOWER(?) AND like_count >= ? AND retweet_count >= ?
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (clean_name, limit))
+            """, (clean_name, min_likes, min_retweets, limit))
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def export_markdown(self, output_file: Path | None = None, limit: int = 200) -> Path:
+    def export_markdown(
+        self,
+        output_file: Path | None = None,
+        limit: int = 200,
+        min_likes: int = 0,
+        min_retweets: int = 0
+    ) -> Path:
         """Exports stored tweets to a structured, human-readable Markdown file."""
-        tweets = self.get_recent_tweets(limit=limit)
+        tweets = self.get_recent_tweets(limit=limit, min_likes=min_likes, min_retweets=min_retweets)
         today = datetime.now().strftime("%Y-%m-%d")
         file_path = output_file or (Config.PROJECT_ROOT / "output" / f"tweets_{today}.md")
         if file_path.is_dir():
             file_path = file_path / f"tweets_{today}.md"
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
+        filter_desc = []
+        if min_likes > 0:
+            filter_desc.append(f"赞数 ≥ {min_likes}")
+        if min_retweets > 0:
+            filter_desc.append(f"转发 ≥ {min_retweets}")
+        filter_str = f"（筛选: {', '.join(filter_desc)}）" if filter_desc else ""
+
         lines = [
-            f"# 📚 X 关注流推文存档 ({today})",
-            f"\n> 本地数据库共计 **{self.get_total_count()}** 条推文，本文件展示最近 **{len(tweets)}** 条。\n",
+            f"# 📚 X 推文存档 ({today})",
+            f"\n> 本地数据库共计 **{self.get_total_count()}** 条推文，本文件展示符合条件的最近 **{len(tweets)}** 条推文{filter_str}。\n",
             "---\n",
         ]
 

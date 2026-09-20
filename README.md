@@ -17,8 +17,10 @@
   - [4.6 导出推文为 Markdown 归档 (`--export`)](#46-导出推文为-markdown-归档---export)
   - [4.7 获取与检索指定博主推文 (`--user`)](#47-获取与检索指定博主推文---user)
   - [4.8 获取指定 X 列表最新推文 (`--x-list`)](#48-获取指定-x-列表最新推文---x-list)
-  - [4.9 验证账号会话连通性 (`--check-auth`)](#49-验证账号会话连通性---check-auth)
-  - [4.10 交互式浏览器登录 (`--login`)](#410-交互式浏览器登录---login)
+  - [4.9 关键词/高级语法实时搜索 (`--search`)](#49-关键词高级语法实时搜索---search)
+  - [4.10 互动信噪比门槛过滤 (`--min-likes`, `--min-retweets`)](#410-互动信噪比门槛过滤---min-likes---min-retweets)
+  - [4.11 验证账号会话连通性 (`--check-auth`)](#411-验证账号会话连通性---check-auth)
+  - [4.12 交互式浏览器登录 (`--login`)](#412-交互式浏览器登录---login)
 - [5. 典型工作流与使用场景](#5-典型工作流与使用场景)
 - [6. 定时任务自动化配置 (Cron / launchd)](#6-定时任务自动化配置-cron--launchd)
 - [7. 存储架构与数据目录规范](#7-存储架构与数据目录规范)
@@ -34,16 +36,22 @@
 本项目从第一性原理出发，采用**生产级抗脆弱架构**：
 
 1. **官方网络流透明拦截（Playwright Network Interception）**：
-   - 驱动真实原生 Chrome 浏览器加载 `x.com/home`，在底层协议层监听由 X 官方前端代码合法发出的 GraphQL 响应（`HomeLatestTimeline`）。
+   - 驱动真实原生 Chrome 浏览器加载目标页面，在底层协议层监听由 X 官方前端代码合法发出的 GraphQL 响应（`HomeLatestTimeline`、`SearchTimeline` 等）。
    - **对用户的影响**：零逆向成本、完全免疫 X 前端改版；只要你能用浏览器刷推，抓取就 100% 可用。
-2. **抓取（Fetch）与总结（Summarize）彻底解耦**：
+2. **主动搜索与全网情报侦测**：
+   - 突破封闭的关注流白名单，支持关键词与原生高级语法搜索（`min_faves:`、`lang:`、`geocode:`），实时捕获全网热点。
+   - **对用户的影响**：不仅能看「关注了谁」，更能主动追踪「全网在讨论什么」。
+3. **互动信噪比质检过滤**：
+   - 支持设置点赞/转推门槛（`--min-likes`、`--min-retweets`），在数据采集、检索、导出、早报全链路过滤水帖。
+   - **对用户的影响**：大幅降低信噪比，快速沉淀高价值情报。
+4. **抓取（Fetch）与总结（Summarize）彻底解耦**：
    - 拉取的推文先落库 SQLite 本地数据库去重，再按需送入 LLM 处理。
    - **对用户的影响**：调整早报 Prompt、聚类维度或重新生成简报时，**直接基于本地数据离线秒级完成**，不需要重新请求 X，0 风控、0 额外等待。
-3. **SQLite 增量去重**：
+5. **SQLite 增量去重**：
    - 定时多次抓取只记录增量，自动按 `tweet_id` 主键去重，杜绝重复推文消耗 LLM Token。
-4. **长推与富媒体自动解析**：
+6. **长推与富媒体自动解析**：
    - 自动展开 X 官方的长推（Note Tweet/Articles），保留完整的长文深度内容与外链。
-5. **推广推文（广告）自动过滤**：
+7. **推广推文（广告）自动过滤**：
    - 数据进入数据库前自动剥离所有信息流广告（Promoted Tweets），保证知识库与早报的纯净度。
 
 ---
@@ -124,6 +132,9 @@ FETCH_TIMEOUT=60
 ```
 usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
                [--list [N]] [--view TWEET_ID] [--export [N]]
+               [--search QUERY] [--search-type {live,top}]
+               [--min-likes MIN_LIKES] [--min-retweets MIN_RETWEETS]
+               [--user USER] [--x-list X_LIST] [--limit LIMIT]
                [--pages PAGES] [--hours HOURS] [--timeout TIMEOUT]
 ```
 
@@ -182,10 +193,12 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
   ```
 * **参数选项**：
   * `--hours <N>`：早报统计回溯时间窗口（默认近 24 小时）。
+  * `--min-likes <N>`：早报推文点赞量筛选门槛（默认 0，低于该门槛的推文不参与早报提炼）。
+  * `--min-retweets <N>`：早报推文转推量筛选门槛（默认 0）。
 * **使用示例**：
   ```bash
-  # 仅基于过去 12 小时内抓取的推文重新提炼早报
-  uv run python main.py --report-only --hours 12
+  # 仅基于过去 12 小时内抓取且点赞 >= 50 的高质推文提炼早报
+  uv run python main.py --report-only --hours 12 --min-likes 50
   ```
 * **终端输出示例**：
   ```text
@@ -197,7 +210,7 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 ---
 
 ### 4.4 查看已抓取推文列表 (`--list`)
-以格式化的交互式富文本表格在终端列出本地数据库中的推文，快速掌握近期抓取动态。
+以格式化的交互式富文本表格在终端列出本地数据库中的推文，快速掌握近期抓取动态，并支持按博主和互动量精确过滤。
 
 * **基本语法**：
   ```bash
@@ -206,6 +219,9 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
   # 指定展示最近 N 条（如展示 50 条）
   uv run python main.py --list 50
+
+  # 按互动门槛筛选（如仅看点赞 >= 500 的爆款推文）
+  uv run python main.py --list 20 --min-likes 500
   ```
 * **展示字段**：
   * `#`：序号
@@ -291,10 +307,16 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
   uv run python main.py --export 50 -o my_notes.md
   uv run python main.py --export 100 -o ~/Documents/ObsidianVault/
 
+  # 配合互动指标筛选高价值推文归档（如仅导出点赞 >= 100 的推文）
+  uv run python main.py --export 100 --min-likes 100 -o output/high_value.md
+
   # 抓取时自动连带导出（链式组合）
   uv run python main.py --x-list 1903106960452620743 --limit 10 --export
   uv run python main.py --user elonmusk --limit 10 --export -o output/elon.md
   ```
+* **参数选项**：
+  * `--min-likes <N>`：按点赞量门槛过滤导出推文。
+  * `--min-retweets <N>`：按转推量门槛过滤导出推文。
 * **导出文件路径**：
   * 默认路径：`output/tweets_YYYY-MM-DD.md`
   * 自定义路径：通过 `-o` / `--output` 指定的具体文件路径或目录。
@@ -374,7 +396,64 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 ---
 
-### 4.9 验证账号会话连通性 (`--check-auth`)
+### 4.9 关键词/高级语法实时搜索 (`--search`)
+支持全网关键词与原生高级语法主动侦测，驱动原生浏览器访问 X 搜索页面并监听底层 `SearchTimeline` GraphQL 接口，自动解析推文与富媒体并增量持久化落库。
+
+* **基本语法**：
+  ```bash
+  # 实时搜索包含 "DeepSeek" 的最新推文（默认抓取最新 20 条，按时间倒序）
+  uv run python main.py --search "DeepSeek"
+
+  # 配合 --limit 指定抓取数量（如抓取 50 条）
+  uv run python main.py --search "DeepSeek" --limit 50
+
+  # 切换为「热门 (Top)」排序流（默认是「最新 (Live)」）
+  uv run python main.py --search "Claude" --search-type top --limit 20
+  ```
+* **常用 X 高级搜索语法示例**：
+  * **按语言筛选**：`--search "AI agent lang:zh"`（仅搜中文推文）
+  * **按互动阈值初筛**：`--search "OpenAI min_faves:500"`（X 官方服务端只返回 500+ 点赞推文）
+  * **排除指定词**：`--search "Python -snake -reptile"`（排除特定干扰词）
+  * **指定来源用户**：`--search "release from:sama"`（搜索特定用户发布的关键词）
+* **参数选项**：
+  * `--search-type {live,top}`：搜索流排序类型，`live` 为最新实时（默认），`top` 为全网热门。
+  * `--limit <N>`：抓取推文数量上限（默认 20 条）。
+  * `--min-likes <N>`：抓取时本地入库的点赞数门槛（低于该数值的推文将被就地丢弃）。
+  * `--min-retweets <N>`：抓取时本地入库的转推数门槛。
+  * `--timeout <N>`：页面加载与监听超时时间（秒，默认 60 秒）。
+
+---
+
+### 4.10 互动信噪比门槛过滤 (`--min-likes`, `--min-retweets`)
+推特海量信息流中充斥大量低质水帖、自言自语或噪音。通过设置点赞数（`--min-likes`）与转发数（`--min-retweets`）阈值，可在**数据抓取、本地查阅、早报生成、Markdown 导出**全流程实现高价值情报过滤：
+
+* **1. 在搜索抓取时过滤（入库前初筛）**：
+  ```bash
+  # 抓取并只入库点赞 >= 50、转推 >= 10 的高价值推文
+  uv run python main.py --search "Claude" --min-likes 50 --min-retweets 10
+  ```
+* **2. 本地已存推文查阅过滤 (`--list`)**：
+  ```bash
+  # 在终端快速查看点赞过千（>= 1000）的爆款推文
+  uv run python main.py --list 10 --min-likes 1000
+
+  # 查阅某位博主的高赞推文
+  uv run python main.py --list 10 --user elonmusk --min-likes 500
+  ```
+* **3. 结构化早报生成过滤 (`--report-only` / 默认流水线)**：
+  ```bash
+  # 早报仅提炼点赞 >= 20 的核心推文，彻底隔绝闲聊噪音
+  uv run python main.py --report-only --min-likes 20
+  ```
+* **4. 批量导出 Markdown 文档过滤 (`--export`)**：
+  ```bash
+  # 仅导出点赞数 >= 100 的精选推文到知识库
+  uv run python main.py --export 50 --min-likes 100 -o output/high_signal_tweets.md
+  ```
+
+---
+
+### 4.11 验证账号会话连通性 (`--check-auth`)
 测试当前 `.env` 中的凭证和网络代理是否能成功与 X 建立合法会话。
 
 * **基本语法**：
@@ -394,7 +473,7 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 ---
 
-### 4.10 交互式浏览器登录 (`--login`)
+### 4.12 交互式浏览器登录 (`--login`)
 弹出原生 Chrome 窗口进行免查 Cookie 交互式登录。一旦检测到登录成功，自动提取 Session 并保存至 `data/auth_state.json`。
 
 * **基本语法**：

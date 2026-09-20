@@ -80,6 +80,19 @@ def test_storage_init_and_deduplication():
         paged = storage.get_recent_tweets(limit=2)
         assert len(paged) == 2
 
+        # Test engagement filtering (min_likes & min_retweets)
+        high_like_tweets = storage.get_recent_tweets(min_likes=8)
+        assert len(high_like_tweets) == 1
+        assert high_like_tweets[0]["tweet_id"] == "1001"
+
+        high_rt_tweets = storage.get_recent_tweets(min_retweets=1)
+        assert len(high_rt_tweets) == 1
+        assert high_rt_tweets[0]["tweet_id"] == "1001"
+
+        unsummarized_filtered = storage.get_unsummarized_tweets(hours=24, min_likes=8)
+        assert len(unsummarized_filtered) == 1
+        assert unsummarized_filtered[0]["tweet_id"] == "1001"
+
         # Test get_tweet_by_id
         t = storage.get_tweet_by_id("1001")
         assert t is not None

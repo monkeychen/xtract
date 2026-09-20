@@ -69,22 +69,43 @@ def render_tweets_table(tweets: list[dict], title: str) -> None:
     )
 
 
-def list_tweets_cmd(limit: int = 20, username: str | None = None) -> None:
+def list_tweets_cmd(
+    limit: int = 20,
+    username: str | None = None,
+    min_likes: int = 0,
+    min_retweets: int = 0
+) -> None:
     storage = Storage()
+    filter_desc = []
+    if min_likes > 0:
+        filter_desc.append(f"❤️ ≥ {min_likes}")
+    if min_retweets > 0:
+        filter_desc.append(f"🔁 ≥ {min_retweets}")
+    filter_str = f" [门槛: {', '.join(filter_desc)}]" if filter_desc else ""
+
     if username:
         clean_user = username.lstrip("@").strip()
-        tweets = storage.get_tweets_by_user(clean_user, limit=limit)
+        tweets = storage.get_tweets_by_user(
+            clean_user,
+            limit=limit,
+            min_likes=min_likes,
+            min_retweets=min_retweets
+        )
         if not tweets:
-            console.print(f"[yellow]⚠️ 本地数据库暂无博主 @{clean_user} 的推文。可使用 `uv run python main.py --user {clean_user}` 在线抓取。[/yellow]")
+            console.print(f"[yellow]⚠️ 本地数据库暂无符合条件的博主 @{clean_user} 的推文。[/yellow]")
             return
-        render_tweets_table(tweets, f"博主 @{clean_user} 的推文列表 (展示最近 {len(tweets)} 条)")
+        render_tweets_table(tweets, f"博主 @{clean_user} 的推文列表{filter_str} (展示最近 {len(tweets)} 条)")
     else:
         total = storage.get_total_count()
-        tweets = storage.get_recent_tweets(limit=limit)
+        tweets = storage.get_recent_tweets(
+            limit=limit,
+            min_likes=min_likes,
+            min_retweets=min_retweets
+        )
         if not tweets:
-            console.print("[yellow]⚠️ 数据库中暂无推文，请先运行 `uv run python main.py --fetch-only` 进行抓取。[/yellow]")
+            console.print("[yellow]⚠️ 数据库中暂无符合条件的推文，请调整过滤门槛或先抓取数据。[/yellow]")
             return
-        render_tweets_table(tweets, f"X Following 时间线推文列表 (库内共 {total} 条，展示最近 {len(tweets)} 条)")
+        render_tweets_table(tweets, f"推文列表{filter_str} (库内共 {total} 条，展示符合条件的最近 {len(tweets)} 条)")
 
 
 async def view_tweet_cmd(
@@ -160,12 +181,23 @@ async def view_tweet_cmd(
             console.print(f"[bold red]❌ 导出 Markdown 失败: {e}[/bold red]")
 
 
-def export_cmd(limit: int = 200, output_path: str | None = None) -> Path:
+def export_cmd(
+    limit: int = 200,
+    output_path: str | None = None,
+    min_likes: int = 0,
+    min_retweets: int = 0
+) -> Path:
     storage = Storage()
     target_path = Path(output_path).expanduser().resolve() if output_path else None
-    file_path = storage.export_markdown(output_file=target_path, limit=limit)
+    file_path = storage.export_markdown(
+        output_file=target_path,
+        limit=limit,
+        min_likes=min_likes,
+        min_retweets=min_retweets
+    )
     console.print(f"[bold green]🎉 推文清单已导出为 Markdown 文档: {file_path}[/bold green]")
-    console.print(f"[dim]已归档最近 {min(limit, storage.get_total_count())} 条推文。可在编辑器或 Markdown 阅读器中点击直接阅读。[/dim]")
+    filter_info = f" (门槛: 赞 ≥ {min_likes}, 转发 ≥ {min_retweets})" if (min_likes > 0 or min_retweets > 0) else ""
+    console.print(f"[dim]已归档最近 {limit} 条推文{filter_info}。可在编辑器或 Markdown 阅读器中点击直接阅读。[/dim]")
     return file_path
 
 
@@ -202,6 +234,33 @@ async def main() -> None:
         type=str,
         metavar="LIST_ID_OR_URL",
         help="指定 X 列表 ID 或 URL（如 --x-list 1838848123456789012 或完整链接），抓取该列表的最新推文"
+    )
+    parser.add_argument(
+        "--search",
+        type=str,
+        metavar="QUERY",
+        help="按关键词或高级语法搜索推文（如 --search 'DeepSeek' 或 --search 'AI Agent min_faves:50'）"
+    )
+    parser.add_argument(
+        "--search-type",
+        type=str,
+        choices=["live", "top"],
+        default="live",
+        help="搜索结果类型：live (实时最新，默认) 或 top (热门)"
+    )
+    parser.add_argument(
+        "--min-likes",
+        type=int,
+        default=0,
+        metavar="N",
+        help="最低点赞门槛过滤（仅保留点赞数 ≥ N 的推文，默认 0 不过滤）"
+    )
+    parser.add_argument(
+        "--min-retweets",
+        type=int,
+        default=0,
+        metavar="N",
+        help="最低转发门槛过滤（仅保留转发数 ≥ N 的推文，默认 0 不过滤）"
     )
     parser.add_argument(
         "--limit",
@@ -276,7 +335,12 @@ async def main() -> None:
 
     if args.list is not None:
         limit = args.list if args.list != 20 else args.limit
-        list_tweets_cmd(limit=limit, username=args.user)
+        list_tweets_cmd(
+            limit=limit,
+            username=args.user,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets
+        )
         return
 
     if args.view:
@@ -287,15 +351,48 @@ async def main() -> None:
             output_path=args.output
         )
         if args.export is not None:
-            export_cmd(limit=args.export, output_path=args.output)
+            export_cmd(
+                limit=args.export,
+                output_path=args.output,
+                min_likes=args.min_likes,
+                min_retweets=args.min_retweets
+            )
         return
 
     # Standalone export (without crawl)
-    if args.export is not None and not (args.user or args.x_list or args.fetch_only or args.report_only):
-        export_cmd(limit=args.export, output_path=args.output)
+    if args.export is not None and not (args.user or args.x_list or args.search or args.fetch_only or args.report_only):
+        export_cmd(
+            limit=args.export,
+            output_path=args.output,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets
+        )
         return
 
     pipeline = Pipeline()
+
+    if args.search:
+        tweets = await pipeline.fetch_search_and_store(
+            query=args.search,
+            search_type=args.search_type,
+            limit=args.limit,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets,
+            timeout=args.timeout
+        )
+        if tweets:
+            type_label = "实时最新" if args.search_type == "live" else "热门"
+            render_tweets_table(tweets, f"搜索 '{args.search}' ({type_label}) 结果 (展示 {len(tweets)} 条)")
+        else:
+            console.print(f"[yellow]⚠️ 未检索到符合条件的推文（搜索词: '{args.search}'）。[/yellow]")
+        if args.export is not None:
+            export_cmd(
+                limit=args.export,
+                output_path=args.output,
+                min_likes=args.min_likes,
+                min_retweets=args.min_retweets
+            )
+        return
 
     if args.user:
         clean_user = args.user.lstrip("@").strip()
@@ -305,7 +402,12 @@ async def main() -> None:
         else:
             console.print(f"[yellow]⚠️ 未能获取到 @{clean_user} 的推文，请确认账号名是否正确或该账号是否有公开推文。[/yellow]")
         if args.export is not None:
-            export_cmd(limit=args.export, output_path=args.output)
+            export_cmd(
+                limit=args.export,
+                output_path=args.output,
+                min_likes=args.min_likes,
+                min_retweets=args.min_retweets
+            )
         return
 
     if args.x_list:
@@ -318,23 +420,48 @@ async def main() -> None:
         except Exception as e:
             console.print(f"[bold red]❌ 列表抓取失败: {e}[/bold red]")
         if args.export is not None:
-            export_cmd(limit=args.export, output_path=args.output)
+            export_cmd(
+                limit=args.export,
+                output_path=args.output,
+                min_likes=args.min_likes,
+                min_retweets=args.min_retweets
+            )
         return
 
     if args.fetch_only:
         await pipeline.fetch_and_store(max_pages=args.pages, timeout=args.timeout)
         if args.export is not None:
-            export_cmd(limit=args.export, output_path=args.output)
+            export_cmd(
+                limit=args.export,
+                output_path=args.output,
+                min_likes=args.min_likes,
+                min_retweets=args.min_retweets
+            )
         return
 
     if args.report_only:
-        pipeline.generate_report(hours=args.hours)
+        pipeline.generate_report(
+            hours=args.hours,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets
+        )
         return
 
     # Default: Run full pipeline
-    await pipeline.run_daily(max_pages=args.pages, hours=args.hours, timeout=args.timeout)
+    await pipeline.run_daily(
+        max_pages=args.pages,
+        hours=args.hours,
+        min_likes=args.min_likes,
+        min_retweets=args.min_retweets,
+        timeout=args.timeout
+    )
     if args.export is not None:
-        export_cmd(limit=args.export, output_path=args.output)
+        export_cmd(
+            limit=args.export,
+            output_path=args.output,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets
+        )
 
 
 if __name__ == "__main__":

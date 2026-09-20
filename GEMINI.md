@@ -1,12 +1,12 @@
-# Project: X Following Timeline AI Digest
+# Project: X Following Timeline & Search AI Digest
 
 ## 1. 目标与背景
-从 X（Twitter）个人的 Following（时间线关注流）自动拉取最新推文，通过本地存储去重与过滤，利用 AI 对关注圈子的核心讨论、要闻资讯进行结构化聚类与早报生成。
+从 X（Twitter）个人的 Following（时间线关注流）、指定 Lists（列表）、特定博主以及关键词高级搜索（Search Timeline）中自动拉取最新实时推文，通过本地 SQLite 存储去重与互动指标信噪比过滤，利用 AI 对核心讨论、要闻资讯进行结构化聚类与早报生成。
 
 ## 2. 核心架构与设计决策
 
 ### 架构流程
-`Fetch (Playwright 无头网络拦截)` -> `Deduplicate & Store (本地 SQLite 去重)` -> `Filter (过滤无效推文)` -> `Summarize (AI 结构化早报)` -> `Output (Markdown 归档)`
+`Fetch (Following / List / User / Search Playwright 拦截)` -> `Deduplicate & Store (SQLite 去重与元数据落库)` -> `Filter (互动门槛与无效过滤)` -> `Summarize (AI 结构化早报)` -> `Output (Markdown 归档与图片隔离保存)`
 
 ### 设计决策说明
 1. **采用 Playwright 监听官方网络流替代第三方逆向库（如 twikit）**：
@@ -21,6 +21,12 @@
 4. **凭证隔离与双模式会话持久化**：
    - **为什么**：支持 `.env` 填入 `auth_token`/`ct0`，或通过 `--login` 交互式登录持久化保存 `auth_state.json`。
    - **对用户的影响**：高敏感凭据不入代码库；支持免手工查 Cookie 一键登录。
+5. **主动关键词高级搜索监控（Search Timeline）**：
+   - **为什么**：Following 与 List 属于封闭白名单，无法监控圈外未关注用户的突发热点。拦截官方 `SearchTimeline` 支持 `min_faves:`、`lang:` 等高级语法。
+   - **对用户的影响**：从「被动阅读关注流」升级为「主动追踪全网特定技术/商业主题情报」。
+6. **互动信噪比门槛过滤（Engagement Filtering）**：
+   - **为什么**：推特信息流充斥水帖、闲聊与低质灌水。按 `min_likes` / `min_retweets` 在采集、查阅、早报生成中过滤。
+   - **对用户的影响**：大幅提升早报质量与阅读效率，专注高价值讨论。
 
 ---
 
@@ -60,12 +66,12 @@
 - 初始化环境：`uv venv && uv pip install -e .`
 - 执行全量流水线：`uv run python main.py`
 - 仅拉取推文：`uv run python main.py --fetch-only`
-- 仅生成今日报告：`uv run python main.py --report-only`
+- 仅生成今日报告：`uv run python main.py --report-only [--hours N] [--min-likes N]`
+- 关键词与高级语法搜索：`uv run python main.py --search "<关键词或语法>" [--search-type live|top] [--limit N] [--min-likes N]`
 - 在线抓取指定博主推文：`uv run python main.py --user <博主用户名> [--limit N]`
 - 抓取指定 X 列表最新推文：`uv run python main.py --x-list <列表ID或URL> [--limit N]`
-- 本地检索指定博主推文：`uv run python main.py --list [数量] --user <博主用户名>`
-- 查看已抓取推文列表：`uv run python main.py --list [数量]`
+- 本地检索已存推文：`uv run python main.py --list [数量] [--user <博主>] [--min-likes N] [--min-retweets N]`
 - 查看/在线抓取单篇推文或连帖并导出 Markdown（含图片回传）：`uv run python main.py --view <推文ID或URL> [-o 目标路径] [--no-export-md]`
-- 导出已抓取推文为全局 Markdown 文档：`uv run python main.py --export [数量] [-o 目标路径]`
+- 导出已抓取推文为全局 Markdown 文档：`uv run python main.py --export [数量] [-o 目标路径] [--min-likes N]`
 - 运行测试：`uv run pytest`
 
