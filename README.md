@@ -1,13 +1,13 @@
-# 🗞️ X (Twitter) Following Timeline AI Digest
+# 🗞️ X (Twitter) Following Timeline & Trends AI Digest
 
-> **基于 Playwright 官方流无损拦截 + SQLite 本地增量去重 + Gemini AI 结构化提炼的个人时间线情报早报系统。**
+> **基于 Playwright 官方流无损拦截 + SQLite 本地增量去重 + 全网实时热搜雷达 + 国内外多大模型统一调度（双轨认证：API-Key / 账号订阅免Key）的个人情报与深度研报系统。**
 
 ---
 
 ## 目录
 - [1. 核心设计与第一性原理](#1-核心设计与第一性原理)
 - [2. 环境依赖与快速安装](#2-环境依赖与快速安装)
-- [3. 凭据与网络配置指南](#3-凭据与网络配置指南)
+- [3. 凭据与多模型配置指南](#3-凭据与多模型配置指南)
 - [4. CLI 完整命令参考手册](#4-cli-完整命令参考手册)
   - [4.1 全量流水线（拉取 + 存储 + 生成早报）](#41-全量流水线拉取--存储--生成早报)
   - [4.2 仅抓取推文入库 (`--fetch-only`)](#42-仅抓取推文入库---fetch-only)
@@ -19,8 +19,11 @@
   - [4.8 获取指定 X 列表最新推文 (`--x-list`)](#48-获取指定-x-列表最新推文---x-list)
   - [4.9 关键词/高级语法实时搜索 (`--search`)](#49-关键词高级语法实时搜索---search)
   - [4.10 互动信噪比门槛过滤 (`--min-likes`, `--min-retweets`)](#410-互动信噪比门槛过滤---min-likes---min-retweets)
-  - [4.11 验证账号会话连通性 (`--check-auth`)](#411-验证账号会话连通性---check-auth)
-  - [4.12 交互式浏览器登录 (`--login`)](#412-交互式浏览器登录---login)
+  - [4.11 交互式免查 Cookie 浏览器登录 (`--login`)](#411-交互式免查-cookie-浏览器登录---login)
+  - [4.12 验证账号会话连通性 (`--check-auth`)](#412-验证账号会话连通性---check-auth)
+  - [4.13 全网热搜与趋势看板（模式 1：`--trends`）](#413-全网热搜与趋势看板模式-1---trends)
+  - [4.14 全自动趋势深度研报（模式 2：`--trends-digest`）](#414-全自动趋势深度研报模式-2---trends-digest)
+  - [4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)](#415-多大模型与双轨认证参数)
 - [5. 典型工作流与使用场景](#5-典型工作流与使用场景)
 - [6. 定时任务自动化配置 (Cron / launchd)](#6-定时任务自动化配置-cron--launchd)
 - [7. 存储架构与数据目录规范](#7-存储架构与数据目录规范)
@@ -79,7 +82,7 @@ uv run playwright install chromium
 
 ---
 
-## 3. 凭据与网络配置指南
+## 3. 凭据与多模型配置指南
 
 复制配置文件模板：
 ```bash
@@ -92,6 +95,9 @@ cp .env.example .env
 # ==========================================
 # 1. X (Twitter) 会话认证凭据
 # ==========================================
+# 方式 A（推荐交互式登录，免查 Cookie）：
+# 运行 uv run python main.py --login 弹出浏览器窗口直接登录并自动保存
+# 方式 B（手动填入已有 Cookie）：
 X_AUTH_TOKEN=你的auth_token
 X_CT0=你的ct0
 
@@ -101,27 +107,34 @@ X_CT0=你的ct0
 HTTP_PROXY=http://127.0.0.1:8118
 
 # ==========================================
-# 3. LLM 智能提炼配置 (Google Gemini)
+# 3. 多大模型调度与双轨认证 (Multi-LLM & Dual-Track Auth)
 # ==========================================
-GEMINI_API_KEY=你的gemini_api_key
-GEMINI_MODEL=gemini-2.5-flash
+# 模型提供商：gemini | openai | deepseek | qwen | zhipu | minimax | custom
+LLM_PROVIDER=gemini
 
-# ==========================================
-# 4. 抓取行为控制
-# ==========================================
-FETCH_MAX_PAGES=3
-FETCH_TIMEOUT=60
+# 认证模式：
+# - account: 账号订阅模式（直接复用 Google Gemini / ChatGPT Plus 网页订阅配额，0 额外 API 费用）
+# - api_key: 官方 API Key 计费模式
+LLM_AUTH_MODE=account
+
+# 默认调用模型（留空使用提供商官方最佳默认值）
+LLM_MODEL=gemini-3.7-flash-high
+
+# --- 提供商 API Key 配置 (当 LLM_AUTH_MODE=api_key 时生效) ---
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+DEEPSEEK_API_KEY=
+DASHSCOPE_API_KEY=   # 通义千问 Qwen
+ZHIPUAI_API_KEY=     # 智谱清言 GLM
+MINIMAX_API_KEY=     # MiniMax
 ```
 
-### 如何在 20 秒内获取 `auth_token` 与 `ct0`？
-你在日常使用的 Chrome / Edge 浏览器中已处于登录状态，直接复用其合法凭证即可，**完全无需在脚本中重新输入账号密码**：
-1. 打开已登录的 [x.com](https://x.com)；
-2. 按快捷键 `Cmd + Option + I`（Mac）或 `F12` 打开开发者工具；
-3. 切换到顶部 **Application（应用）** 标签页；
-4. 左侧菜单展开 **Storage（存储）** ➔ **Cookies** ➔ 点击 **`https://x.com`**；
-5. 在中间表格找到以下两项并双击复制其 **Value（值）**：
-   - `auth_token`：一串 40 位的哈希字符串，填入 `X_AUTH_TOKEN`
-   - `ct0`：CSRF 校验值，填入 `X_CT0`
+### 免查 Cookie 一键登录（最省心）
+项目支持通过可视化交互式窗口一键捕获合法凭据，**彻底告别手动打开 F12 查 Cookie**：
+- **X 账号登录**：`uv run python main.py --login x`（或直接 `main.py --login`）
+- **OpenAI / ChatGPT Plus 会话凭据**：`uv run python main.py --login openai`
+- **Google Gemini 账号凭据**：`uv run python main.py --login gemini`
 
 ---
 
@@ -130,11 +143,16 @@ FETCH_TIMEOUT=60
 所有命令均支持 `uv run python main.py [选项]` 执行，保证在隔离虚拟环境中运行。
 
 ```
-usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
-               [--list [N]] [--view TWEET_ID] [--export [N]]
-               [--search QUERY] [--search-type {live,top}]
-               [--min-likes MIN_LIKES] [--min-retweets MIN_RETWEETS]
-               [--user USER] [--x-list X_LIST] [--limit LIMIT]
+usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
+               [--trends-digest]
+               [-c {tech,all,business,news,entertainment,sports}] [--top N]
+               [--provider {gemini,openai,deepseek,qwen,zhipu,minimax,custom}]
+               [--auth-mode {api_key,account}] [--model MODEL_NAME]
+               [--fetch-only] [--report-only] [--user USERNAME]
+               [--x-list LIST_ID_OR_URL] [--search QUERY]
+               [--search-type {live,top}] [--min-likes N] [--min-retweets N]
+               [--limit N] [--list [N]] [--view TWEET_ID]
+               [--export-md | --no-export-md] [--export [N]] [-o PATH]
                [--pages PAGES] [--hours HOURS] [--timeout TIMEOUT]
 ```
 
@@ -453,8 +471,32 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
 
 ---
 
-### 4.11 验证账号会话连通性 (`--check-auth`)
-测试当前 `.env` 中的凭证和网络代理是否能成功与 X 建立合法会话。
+### 4.11 交互式免查 Cookie 浏览器登录 (`--login`)
+弹出原生可视化 Chrome 窗口进行交互式登录，系统在后台自动截获并持久化保存 Session 凭据，**彻底告别手动打开开发者工具查 Cookie**：
+
+* **基本语法**：
+  ```bash
+  # 登录 X (Twitter) 并持久化保存凭据（默认）
+  uv run python main.py --login
+  uv run python main.py --login x
+
+  # 登录 OpenAI / ChatGPT Plus（用于无 API Key 费用白嫖订阅配额）
+  uv run python main.py --login openai
+
+  # 登录 Google Gemini
+  uv run python main.py --login gemini
+  ```
+* **参数选项**：
+  * `--timeout <N>`：浏览器登录窗口等待超时阈值（秒，默认 120 秒）。
+* **凭据持久化位置**：
+  * X 会话：`data/auth_state.json`
+  * OpenAI 会话：`data/chatgpt_auth.json`
+  * Gemini 会话：`data/gemini_auth.json`
+
+---
+
+### 4.12 验证账号会话连通性 (`--check-auth`)
+测试当前 `.env` 或 `data/auth_state.json` 中的凭证和网络代理是否能成功与 X 建立合法会话。
 
 * **基本语法**：
   ```bash
@@ -468,25 +510,93 @@ usage: main.py [-h] [--login] [--check-auth] [--fetch-only] [--report-only]
   │ 状态: 会话有效                                                               │
   │ 信息: X User (logged_in)                                                     │
   │ 代理配置: http://127.0.0.1:8118                                              │
+  │ 会话来源: data/auth_state.json                                               │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   ```
 
 ---
 
-### 4.12 交互式浏览器登录 (`--login`)
-弹出原生 Chrome 窗口进行免查 Cookie 交互式登录。一旦检测到登录成功，自动提取 Session 并保存至 `data/auth_state.json`。
+### 4.13 全网热搜与趋势看板（模式 1：`--trends`）
+**解决用户「在没有预设关键词」时的信息盲区**。底层直接拦截 X 官方 `ExplorePage` 与 `GenericTimelineById` GraphQL 协议，自动清洗推广广告，以结构化富文本表格呈现当前全网热搜与分类趋势榜单。
 
 * **基本语法**：
   ```bash
-  uv run python main.py --login
+  # 查看当前科技/AI领域前 10 大热搜（默认）
+  uv run python main.py --trends
+
+  # 指定前 N 名（如 Top 5）
+  uv run python main.py --trends --top 5
+
+  # 切换不同分类看板
+  uv run python main.py --trends -c all            # 全网综合热榜
+  uv run python main.py --trends -c business       # 商业财经
+  uv run python main.py --trends -c news           # 全球要闻
+  uv run python main.py --trends -c entertainment  # 娱乐影视
+  uv run python main.py --trends -c sports         # 体育赛事
   ```
-* **参数选项**：
-  * `--timeout <N>`：窗口加载超时阈值（秒，默认 60 秒，若网络卡顿可指定 `--timeout 90`）。
+* **终端展示效果**：
+  ```text
+                                🔥 X 全网实时热搜榜单 - 科技/AI (Top 5)           
+  ┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ┃  # ┃ 趋势话题 / 热点                        ┃ 所属分类           ┃ 热度指标 ┃ 推荐检索 Query             ┃
+  ┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+  │  1 │ Alibaba Releases Qwen-Image-2.1        │ General            │ 高热度   │ Alibaba Releases Qwen...   │
+  │  2 │ XGEN Labs Persistent World Simulation  │ General            │ 高热度   │ XGEN Labs Prototype...     │
+  │  3 │ DeepSeek Open Source Infrastructure    │ Artificial Intell… │ 85K 讨论 │ DeepSeek Infrastructure    │
+  └────┴────────────────────────────────────────┴────────────────────┴──────────┴────────────────────────────┘
+  ```
+
+---
+
+### 4.14 全自动趋势深度研报（模式 2：`--trends-digest`）
+**从「热搜榜单」到「深度分析研报」的全自动闭环**：
+1. 自动截获当前分类下的热门趋势；
+2. 针对每个趋势主题，自动在全网发起二级热门推文定向挖掘（Top Tweets）；
+3. 将高赞讨论聚合送入大模型，生成兼具**客观事件还原、多方争议对立观点、代表性原声引用、行业启示与新媒体选题建议**的深度研报；
+4. 归档至 `output/reports/trends_YYYY-MM-DD.md`。
+
+* **基本语法**：
+  ```bash
+  # 对科技热榜 Top 3 生成深度全自动研报（默认）
+  uv run python main.py --trends-digest
+
+  # 对全网综合热搜 Top 5 生成研报
+  uv run python main.py --trends-digest -c all --top 5
+
+  # 指定使用 DeepSeek 或本地 Google 账号订阅驱动
+  uv run python main.py --trends-digest --provider deepseek --auth-mode api_key
+  uv run python main.py --trends-digest --provider gemini --auth-mode account
+  ```
+* **研报产出样例**：
+  保存在 `output/reports/trends_YYYY-MM-DD.md`，包含以下模块：
+  - **⚡ 热搜雷达速览 (Trending Radar)**：排名、趋势、体量与一句话定性；
+  - **🔍 核心热点深度剖析 (Deep Dive)**：突发事件起因、各方争议与多空交锋、高赞爆款原声引用；
+  - **💡 趋势启示与选题建议 (Actionable Insights)**：行业研判总结 + 新媒体/技术写作选题推荐。
+
+---
+
+### 4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
+任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换大模型与认证机制：
+
+* **支持的提供商 (`--provider`)**：
+  - 国外：`gemini` (Google), `openai` (ChatGPT / GPT-4o)
+  - 国内：`deepseek` (DeepSeek V3/R1), `qwen` (通义千问), `zhipu` (智谱清言), `minimax` (MiniMax), `custom` (自定义 OpenAI 兼容接口)
+* **双轨认证模式 (`--auth-mode`)**：
+  - `account`：**账号订阅免 Key 模式**（支持 Google Gemini 与 OpenAI ChatGPT Plus，0 额外账单，白嫖月付配额）
+  - `api_key`：**官方 API Key 计费模式**（按 Token 计费，高并发首选）
+* **指定具体模型 (`--model`)**：
+  - 覆盖默认模型（如 `--model deepseek-reasoner`、`--model gpt-4o`、`--model gemini-3.7-flash-high`）
 * **使用示例**：
   ```bash
-  uv run python main.py --login --timeout 90
+  # 使用 DeepSeek 提炼今日关注流早报
+  uv run python main.py --report-only --provider deepseek --auth-mode api_key
+
+  # 使用用户已订阅的 Google 账号配额生成趋势研报（0 额外费用）
+  uv run python main.py --trends-digest --provider gemini --auth-mode account
+
+  # 使用 OpenAI ChatGPT Plus 网页配额生成早报
+  uv run python main.py --report-only --provider openai --auth-mode account
   ```
-*(注：由于 X 官方对全新无缓存环境登录有严格风控，如遇「登录被限制」，请使用常规浏览器登录并通过 [第 3 节](#3-凭据与网络配置指南) 直接复制 Cookie 填入 `.env`，最快最稳)*
 
 ---
 

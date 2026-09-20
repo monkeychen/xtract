@@ -11,6 +11,7 @@ from src.config import Config
 from src.client import XClient
 from src.storage import Storage
 from src.pipeline import Pipeline
+from src.auth import run_interactive_login
 
 console = Console()
 
@@ -205,13 +206,61 @@ async def main() -> None:
     parser = argparse.ArgumentParser(description="X Following Timeline AI Digest CLI")
     parser.add_argument(
         "--login",
-        action="store_true",
-        help="打开可视化浏览器窗口登录 X，并持久化保存会话凭据（免手工查 Cookie）"
+        nargs="?",
+        const="x",
+        default=None,
+        choices=["x", "openai", "gemini"],
+        help="打开可视化浏览器登录并自动截获保存凭据（免手工查 Cookie）。支持 x (默认), openai, gemini"
     )
     parser.add_argument(
         "--check-auth",
         action="store_true",
         help="验证 X Cookie 凭证或本地会话是否有效"
+    )
+    parser.add_argument(
+        "--trends",
+        action="store_true",
+        help="查看全网热门趋势榜单看板（模式 1：支持科技、商业、新闻、全网等分类）"
+    )
+    parser.add_argument(
+        "--trends-digest",
+        action="store_true",
+        help="全自动趋势研报（模式 2：自动拉取热榜、主动挖掘代表性讨论，并通过大模型生成结构化深度研报）"
+    )
+    parser.add_argument(
+        "-c", "--category",
+        type=str,
+        default="tech",
+        choices=["tech", "all", "business", "news", "entertainment", "sports"],
+        help="趋势分类主题（默认 tech，可选 all, business, news, entertainment, sports）"
+    )
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        metavar="N",
+        help="趋势榜单展示或研报挖掘的前 N 个热点话题（默认 10）"
+    )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default=None,
+        choices=["gemini", "openai", "deepseek", "qwen", "zhipu", "minimax", "custom"],
+        help="指定大模型提供商（默认读取配置，支持 gemini, openai, deepseek, qwen, zhipu, minimax, custom）"
+    )
+    parser.add_argument(
+        "--auth-mode",
+        type=str,
+        default=None,
+        choices=["api_key", "account"],
+        help="指定大模型认证模式：api_key (API 密钥) 或 account (账号订阅/免 Key)"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        metavar="MODEL_NAME",
+        help="指定具体的模型名称（如 deepseek-chat, gpt-4o, qwen-plus 等，覆盖默认配置）"
     )
     parser.add_argument(
         "--fetch-only",
@@ -325,8 +374,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     if args.login:
-        client = XClient(timeout=args.timeout)
-        await client.login_interactive(timeout=args.timeout)
+        await run_interactive_login(args.login, timeout=args.timeout)
         return
 
     if args.check_auth:
@@ -370,6 +418,27 @@ async def main() -> None:
         return
 
     pipeline = Pipeline()
+
+    if args.trends:
+        await pipeline.show_trends(
+            category=args.category,
+            top=args.top,
+            timeout=args.timeout
+        )
+        return
+
+    if args.trends_digest:
+        await pipeline.run_trends_digest(
+            category=args.category,
+            top=args.top,
+            min_likes=args.min_likes,
+            min_retweets=args.min_retweets,
+            provider=args.provider,
+            auth_mode=args.auth_mode,
+            model=args.model,
+            timeout=args.timeout
+        )
+        return
 
     if args.search:
         tweets = await pipeline.fetch_search_and_store(
@@ -443,7 +512,10 @@ async def main() -> None:
         pipeline.generate_report(
             hours=args.hours,
             min_likes=args.min_likes,
-            min_retweets=args.min_retweets
+            min_retweets=args.min_retweets,
+            provider=args.provider,
+            auth_mode=args.auth_mode,
+            model=args.model,
         )
         return
 
@@ -453,6 +525,9 @@ async def main() -> None:
         hours=args.hours,
         min_likes=args.min_likes,
         min_retweets=args.min_retweets,
+        provider=args.provider,
+        auth_mode=args.auth_mode,
+        model=args.model,
         timeout=args.timeout
     )
     if args.export is not None:

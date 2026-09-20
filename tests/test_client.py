@@ -171,3 +171,79 @@ def test_extract_timeline_instructions():
     extracted_fallback = extract_timeline_instructions(fallback_payload)
     assert len(extracted_fallback) == 1
     assert extracted_fallback[0]["type"] == "TimelinePinEntry"
+
+
+def test_parse_trends_from_graphql():
+    from src.client import parse_trends_from_graphql
+
+    payload = {
+        "data": {
+            "timeline": {
+                "instructions": [
+                    {
+                        "type": "TimelineAddEntries",
+                        "entries": [
+                            {
+                                "content": {
+                                    "itemContent": {
+                                        "__typename": "TimelineTrend",
+                                        "name": "Claude 3.7",
+                                        "rank": "1",
+                                        "trend_metadata": {
+                                            "domain_context": "Technology · Trending",
+                                            "meta_description": "120K posts",
+                                            "url": {
+                                                "url": "twitter://search?query=%22Claude+3.7%22"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "content": {
+                                    "itemContent": {
+                                        "__typename": "TimelineTrend",
+                                        "name": "Sponsored Brand Ad",
+                                        "promoted_metadata": {"advertiser_name": "AdCorp"},
+                                        "trend_metadata": {
+                                            "domain_context": "Promoted by AdCorp",
+                                            "meta_description": "Promoted by AdCorp",
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "content": {
+                                    "itemContent": {
+                                        "__typename": "TimelineTrend",
+                                        "name": "DeepSeek V3",
+                                        "rank": "2",
+                                        "trend_metadata": {
+                                            "domain_context": "Artificial Intelligence",
+                                            "meta_description": "85K posts",
+                                            "url": {
+                                                "url": "twitter://search?query=DeepSeek+V3"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+    trends = parse_trends_from_graphql(payload)
+    assert len(trends) == 2
+    assert trends[0]["name"] == "Claude 3.7"
+    assert trends[0]["query"] == "Claude 3.7"
+    assert trends[0]["domain"] == "Technology · Trending"
+    assert trends[0]["volume"] == "120K posts"
+    assert trends[0]["rank"] == 1
+
+    assert trends[1]["name"] == "DeepSeek V3"
+    assert trends[1]["query"] == "DeepSeek V3"
+    assert trends[1]["rank"] == 2
+

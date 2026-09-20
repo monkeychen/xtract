@@ -1,11 +1,12 @@
 import json
 from datetime import datetime, timezone
 from typing import Any
-from google import genai
+
 from .config import Config
+from .llm import BaseLLMProvider, get_llm_provider
 
 
-SYSTEM_PROMPT = """你是一名敏锐的科技与AI行业主编兼高级情报分析师。
+DAILY_SYSTEM_PROMPT = """你是一名敏锐的科技与AI行业主编兼高级情报分析师。
 你的任务是将用户在 X (Twitter) 关注流中抓取到的最新推文，加工成一份高信息密度、结论先行、结构清晰的「每日关注圈情报简报」。
 
 ### 目标读者背景：
@@ -39,13 +40,48 @@ SYSTEM_PROMPT = """你是一名敏锐的科技与AI行业主编兼高级情报�
 3. 英文推文提炼其核心中文洞察，保留关键专业术语及原作者 Handle。
 """
 
+TRENDS_SYSTEM_PROMPT = """你是一名全网热点趋势情报分析专家。
+你的任务是将 X (Twitter) 当前最热的突发趋势话题及其高赞推文，加工成一份权威、犀利、结构清晰的「全网实时趋势深度研报」。
+
+### 报告输出结构要求（严格采用 Markdown 输出）：
+
+# 🔥 X 全网趋势研报 ({category_label}) | {date}
+
+## ⚡ 热搜雷达速览 (Trending Radar)
+用一张紧凑的 Markdown 表格汇总当前分析的 Top 趋势：
+| 排名 | 趋势话题 | 讨论体量 | 核心事件/一句话定性 |
+
+## 🔍 核心热点深度剖析 (Deep Dive)
+对上述每个趋势话题，展开深入拆解：
+### 话题名称 (附推文体量)
+- **突发事件/起因**：为什么会突然爆发？源头事件或最新进展是什么？
+- **多方立场与争议交锋**：行业大佬、当事人、社区主流声音与反面意见。
+- **高赞爆款原声**：引用 1~2 条最具代表性或争议性的推文原话，注明博主 Handle 与点赞数。
+
+## 💡 趋势启示与选题建议 (Actionable Insights)
+- 对行业观察者/新媒体创作者/投资者的启示与预判；
+- 值得跟进的潜在衍生事件或选题方向。
+
+---
+
+### 原则：
+1. 结论先行，客观公正，禁止空话套话。
+2. 重点挖掘推文间的观点碰撞与事实真相。
+"""
+
 
 class Summarizer:
-    def __init__(self) -> None:
-        if not Config.validate_gemini_credentials():
-            raise ValueError("GEMINI_API_KEY is not set in environment or .env file.")
-        self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        self.model = Config.GEMINI_MODEL
+    def __init__(
+        self,
+        provider: str | None = None,
+        auth_mode: str | None = None,
+        model: str | None = None,
+        llm_instance: BaseLLMProvider | None = None,
+    ) -> None:
+        if llm_instance:
+            self.llm = llm_instance
+        else:
+            self.llm = get_llm_provider(provider=provider, auth_mode=auth_mode, model=model)
 
     def _format_tweets_for_prompt(self, tweets: list[dict[str, Any]]) -> str:
         lines = []
@@ -81,15 +117,53 @@ class Summarizer:
             return "# 🗞️ X 关注流情报早报\n\n今日未采集到有效推文，暂无报告。"
 
         date_str = target_date or datetime.now().strftime("%Y-%m-%d")
-        prompt_system = SYSTEM_PROMPT.format(date=date_str)
+        prompt_system = DAILY_SYSTEM_PROMPT.format(date=date_str)
         formatted_tweets = self._format_tweets_for_prompt(tweets)
 
         user_content = f"以下是抓取到的 {len(tweets)} 条关注流推文数据：\n\n{formatted_tweets}\n\n请按规范生成今日情报简报。"
+        return self.llm.generate(prompt=user_content, system_prompt=prompt_system)
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=[
-                {"role": "user", "parts": [{"text": f"{prompt_system}\n\n---\n\n{user_content}"}]}
-            ]
+    def summarize_trends(
+        self,
+        trends_payload: list[dict[str, Any]],
+        category: str = "tech",
+        target_date: str | None = None,
+    ) -> str:
+        if not trends_payload:
+            return "# 🔥 X 全网趋势研报\n\n未采集到有效趋势数据，暂无研报。"
+
+        category_labels = {
+            "tech": "科技/AI/开发者",
+            "all": "全网综合热搜",
+            "business": "商业财经/投资",
+            "news": "全球要闻/时事",
+            "entertainment": "娱乐/影视/文化",
+            "sports": "体育赛事",
+        }
+        cat_label = category_labels.get(category.lower(), category)
+        date_str = target_date or datetime.now().strftime("%Y-%m-%d")
+        prompt_system = TRENDS_SYSTEM_PROMPT.format(date=date_str, category_label=cat_label)
+
+        content_blocks = []
+        for item in trends_payload:
+            topic = item.get("topic", "未知话题")
+            volume = item.get("volume", "热度高")
+            domain = item.get("domain", "")
+            domain_str = f" ({domain})" if domain else ""
+            tweets = item.get("tweets", [])
+
+            block = [f"### 话题: {topic}{domain_str} | 推文量: {volume}"]
+            if tweets:
+                block.append("相关精选推文数据:")
+                block.append(self._format_tweets_for_prompt(tweets))
+            else:
+                block.append("（暂无补充推文数据）")
+            content_blocks.append("\n".join(block))
+
+        user_content = (
+            f"以下是当前分类【{cat_label}】下的 {len(trends_payload)} 个焦点趋势话题及其高赞推文数据：\n\n"
+            + "\n\n---\n\n".join(content_blocks)
+            + "\n\n请按规范生成今日趋势深度研报。"
         )
-        return response.text or "生成报告失败：模型未返回内容。"
+
+        return self.llm.generate(prompt=user_content, system_prompt=prompt_system)

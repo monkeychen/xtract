@@ -179,6 +179,77 @@ def extract_timeline_instructions(data: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def parse_trends_from_graphql(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Extracts organic trends from ExplorePage or GenericTimelineById GraphQL responses.
+    Filters out sponsored/promoted trends and extracts ranks, categories, and queries.
+    """
+    trends: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def process_item_content(ic: dict, is_ai: bool = False) -> None:
+        if not isinstance(ic, dict):
+            return
+        if ic.get("__typename") != "TimelineTrend" and not is_ai:
+            return
+
+        name = ic.get("name")
+        if not name or name in seen:
+            return
+
+        # Filter out sponsored / promoted trends
+        if ic.get("promoted_metadata"):
+            return
+        tm = ic.get("trend_metadata", {})
+        meta_desc = tm.get("meta_description", "")
+        if "promoted" in meta_desc.lower():
+            return
+
+        domain = tm.get("domain_context", "")
+        rank_str = ic.get("rank")
+        try:
+            rank = int(rank_str) if rank_str else len(trends) + 1
+        except Exception:
+            rank = len(trends) + 1
+
+        # Extract search query
+        query = name
+        url_obj = tm.get("url", {})
+        deep_link = url_obj.get("url", "")
+        if "query=" in deep_link:
+            match = re.search(r"query=([^&]+)", deep_link)
+            if match:
+                query = urllib.parse.unquote_plus(match.group(1)).strip('"')
+
+        seen.add(name)
+        trends.append({
+            "name": name,
+            "query": query,
+            "rank": rank,
+            "domain": domain,
+            "volume": meta_desc if meta_desc and "promoted" not in meta_desc.lower() else "高热度讨论",
+            "is_ai_trend": is_ai or ic.get("is_ai_trend", False),
+        })
+
+    def walk(d: Any) -> None:
+        if isinstance(d, dict):
+            if "itemContent" in d:
+                process_item_content(d["itemContent"])
+            if "items" in d and isinstance(d["items"], list):
+                for sub in d["items"]:
+                    sub_ic = sub.get("item", {}).get("itemContent", {})
+                    process_item_content(sub_ic, is_ai=True)
+            for v in d.values():
+                walk(v)
+        elif isinstance(d, list):
+            for x in d:
+                walk(x)
+
+    walk(payload)
+    trends.sort(key=lambda t: t["rank"])
+    return trends
+
+
 class XClient:
     def __init__(self, timeout: int | None = None) -> None:
         self.timeout_seconds = timeout or Config.FETCH_TIMEOUT
@@ -678,3 +749,110 @@ class XClient:
                 unique_tweets.append(t)
 
         return unique_tweets
+
+    async def fetch_explore_trends(
+        self,
+        category: str = "tech",
+        top: int = 10,
+        timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Intercepts official Explore / Trending GraphQL endpoints (ExplorePage & GenericTimelineById).
+        Supports category filtering (tech, all, business, news, entertainment, sports).
+        """
+        if not Config.validate_x_credentials():
+            raise ValueError("未配置认证信息：请在 .env 填写 X_AUTH_TOKEN 或运行 python main.py --login。")
+
+        cat = category.lower().strip()
+        cat_urls = {
+            "sports": "https://x.com/explore/tabs/sports_unified",
+            "entertainment": "https://x.com/explore/tabs/entertainment_unified",
+            "news": "https://x.com/explore/tabs/news_unified",
+            "all": "https://x.com/explore/tabs/trending",
+            "business": "https://x.com/explore/tabs/trending",
+            "tech": "https://x.com/explore/tabs/trending",
+        }
+        target_url = cat_urls.get(cat, "https://x.com/explore/tabs/trending")
+
+        timeout_s = timeout or self.timeout_seconds
+        timeout_ms = timeout_s * 1000
+        intercepted_payloads = []
+
+        async def handle_response(response: Response) -> None:
+            url = response.url
+            if "/graphql/" in url and response.status == 200:
+                if any(k in url for k in ["ExplorePage", "GenericTimelineById", "Explore", "Trends"]):
+                    try:
+                        data = await response.json()
+                        intercepted_payloads.append(data)
+                    except Exception as e:
+                        logger.debug(f"Failed to parse explore response: {e}")
+
+        async with async_playwright() as p:
+            browser = await self._launch_browser(p, headless=True)
+            context = await self._setup_context(browser, timeout_ms=timeout_ms)
+            page = await context.new_page()
+            page.on("response", handle_response)
+
+            console.print(f"[cyan]🌐 正在打开 X 趋势中心 ({target_url}) 并拦截热点流（超时阈值: {timeout_s} 秒）...[/cyan]")
+            await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
+
+            for _ in range(max(30, timeout_s)):
+                await asyncio.sleep(1)
+                if len(intercepted_payloads) >= 2:
+                    break
+
+            await browser.close()
+
+        all_trends: list[dict[str, Any]] = []
+        seen_names = set()
+        for payload in intercepted_payloads:
+            for item in parse_trends_from_graphql(payload):
+                if item["name"] not in seen_names:
+                    seen_names.add(item["name"])
+                    all_trends.append(item)
+
+        # Categorization logic
+        filtered = []
+        tech_keywords = {
+            "ai", "model", "llm", "claude", "gpt", "deepseek", "qwen", "tech",
+            "code", "software", "nvidia", "apple", "google", "alibaba", "robot",
+            "openai", "agent", "data", "meta", "chips", "hardware"
+        }
+        biz_keywords = {"business", "finance", "economy", "stock", "market", "fund", "cpi", "fed", "ipo", "trading"}
+        news_keywords = {"news", "politics", "war", "minister", "president", "gulf", "policy", "election"}
+
+        for t in all_trends:
+            domain_l = t["domain"].lower()
+            name_l = t["name"].lower()
+
+            if cat == "all":
+                filtered.append(t)
+            elif cat == "tech":
+                if t["is_ai_trend"] or "tech" in domain_l or any(k in name_l for k in tech_keywords):
+                    filtered.append(t)
+            elif cat == "business":
+                if "business" in domain_l or "finance" in domain_l or any(k in name_l for k in biz_keywords):
+                    filtered.append(t)
+            elif cat == "news":
+                if "news" in domain_l or "politics" in domain_l or any(k in name_l for k in news_keywords):
+                    filtered.append(t)
+            elif cat == "sports":
+                if "sports" in domain_l:
+                    filtered.append(t)
+            elif cat == "entertainment":
+                if "entertainment" in domain_l:
+                    filtered.append(t)
+            else:
+                filtered.append(t)
+
+        # If domain-specific filtering returned fewer than requested, supplement with top general organic trends
+        if len(filtered) < top:
+            for t in all_trends:
+                if t not in filtered:
+                    filtered.append(t)
+                if len(filtered) >= top:
+                    break
+
+        return filtered[:top]
+

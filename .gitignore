@@ -6,6 +6,9 @@
 !.env.example
 cookies.json
 data/auth_state.json
+data/*_auth.json
+data/chatgpt_auth.json
+data/gemini_auth.json
 *.pem
 *.key
 

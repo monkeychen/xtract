@@ -1,12 +1,12 @@
 # Project: X Following Timeline & Search AI Digest
 
 ## 1. 目标与背景
-从 X（Twitter）个人的 Following（时间线关注流）、指定 Lists（列表）、特定博主以及关键词高级搜索（Search Timeline）中自动拉取最新实时推文，通过本地 SQLite 存储去重与互动指标信噪比过滤，利用 AI 对核心讨论、要闻资讯进行结构化聚类与早报生成。
+从 X（Twitter）个人的 Following（时间线关注流）、指定 Lists（列表）、特定博主、全网热门趋势（Explore Trends）以及关键词高级搜索（Search Timeline）中自动拉取最新实时推文，通过本地 SQLite 存储去重与互动指标信噪比过滤，利用国内外多大模型（双轨认证：API-Key / 账号订阅免Key）对核心讨论、要闻资讯与全网突发热点进行结构化聚类与研报生成。
 
 ## 2. 核心架构与设计决策
 
 ### 架构流程
-`Fetch (Following / List / User / Search Playwright 拦截)` -> `Deduplicate & Store (SQLite 去重与元数据落库)` -> `Filter (互动门槛与无效过滤)` -> `Summarize (AI 结构化早报)` -> `Output (Markdown 归档与图片隔离保存)`
+`Fetch (Following / List / User / Search / Trends Playwright 拦截)` -> `Deduplicate & Store (SQLite 去重与元数据落库)` -> `Filter (互动门槛与无效过滤)` -> `Summarize (多模型统一调度)` -> `Output (Markdown 归档与图片隔离保存)`
 
 ### 设计决策说明
 1. **采用 Playwright 监听官方网络流替代第三方逆向库（如 twikit）**：
@@ -27,6 +27,15 @@
 6. **互动信噪比门槛过滤（Engagement Filtering）**：
    - **为什么**：推特信息流充斥水帖、闲聊与低质灌水。按 `min_likes` / `min_retweets` 在采集、查阅、早报生成中过滤。
    - **对用户的影响**：大幅提升早报质量与阅读效率，专注高价值讨论。
+7. **全网热搜与趋势雷达（Explore Trends Discovery）**：
+   - **为什么**：解决用户在不知道关键词前置条件时的「信息盲区」。支持分类看板与全自动研报（默认 `tech`，开放 `all`, `business`, `news`, `entertainment`, `sports` 等全分类）。
+   - **对用户的影响**：实现「从未知到已知」的情报闭环；零输入全自动发现热点并生成研报。
+8. **统一多大模型驱动与双轨认证（Unified LLM & Dual-Track Auth）**：
+   - **为什么**：打破单一 Gemini 绑定，支持国外（Gemini, OpenAI）与国内（DeepSeek, Qwen, Zhipu, MiniMax）主流大模型；同时支持 API Key 计费与账号认证模式（走用户已订阅的 Google / ChatGPT Plus 配额）。
+   - **对用户的影响**：零额外 API 账单（直接白嫖月付订阅）；模型选择自由度最大化。
+9. **交互式免查 Token 登录 UI（Interactive Browser Login）**：
+   - **为什么**：让用户在浏览器开发者工具查 Token 极度违背体验准则。
+   - **对用户的影响**：统一使用 `main.py --login [x|openai|gemini]`，弹出浏览器完成登录后系统自动截获并持久化保存凭据，免去任何手动查找复制。
 
 ---
 
@@ -41,13 +50,24 @@
 ├── src/                    # 核心业务逻辑
 │   ├── __init__.py
 │   ├── config.py           # 环境变量与配置加载
-│   ├── client.py           # X Following 流拉取客户端
+│   ├── client.py           # X Following / Search / Trends 流拉取客户端
 │   ├── storage.py          # SQLite 增量存储与去重逻辑
-│   ├── summarizer.py       # LLM 早报提炼与生成器
+│   ├── auth.py             # 交互式浏览器登录与凭证自动捕获
+│   ├── llm/                # 统一多大模型驱动层
+│   │   ├── __init__.py
+│   │   ├── base.py         # 抽象基类与通用 Message
+│   │   ├── factory.py      # 提供商调度工厂
+│   │   ├── openai_compat.py# OpenAI 协议驱动 (DeepSeek/Qwen/Zhipu/MiniMax/OpenAI)
+│   │   ├── gemini_account.py# Gemini 账号免 Key 驱动 (agy / OAuth)
+│   │   └── chatgpt_account.py# OpenAI Plus 账号驱动
+│   ├── summarizer.py       # 早报与趋势研报提炼器
 │   └── pipeline.py         # 任务串联与编排入口
 ├── data/                   # 本地数据存储（Git 忽略）
 │   ├── tweets.db           # SQLite 数据库
-│   └── raw/                # 原始抓取快照备份（按需归档，保留 30 天）
+│   ├── auth_state.json     # X 登录凭据
+│   ├── chatgpt_auth.json   # ChatGPT Plus 会话凭据
+│   ├── gemini_auth.json    # Gemini 会话凭据
+│   └── raw/                # 原始抓取快照备份（保留 30 天）
 ├── output/                 # 输出结果
 │   └── reports/            # 生成的 Markdown 早报（YYYY-MM-DD.md）
 └── main.py                 # CLI 入口
@@ -58,7 +78,7 @@
 - **数据保留策略**：
   - `data/tweets.db`：持久化保留推文元数据用于历史去重。
   - `data/raw/`：调试抓取的原始 JSON，按日期命名 `raw_YYYYMMDD_HHMM.json`，清理策略为保留近 30 天。
-  - `output/reports/`：早报输出文件命名为 `YYYY-MM-DD.md`。
+  - `output/reports/`：早报输出文件命名为 `YYYY-MM-DD.md`，趋势研报命名为 `trends_YYYY-MM-DD.md`。
 
 ---
 
@@ -66,8 +86,11 @@
 - 初始化环境：`uv venv && uv pip install -e .`
 - 执行全量流水线：`uv run python main.py`
 - 仅拉取推文：`uv run python main.py --fetch-only`
-- 仅生成今日报告：`uv run python main.py --report-only [--hours N] [--min-likes N]`
+- 仅生成今日报告：`uv run python main.py --report-only [--hours N] [--min-likes N] [--provider X] [--auth-mode Y]`
 - 关键词与高级语法搜索：`uv run python main.py --search "<关键词或语法>" [--search-type live|top] [--limit N] [--min-likes N]`
+- 查看全网趋势榜单（模式1）：`uv run python main.py --trends [--category tech|all|business|news|entertainment|sports] [--top N]`
+- 全自动趋势研报（模式2）：`uv run python main.py --trends-digest [--category tech|all|business|news] [--top N] [--provider X] [--auth-mode Y]`
+- 交互式浏览器登录：`uv run python main.py --login [x|openai|gemini]`
 - 在线抓取指定博主推文：`uv run python main.py --user <博主用户名> [--limit N]`
 - 抓取指定 X 列表最新推文：`uv run python main.py --x-list <列表ID或URL> [--limit N]`
 - 本地检索已存推文：`uv run python main.py --list [数量] [--user <博主>] [--min-likes N] [--min-retweets N]`
