@@ -109,7 +109,7 @@ HTTP_PROXY=http://127.0.0.1:8118
 # ==========================================
 # 3. 多大模型调度与双轨认证 (Multi-LLM & Dual-Track Auth)
 # ==========================================
-# 模型提供商：gemini | openai | deepseek | qwen | zhipu | minimax | custom
+# 模型提供商：gemini | openai | deepseek | qwen | qwen-token-plan | zhipu | zhipu-code-plan | minimax | kimi | custom
 LLM_PROVIDER=gemini
 
 # 认证模式：
@@ -117,17 +117,23 @@ LLM_PROVIDER=gemini
 # - api_key: 官方 API Key 计费模式
 LLM_AUTH_MODE=account
 
-# 默认调用模型（留空使用提供商官方最佳默认值）
-LLM_MODEL=gemini-3.7-flash-high
+# 默认调用模型（留空使用提供商官方最佳默认值，全量默认开启深度思考/推理模式与 high 级别）
+LLM_MODEL=
 
 # --- 提供商 API Key 配置 (当 LLM_AUTH_MODE=api_key 时生效) ---
 GEMINI_API_KEY=
 OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_BASE_URL=
 DEEPSEEK_API_KEY=
-DASHSCOPE_API_KEY=   # 通义千问 Qwen
-ZHIPUAI_API_KEY=     # 智谱清言 GLM
-MINIMAX_API_KEY=     # MiniMax
+DEEPSEEK_BASE_URL=
+DASHSCOPE_API_KEY=   # 阿里通义千问 (普通百炼 sk-，Token Plan 专属套餐 sk-sp- 自动路由)
+DASHSCOPE_BASE_URL=
+ZHIPUAI_API_KEY=     # 智谱清言 (普通开放平台 zhipu 或 Code Plan 专属套餐 zhipu-code-plan)
+ZHIPUAI_BASE_URL=
+MINIMAX_API_KEY=     # MiniMax 海螺
+MINIMAX_BASE_URL=
+MOONSHOT_API_KEY=    # 月之暗面 Kimi
+MOONSHOT_BASE_URL=
 ```
 
 ### 免查 Cookie 一键登录（最省心）
@@ -728,18 +734,31 @@ launchctl load ~/Library/LaunchAgents/com.x.digest.plist
 ├── GEMINI.md               # 项目架构约束与设计记录
 ├── README.md               # 本项目全量使用指南
 ├── pyproject.toml          # uv 依赖管理
+├── .env.example            # 环境变量配置模板
 ├── .env                    # 敏感会话凭据与代理（Git 忽略）
 ├── src/                    # 核心模块
+│   ├── __init__.py
 │   ├── config.py           # 集中配置管理
 │   ├── client.py           # Playwright 无头官方流拦截器
 │   ├── storage.py          # SQLite 增量存储与 Markdown 导出
-│   ├── summarizer.py       # Gemini 结构化聚类分析器
+│   ├── auth.py             # 交互式浏览器登录与凭证自动捕获
+│   ├── llm/                # 统一多大模型驱动层
+│   │   ├── __init__.py
+│   │   ├── base.py         # 抽象基类与通用 Message / 多模态
+│   │   ├── factory.py      # 提供商调度工厂
+│   │   ├── openai_compat.py# OpenAI 协议驱动 (DeepSeek/Qwen/Zhipu/MiniMax/OpenAI)
+│   │   ├── gemini_account.py# Gemini 账号免 Key 驱动 (agy / OAuth)
+│   │   └── chatgpt_account.py# OpenAI Plus 账号驱动
+│   ├── summarizer.py       # 结构化聚类分析与趋势研报提炼器
 │   └── pipeline.py         # 流水线编排中枢
 ├── data/                   # 本地持久化数据（Git 忽略）
 │   ├── tweets.db           # SQLite 数据库（存储去重推文元数据）
+│   ├── auth_state.json     # X 登录凭据
+│   ├── chatgpt_auth.json   # ChatGPT Plus 会话凭据
+│   ├── gemini_auth.json    # Gemini 会话凭据
 │   └── raw/                # 原始 JSON 快照备份（灾备，保留 30 天）
 ├── output/                 # 输出结果
-│   ├── reports/            # 生成的 Markdown 早报（YYYY-MM-DD.md）
+│   ├── reports/            # 生成的 Markdown 早报与趋势研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
 │   └── tweets_YYYY-MM-DD.md# 导出的全量推文归档清单
 ├── tests/                  # 自动化单元测试集
 └── main.py                 # 统一 CLI 入口
