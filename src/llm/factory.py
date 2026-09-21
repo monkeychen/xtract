@@ -37,8 +37,13 @@ def get_llm_provider(
     # API-Key mode
     if prov in ("gemini", "google"):
         return OpenAICompatProvider(provider="gemini_api", model_name=target_model)
-    elif prov in ("openai", "gpt", "deepseek", "qwen", "glm", "zhipu", "minimax", "kimi", "custom"):
-        return OpenAICompatProvider(provider=prov, model_name=target_model)
+    norm_prov = prov.replace("-", "_")
+    if norm_prov in (
+        "openai", "gpt", "deepseek", "qwen", "qwen_token_plan",
+        "glm", "zhipu", "glm_code_plan", "zhipu_code_plan",
+        "minimax", "kimi", "custom"
+    ):
+        return OpenAICompatProvider(provider=norm_prov, model_name=target_model)
     else:
         # Fallback to custom OpenAI compatible provider
         logger.warning(f"Unknown provider '{prov}', falling back to custom OpenAI-compatible endpoint.")

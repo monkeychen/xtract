@@ -29,13 +29,28 @@ PROVIDER_CONFIGS = {
         "default_model": "qwen-plus",
         "env_key": "DASHSCOPE_API_KEY",
     },
+    "qwen_token_plan": {
+        "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-plus",
+        "env_key": "DASHSCOPE_API_KEY",
+    },
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "default_model": "glm-4-plus",
         "env_key": "ZHIPUAI_API_KEY",
     },
+    "glm_code_plan": {
+        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+        "default_model": "glm-4-plus",
+        "env_key": "ZHIPUAI_API_KEY",
+    },
     "zhipu": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-4-plus",
+        "env_key": "ZHIPUAI_API_KEY",
+    },
+    "zhipu_code_plan": {
+        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
         "default_model": "glm-4-plus",
         "env_key": "ZHIPUAI_API_KEY",
     },
@@ -65,7 +80,7 @@ PROVIDER_CONFIGS = {
 class OpenAICompatProvider(BaseLLMProvider):
     """
     Unified client for OpenAI-compatible REST endpoints:
-    OpenAI, DeepSeek, Qwen (DashScope), Zhipu GLM, MiniMax, etc.
+    OpenAI, DeepSeek, Qwen (DashScope / Token Plan), Zhipu GLM (Standard / Code Plan), MiniMax, Kimi, etc.
     """
 
     def __init__(
@@ -76,12 +91,43 @@ class OpenAICompatProvider(BaseLLMProvider):
         model_name: str | None = None,
         timeout: float = 120.0,
     ) -> None:
-        self._provider = provider.lower()
+        self._provider = provider.lower().replace("-", "_")
         cfg = PROVIDER_CONFIGS.get(self._provider, PROVIDER_CONFIGS["custom"])
 
-        self._base_url = (base_url or Config.OPENAI_BASE_URL or cfg["base_url"]).rstrip("/")
-        self._default_model = cfg["default_model"]
         self._api_key = api_key or getattr(Config, cfg["env_key"], "")
+
+        # Dynamic endpoint resolution with intelligent auto-deduction
+        resolved_base_url = base_url
+        if not resolved_base_url:
+            if "qwen" in self._provider:
+                if Config.DASHSCOPE_BASE_URL:
+                    resolved_base_url = Config.DASHSCOPE_BASE_URL
+                elif self._provider == "qwen_token_plan" or (self._api_key and self._api_key.startswith("sk-sp-")):
+                    # Auto-detect Alibaba Model Studio Token Plan dedicated key (sk-sp-)
+                    resolved_base_url = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+                else:
+                    resolved_base_url = cfg["base_url"]
+            elif "glm" in self._provider or "zhipu" in self._provider:
+                if Config.ZHIPUAI_BASE_URL:
+                    resolved_base_url = Config.ZHIPUAI_BASE_URL
+                elif self._provider in ("glm_code_plan", "zhipu_code_plan", "glm_coding", "zhipu_coding"):
+                    # Dedicated GLM Coding Plan endpoint
+                    resolved_base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+                else:
+                    resolved_base_url = cfg["base_url"]
+            elif "kimi" in self._provider:
+                resolved_base_url = Config.MOONSHOT_BASE_URL or cfg["base_url"]
+            elif "deepseek" in self._provider:
+                resolved_base_url = Config.DEEPSEEK_BASE_URL or cfg["base_url"]
+            elif "minimax" in self._provider:
+                resolved_base_url = Config.MINIMAX_BASE_URL or cfg["base_url"]
+            elif self._provider in ("openai", "gpt"):
+                resolved_base_url = Config.OPENAI_BASE_URL or cfg["base_url"]
+            else:
+                resolved_base_url = Config.OPENAI_BASE_URL or cfg["base_url"]
+
+        self._base_url = resolved_base_url.rstrip("/")
+        self._default_model = cfg["default_model"]
         self._timeout = timeout
 
         super().__init__(model_name=model_name or Config.LLM_MODEL)
@@ -96,6 +142,10 @@ class OpenAICompatProvider(BaseLLMProvider):
 
     @property
     def provider_name(self) -> str:
+        if self._provider == "qwen_token_plan" or "token-plan" in self._base_url:
+            return "Qwen (Token Plan · 专属套餐)"
+        if self._provider in ("glm_code_plan", "zhipu_code_plan") or "/coding/" in self._base_url:
+            return "GLM (Coding Plan · 专属套餐)"
         return f"{self._provider.capitalize()} (API Key)"
 
     def generate(self, prompt: str, system_prompt: str | None = None) -> str:

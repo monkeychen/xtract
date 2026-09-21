@@ -41,8 +41,12 @@
 - **Google Gemini**：主力 `gemini-3.8-flash`（高智商超高速），推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。
 - **OpenAI GPT**：主力 `gpt-4o`，轻量 `gpt-4o-mini`，推理 `o3-mini` / `o1`。账号通道走 ChatGPT Plus 会话。
 - **DeepSeek**：主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态），高阶 `deepseek-v4-pro`。通过 `thinking` 参数动态控制思考链。（**禁止使用已下线的 `deepseek-chat` / `deepseek-reasoner`**）。
-- **阿里通义千问 Qwen**：主力 `qwen-plus`，旗舰 `qwen-max`（映射 Qwen3.8-Max），极速 `qwen-turbo`。端点为 DashScope 兼容模式。
-- **智谱 GLM**：主力 `glm-4-plus`，高频轻量 `glm-4-flash`。端点为 `open.bigmodel.cn/api/paas/v4`。
+- **阿里通义千问 Qwen**：主力 `qwen-plus`，旗舰 `qwen-max`（映射 Qwen3.8-Max），极速 `qwen-turbo`。
+  - 普通按量端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
+  - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-sp-` 开头，系统自动识别或指定 `--provider qwen-token-plan`）
+- **智谱 GLM**：主力 `glm-4-plus`，高频轻量 `glm-4-flash`。
+  - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`
+  - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（支持通过 `ZHIPUAI_BASE_URL` 或指定 `--provider glm-code-plan` 接入以享受套餐额度）
 - **MiniMax**：主力 `MiniMax-M3`（1M多模态旗舰），极速 `MiniMax-M2.7-highspeed`，经典 `MiniMax-Text-01`。
 - **月之暗面 Kimi**：主力 `kimi-k3`（2.8T参数1M上下文旗舰），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。
 

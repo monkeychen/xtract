@@ -588,12 +588,16 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
   3. **DeepSeek (`deepseek`)**：
      - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态）、`deepseek-v4-pro`
      - ⚠️ **模型升级警示**：旧版 `deepseek-chat` 与 `deepseek-reasoner` 别名已于 2026 年 7 月正式下线停运，系统已全面切至 `deepseek-flash`
-  4. **阿里通义千问 (`qwen`)**：
+  4. **阿里通义千问 (`qwen` / `qwen-token-plan`)**：
      - 最新主力：`qwen-plus`（默认，平衡性与多模态极强）、`qwen-max`（最新 Qwen3.8-Max 旗舰推理）、`qwen-turbo`
-     - 接入方式：阿里云百炼 DashScope 兼容接口
-  5. **智谱清言 (`glm` / `zhipu`)**：
+     - **普通按量端点**：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
+     - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
+       - *智能感知*：若 API Key 为 `sk-sp-` 开头，系统自动切换至 Token Plan 端点；亦可显式指定 `--provider qwen-token-plan` 或配置 `DASHSCOPE_BASE_URL`
+  5. **智谱清言 (`glm` / `zhipu` / `glm-code-plan`)**：
      - 最新主力：`glm-4-plus`（默认，超长文本高智能模型）、`glm-4-flash`（超轻量高吞吐）、`glm-4-air`
-     - 接入方式：智谱开放平台 API (`open.bigmodel.cn/api/paas/v4`)
+     - **普通开放平台端点**：`https://open.bigmodel.cn/api/paas/v4`
+     - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`
+       - *享用套餐额度*：配置 `ZHIPUAI_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4` 或显式指定 `--provider glm-code-plan`，避免消耗普通按量余额
   6. **MiniMax (`minimax`)**：
      - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰）、`MiniMax-M2.7-highspeed`、`MiniMax-Text-01`
      - 接入方式：MiniMax 开放平台 API (`api.minimax.chat/v1`)

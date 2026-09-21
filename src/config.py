@@ -37,10 +37,15 @@ class Config:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "").strip()
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "").strip()
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "").strip()
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "").strip()
+    DASHSCOPE_BASE_URL: str = os.getenv("DASHSCOPE_BASE_URL", "").strip()
     ZHIPUAI_API_KEY: str = os.getenv("ZHIPUAI_API_KEY", "").strip()
+    ZHIPUAI_BASE_URL: str = os.getenv("ZHIPUAI_BASE_URL", "").strip()
     MINIMAX_API_KEY: str = os.getenv("MINIMAX_API_KEY", "").strip()
+    MINIMAX_BASE_URL: str = os.getenv("MINIMAX_BASE_URL", "").strip()
     MOONSHOT_API_KEY: str = os.getenv("MOONSHOT_API_KEY", "").strip()
+    MOONSHOT_BASE_URL: str = os.getenv("MOONSHOT_BASE_URL", "").strip()
 
     # Scraping Settings
     FETCH_MAX_PAGES: int = int(os.getenv("FETCH_MAX_PAGES", "3"))
@@ -83,10 +88,10 @@ class Config:
             return False, "缺少 OPENAI_API_KEY，请在 .env 中配置。"
         elif prov == "deepseek" and not cls.DEEPSEEK_API_KEY:
             return False, "缺少 DEEPSEEK_API_KEY，请在 .env 中配置。"
-        elif prov == "qwen" and not cls.DASHSCOPE_API_KEY:
-            return False, "缺少 DASHSCOPE_API_KEY (阿里百炼)，请在 .env 中配置。"
-        elif prov in ("zhipu", "glm") and not cls.ZHIPUAI_API_KEY:
-            return False, "缺少 ZHIPUAI_API_KEY (智谱 GLM)，请在 .env 中配置。"
+        elif prov in ("qwen", "qwen_token_plan", "qwen-token-plan") and not cls.DASHSCOPE_API_KEY:
+            return False, "缺少 DASHSCOPE_API_KEY (阿里百炼 / Token Plan)，请在 .env 中配置。"
+        elif prov in ("zhipu", "glm", "glm_code_plan", "glm-code-plan", "zhipu_code_plan", "zhipu-code-plan") and not cls.ZHIPUAI_API_KEY:
+            return False, "缺少 ZHIPUAI_API_KEY (智谱 GLM / Code Plan)，请在 .env 中配置。"
         elif prov == "minimax" and not cls.MINIMAX_API_KEY:
             return False, "缺少 MINIMAX_API_KEY，请在 .env 中配置。"
         elif prov == "kimi" and not cls.MOONSHOT_API_KEY:

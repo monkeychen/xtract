@@ -245,8 +245,11 @@ async def main() -> None:
         "--provider",
         type=str,
         default=None,
-        choices=["gemini", "openai", "gpt", "deepseek", "qwen", "glm", "zhipu", "minimax", "kimi", "custom"],
-        help="指定大模型提供商（默认读取配置，支持 gemini, openai, gpt, deepseek, qwen, glm, zhipu, minimax, kimi, custom）"
+        choices=[
+            "gemini", "openai", "gpt", "deepseek", "qwen", "qwen-token-plan",
+            "glm", "zhipu", "glm-code-plan", "minimax", "kimi", "custom"
+        ],
+        help="指定大模型提供商（支持 gemini, openai, gpt, deepseek, qwen, qwen-token-plan, glm, glm-code-plan, minimax, kimi, custom）"
     )
     parser.add_argument(
         "--auth-mode",

@@ -118,3 +118,27 @@ def test_openai_compat_generate():
         result = provider.generate("Test prompt")
         assert result == "Kimi response content"
         mock_post.assert_called_once()
+
+def test_qwen_token_plan_and_glm_code_plan():
+    # Explicit Qwen Token Plan provider
+    qwen_tp = get_llm_provider("qwen_token_plan", auth_mode="api_key")
+    assert isinstance(qwen_tp, OpenAICompatProvider)
+    assert "token-plan.cn-beijing.maas.aliyuncs.com" in qwen_tp.base_url
+    assert "Token Plan" in qwen_tp.provider_name
+
+    # Auto-detection of Qwen Token Plan by sk-sp- API key prefix
+    qwen_auto = OpenAICompatProvider(provider="qwen", api_key="sk-sp-1234567890abcdef")
+    assert "token-plan.cn-beijing.maas.aliyuncs.com" in qwen_auto.base_url
+    assert "Token Plan" in qwen_auto.provider_name
+
+    # Explicit GLM Coding Plan provider
+    glm_cp = get_llm_provider("glm_code_plan", auth_mode="api_key")
+    assert isinstance(glm_cp, OpenAICompatProvider)
+    assert "open.bigmodel.cn/api/coding/paas/v4" in glm_cp.base_url
+    assert "Coding Plan" in glm_cp.provider_name
+
+    # Alias zhipu_code_plan
+    zhipu_cp = get_llm_provider("zhipu-code-plan", auth_mode="api_key")
+    assert isinstance(zhipu_cp, OpenAICompatProvider)
+    assert "open.bigmodel.cn/api/coding/paas/v4" in zhipu_cp.base_url
+    assert "Coding Plan" in zhipu_cp.provider_name
