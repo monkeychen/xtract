@@ -20,14 +20,14 @@ def test_factory_openai_compat_presets():
     assert qwen.model_name == "qwen-plus"
     assert "dashscope.aliyuncs.com" in qwen.base_url
 
-    # 3. Zhipu GLM & GLM alias
+    # 3. Zhipu GLM & GLM alias (Latest: glm-5.3)
     zhipu = get_llm_provider("zhipu", auth_mode="api_key")
     assert isinstance(zhipu, OpenAICompatProvider)
-    assert zhipu.model_name == "glm-4-plus"
+    assert zhipu.model_name == "glm-5.3"
 
     glm = get_llm_provider("glm", auth_mode="api_key")
     assert isinstance(glm, OpenAICompatProvider)
-    assert glm.model_name == "glm-4-plus"
+    assert glm.model_name == "glm-5.3"
     assert "bigmodel.cn" in glm.base_url
 
     # 4. MiniMax (Latest 2026 model: MiniMax-M3)
@@ -142,3 +142,28 @@ def test_qwen_token_plan_and_glm_code_plan():
     assert isinstance(zhipu_cp, OpenAICompatProvider)
     assert "open.bigmodel.cn/api/coding/paas/v4" in zhipu_cp.base_url
     assert "Coding Plan" in zhipu_cp.provider_name
+
+def test_glm5_thinking_payload():
+    provider = OpenAICompatProvider(
+        provider="glm",
+        api_key="test-key",
+        model_name="glm-5.3"
+    )
+
+    with patch("httpx.Client.post") as mock_post:
+        mock_post.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "choices": [
+                    {"message": {"content": "GLM-5.3 generated response"}}
+                ]
+            }
+        )
+        res = provider.generate("Test prompt")
+        assert res == "GLM-5.3 generated response"
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        payload = kwargs.get("json", {})
+        assert payload.get("model") == "glm-5.3"
+        # Verify required thinking: {"type": "enabled"} is sent
+        assert payload.get("thinking") == {"type": "enabled"}

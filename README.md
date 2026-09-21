@@ -594,10 +594,11 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
      - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
        - *智能感知*：若 API Key 为 `sk-sp-` 开头，系统自动切换至 Token Plan 端点；亦可显式指定 `--provider qwen-token-plan` 或配置 `DASHSCOPE_BASE_URL`
   5. **智谱清言 (`glm` / `zhipu` / `glm-code-plan`)**：
-     - 最新主力：`glm-4-plus`（默认，超长文本高智能模型）、`glm-4-flash`（超轻量高吞吐）、`glm-4-air`
+     - 最新主力：`glm-5.3`（默认，旗舰复杂软件工程与智能体长程任务）、`glm-5.3-flash`（1M 上下文原生多模态主力）、`glm-5.3-flashx`（200 tokens/s 极速版）
      - **普通开放平台端点**：`https://open.bigmodel.cn/api/paas/v4`
      - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`
        - *享用套餐额度*：配置 `ZHIPUAI_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4` 或显式指定 `--provider glm-code-plan`，避免消耗普通按量余额
+     - **深度思考机制**：GLM-5 系列原生要求启用思考链，系统调用时已自动注入 `thinking: {"type": "enabled"}`
   6. **MiniMax (`minimax`)**：
      - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰）、`MiniMax-M2.7-highspeed`、`MiniMax-Text-01`
      - 接入方式：MiniMax 开放平台 API (`api.minimax.chat/v1`)

@@ -36,22 +36,22 @@ PROVIDER_CONFIGS = {
     },
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "default_model": "glm-4-plus",
+        "default_model": "glm-5.3",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "glm_code_plan": {
         "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        "default_model": "glm-4-plus",
+        "default_model": "glm-5.3",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "zhipu": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "default_model": "glm-4-plus",
+        "default_model": "glm-5.3",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "zhipu_code_plan": {
         "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        "default_model": "glm-4-plus",
+        "default_model": "glm-5.3",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "minimax": {
@@ -167,6 +167,10 @@ class OpenAICompatProvider(BaseLLMProvider):
             "messages": messages,
             "temperature": 0.3,
         }
+
+        # GLM-5 series models require thinking: {"type": "enabled"} on Chat Completions
+        if "glm-5" in self.model_name.lower():
+            payload["thinking"] = {"type": "enabled"}
 
         proxies = Config.HTTP_PROXY if Config.HTTP_PROXY and any(p in self._provider for p in ["openai", "gemini"]) else None
 
