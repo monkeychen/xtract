@@ -26,7 +26,7 @@ PROVIDER_CONFIGS = {
     },
     "qwen_token_plan": {
         "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-        "default_model": "qwen-plus",
+        "default_model": "qwen3.7-plus",
         "env_key": "DASHSCOPE_API_KEY",
     },
     "zhipu": {
@@ -124,7 +124,21 @@ class OpenAICompatProvider(BaseLLMProvider):
         self._default_model = cfg["default_model"]
         self._timeout = timeout
 
-        super().__init__(model_name=model_name or Config.LLM_MODEL)
+        is_token_plan = self._provider == "qwen_token_plan" or "token-plan" in self._base_url
+        if is_token_plan:
+            self._default_model = "qwen3.7-plus"
+
+        target_model = model_name or Config.LLM_MODEL
+        if is_token_plan and target_model:
+            token_plan_map = {
+                "qwen-plus": "qwen3.7-plus",
+                "qwen-max": "qwen3.8-max",
+                "qwen-turbo": "qwen3.8-flash",
+                "qwen-flash": "qwen3.8-flash",
+            }
+            target_model = token_plan_map.get(target_model.lower(), target_model)
+
+        super().__init__(model_name=target_model)
 
     @property
     def default_model(self) -> str:

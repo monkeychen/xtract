@@ -14,8 +14,8 @@ def test_factory_openai_compat_presets():
     assert ds.model_name == "deepseek-flash"
     assert "api.deepseek.com" in ds.base_url
 
-    # 2. Qwen (DashScope)
-    qwen = get_llm_provider("qwen", auth_mode="api_key")
+    # 2. Qwen (DashScope Standard vs Token Plan)
+    qwen = OpenAICompatProvider(provider="qwen", api_key="sk-standard-test-key")
     assert isinstance(qwen, OpenAICompatProvider)
     assert qwen.model_name == "qwen-plus"
     assert "dashscope.aliyuncs.com" in qwen.base_url
@@ -125,11 +125,13 @@ def test_qwen_token_plan_and_zhipu_code_plan():
     assert isinstance(qwen_tp, OpenAICompatProvider)
     assert "token-plan.cn-beijing.maas.aliyuncs.com" in qwen_tp.base_url
     assert "Token Plan" in qwen_tp.provider_name
+    assert qwen_tp.model_name == "qwen3.7-plus"
 
     # Auto-detection of Qwen Token Plan by sk-sp- API key prefix
     qwen_auto = OpenAICompatProvider(provider="qwen", api_key="sk-sp-1234567890abcdef")
     assert "token-plan.cn-beijing.maas.aliyuncs.com" in qwen_auto.base_url
     assert "Token Plan" in qwen_auto.provider_name
+    assert qwen_auto.model_name == "qwen3.7-plus"
 
     # Explicit Zhipu Code Plan provider (canonical hyphen)
     zhipu_cp = get_llm_provider("zhipu-code-plan", auth_mode="api_key")
