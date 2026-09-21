@@ -149,3 +149,17 @@ def test_storage_init_and_deduplication():
         assert dl_count2 == 1
         single_content2 = single_md2.read_text(encoding="utf-8")
         assert "images/1002/1_img.jpg" in single_content2
+
+
+def test_is_tweet_within_hours():
+    from src.pipeline import is_tweet_within_hours
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    recent_str = (now - timedelta(hours=5)).strftime("%a %b %d %H:%M:%S +0000 %Y")
+    old_str = (now - timedelta(hours=60)).strftime("%a %b %d %H:%M:%S +0000 %Y")
+
+    assert is_tweet_within_hours({"created_at": recent_str}, hours=24) is True
+    assert is_tweet_within_hours({"created_at": old_str}, hours=24) is False
+    assert is_tweet_within_hours({"created_at": old_str}, hours=72) is True
+

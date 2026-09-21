@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 from rich.console import Console
@@ -10,6 +10,20 @@ from .client import XClient
 from .summarizer import Summarizer
 
 console = Console()
+
+
+def is_tweet_within_hours(tweet: dict[str, Any], hours: int) -> bool:
+    """Checks if tweet created_at is within the last N hours."""
+    created_str = tweet.get("created_at")
+    if not created_str:
+        return True
+    try:
+        # e.g. Mon Sep 21 08:50:52 +0000 2026
+        dt = datetime.strptime(created_str, "%a %b %d %H:%M:%S %z %Y")
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        return dt >= cutoff
+    except Exception:
+        return True
 
 
 class Pipeline:
@@ -249,6 +263,7 @@ class Pipeline:
         self,
         category: str = "tech",
         top: int = 3,
+        hours: int = 48,
         min_likes: int = 0,
         min_retweets: int = 0,
         provider: str | None = None,
@@ -259,10 +274,11 @@ class Pipeline:
         """
         End-to-end automated trend intelligence workflow:
         1. Fetches top trends for the category
-        2. Automatically searches and stores high-engagement tweets for each trend
-        3. Invokes LLM to synthesize a multi-topic trend intelligence report
+        2. Refines search queries with AI & injects freshness constraints (since:YYYY-MM-DD)
+        3. Safely searches and stores high-engagement fresh tweets for each trend
+        4. Invokes LLM to synthesize a multi-topic trend intelligence report
         """
-        console.print(f"[bold cyan]🚀 启动全自动趋势研报流水线（分类: {category}, Top {top} 热点）...[/bold cyan]")
+        console.print(f"[bold cyan]🚀 启动全自动趋势研报流水线（分类: {category}, Top {top} 热点，时效窗口: 近 {hours} 小时）...[/bold cyan]")
         trends = await self.client.fetch_explore_trends(category=category, top=top, timeout=timeout)
 
         if not trends:
@@ -277,16 +293,25 @@ class Pipeline:
         console.print(f"\n[cyan]🧠 正在通过 {summarizer.llm.provider_name} 提炼高命中推特搜索关键词...[/cyan]")
         refined_queries = summarizer.refine_search_queries(topic_names)
 
+        # Freshness date constraint for Twitter search query
+        since_date = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d")
+
         enriched_trends = []
         for idx, item in enumerate(trends, 1):
             topic_name = item.get("name", "")
-            refined_query = refined_queries.get(topic_name, item.get("query") or topic_name)
-            console.print(f"\n[cyan]🔍 ({idx}/{len(trends)}) 正在全网挖掘趋势【{topic_name}】的高赞代表性讨论 (搜索词: '{refined_query}')...[/cyan]")
+            base_query = refined_queries.get(topic_name, item.get("query") or topic_name)
+            # Inject native X since: operator if not present to guarantee freshness
+            if "since:" not in base_query:
+                target_query = f"{base_query} since:{since_date}"
+            else:
+                target_query = base_query
+
+            console.print(f"\n[cyan]🔍 ({idx}/{len(trends)}) 正在全网挖掘趋势【{topic_name}】的高赞实时讨论 (搜索词: '{target_query}')...[/cyan]")
 
             try:
                 # Safe sequential execution with 25s default timeout
                 topic_tweets = await self.fetch_search_and_store(
-                    query=refined_query,
+                    query=target_query,
                     search_type="top",
                     limit=10,
                     min_likes=min_likes,
@@ -297,11 +322,19 @@ class Pipeline:
                 console.print(f"[yellow]⚠️ 话题【{topic_name}】推文抓取受限: {e}，将使用基础趋势信息...[/yellow]")
                 topic_tweets = []
 
+            # Secondary in-memory timestamp verification
+            fresh_tweets = [t for t in topic_tweets if is_tweet_within_hours(t, hours=hours)]
+            if len(fresh_tweets) < len(topic_tweets):
+                filtered_out = len(topic_tweets) - len(fresh_tweets)
+                console.print(f"[dim]  ↳ 🕒 时效性过滤：已剔除 {filtered_out} 篇超出近 {hours} 小时的历史陈旧推文[/dim]")
+
+            final_tweets = fresh_tweets if fresh_tweets else topic_tweets
+
             enriched_trends.append({
                 "topic": topic_name,
                 "domain": item.get("domain", ""),
                 "volume": item.get("volume", ""),
-                "tweets": topic_tweets,
+                "tweets": final_tweets,
             })
 
             # Safe human-like delay between requests to protect account from rate limiting

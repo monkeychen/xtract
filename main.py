@@ -365,7 +365,7 @@ async def main() -> None:
         "--hours",
         type=int,
         default=24,
-        help="早报统计回溯时间窗口（默认近 24 小时）"
+        help="统计与研报回溯时间窗口（小时，默认近 24 小时，支持例如 48）"
     )
     parser.add_argument(
         "--timeout",
@@ -434,6 +434,7 @@ async def main() -> None:
         await pipeline.run_trends_digest(
             category=args.category,
             top=args.top,
+            hours=args.hours,
             min_likes=args.min_likes,
             min_retweets=args.min_retweets,
             provider=args.provider,
