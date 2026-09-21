@@ -5,11 +5,13 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 import httpx
+from rich.console import Console
 
 from ..config import Config
 from .base import BaseLLMProvider
 
 logger = logging.getLogger("x_digest.llm.openai_compat")
+console = Console()
 
 PROVIDER_CONFIGS = {
     "openai": {
@@ -168,7 +170,8 @@ class OpenAICompatProvider(BaseLLMProvider):
         self,
         prompt: str,
         system_prompt: str | None = None,
-        images: list[str] | None = None,
+        images: list[str | Path] | None = None,
+        stream: bool = True,
     ) -> str:
         if not self._api_key:
             raise ValueError(f"调用 {self.provider_name} 失败：未配置 API Key。请在 .env 中设置相应密钥。")
@@ -181,7 +184,7 @@ class OpenAICompatProvider(BaseLLMProvider):
         if images:
             user_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
             for img in images:
-                if img.startswith("http://") or img.startswith("https://") or img.startswith("data:"):
+                if isinstance(img, str) and (img.startswith("http://") or img.startswith("https://") or img.startswith("data:")):
                     user_parts.append({"type": "image_url", "image_url": {"url": img}})
                 else:
                     img_path = Path(img)
@@ -231,21 +234,69 @@ class OpenAICompatProvider(BaseLLMProvider):
             payload["reasoning_effort"] = "high"
 
         proxies = Config.HTTP_PROXY if Config.HTTP_PROXY and any(p in self._provider for p in ["openai", "gemini"]) else None
+        http_timeout = httpx.Timeout(connect=60.0, read=180.0, write=60.0, pool=60.0)
 
-        with httpx.Client(timeout=self._timeout, proxy=proxies) as client:
-            response = client.post(endpoint, headers=headers, json=payload)
-            if response.status_code != 200:
-                raise RuntimeError(
-                    f"LLM API 请求失败 [{response.status_code}]: {response.text[:300]}"
-                )
+        if stream:
+            payload["stream"] = True
+            with httpx.Client(timeout=http_timeout, proxy=proxies, trust_env=False) as client:
+                with client.stream("POST", endpoint, headers=headers, json=payload) as response:
+                    if response.status_code != 200:
+                        err_body = response.read().decode("utf-8", errors="replace")
+                        raise RuntimeError(f"LLM API 请求失败 [{response.status_code}]: {err_body[:300]}")
 
-            data = response.json()
-            choices = data.get("choices", [])
-            if not choices:
-                raise RuntimeError(f"LLM 未返回有效内容: {data}")
+                    collected_content = []
+                    collected_reasoning = []
+                    has_printed_thinking = False
+                    has_printed_content = False
 
-            msg = choices[0].get("message", {})
-            content = msg.get("content") or ""
-            if not content and msg.get("reasoning_content"):
-                content = msg.get("reasoning_content")
-            return content
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                choices = chunk.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    c = delta.get("content")
+                                    r = delta.get("reasoning_content")
+                                    if r:
+                                        if not has_printed_thinking:
+                                            console.print("[dim]  ↳ ⚡ 已建立流式通道，正在深度推理与多方观点推演...[/dim]")
+                                            has_printed_thinking = True
+                                        collected_reasoning.append(r)
+                                    if c:
+                                        if not has_printed_content:
+                                            console.print("[dim]  ↳ ✍️ 思考推演完成，正在生成结构化研报正文...[/dim]")
+                                            has_printed_content = True
+                                        collected_content.append(c)
+                            except Exception:
+                                continue
+
+                    content = "".join(collected_content).strip()
+                    if not content and collected_reasoning:
+                        content = "".join(collected_reasoning).strip()
+                    if not content:
+                        raise RuntimeError(f"LLM 未返回有效内容 (提供商: {self._provider}, 模型: {self.model_name})")
+                    return content
+        else:
+            with httpx.Client(timeout=self._timeout, proxy=proxies, trust_env=False) as client:
+                response = client.post(endpoint, headers=headers, json=payload)
+                if response.status_code != 200:
+                    raise RuntimeError(
+                        f"LLM API 请求失败 [{response.status_code}]: {response.text[:300]}"
+                    )
+
+                data = response.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    raise RuntimeError(f"LLM 未返回有效内容: {data}")
+
+                msg = choices[0].get("message", {})
+                content = msg.get("content") or ""
+                if not content and msg.get("reasoning_content"):
+                    content = msg.get("reasoning_content")
+                return content

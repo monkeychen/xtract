@@ -101,6 +101,26 @@ def test_gemini_account_generate():
         assert "high" in args
 
 
+class MockStreamResponse:
+    def __init__(self, content: str = "", reasoning: str | None = None) -> None:
+        self.status_code = 200
+        self._content = content
+        self._reasoning = reasoning
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def iter_lines(self):
+        if self._reasoning:
+            yield f'{{"choices": [{{"delta": {{"reasoning_content": "{self._reasoning}"}}}}]}}'
+        if self._content:
+            yield f'data: {{"choices": [{{"delta": {{"content": "{self._content}"}}}}]}}'
+        yield "data: [DONE]"
+
+
 def test_openai_compat_generate():
     provider = OpenAICompatProvider(
         provider="kimi",
@@ -109,26 +129,29 @@ def test_openai_compat_generate():
         model_name="kimi-k3"
     )
 
+    # 1. Test streaming mode (default)
+    with patch("httpx.Client.stream") as mock_stream:
+        mock_resp = MockStreamResponse(content="Kimi response content")
+        mock_stream.return_value.__enter__.return_value = mock_resp
+        mock_stream.return_value.__exit__.return_value = None
+
+        result = provider.generate("Test prompt")
+        assert result == "Kimi response content"
+        mock_stream.assert_called_once()
+        _, kwargs = mock_stream.call_args
+        payload = kwargs.get("json", {})
+        assert payload.get("reasoning_effort") == "high"
+        assert payload.get("stream") is True
+
+    # 2. Test non-streaming fallback mode
     with patch("httpx.Client.post") as mock_post:
         mock_post.return_value = MagicMock(
             status_code=200,
-            json=lambda: {
-                "choices": [
-                    {
-                        "message": {
-                            "content": "Kimi response content"
-                        }
-                    }
-                ]
-            }
+            json=lambda: {"choices": [{"message": {"content": "Kimi post content"}}]}
         )
-        result = provider.generate("Test prompt")
-        assert result == "Kimi response content"
+        result_non_stream = provider.generate("Test prompt", stream=False)
+        assert result_non_stream == "Kimi post content"
         mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        payload = kwargs.get("json", {})
-        # Verify reasoning_effort is high by default
-        assert payload.get("reasoning_effort") == "high"
 
 
 def test_qwen_token_plan_and_zhipu_code_plan():
@@ -166,37 +189,37 @@ def test_qwen_token_plan_and_zhipu_code_plan():
 def test_reasoning_and_multimodal_payloads():
     # 1. Zhipu thinking: {"type": "enabled"} and reasoning_effort: "high"
     zhipu = OpenAICompatProvider(provider="zhipu", api_key="test-key", model_name="glm-5.3-flash")
-    with patch("httpx.Client.post") as mock_post:
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"choices": [{"message": {"content": "Zhipu OK"}}]})
+    with patch("httpx.Client.stream") as mock_stream:
+        mock_stream.return_value.__enter__.return_value = MockStreamResponse(content="Zhipu OK")
         zhipu.generate("Hello Zhipu")
-        payload = mock_post.call_args[1].get("json", {})
+        payload = mock_stream.call_args[1].get("json", {})
         assert payload.get("thinking") == {"type": "enabled"}
         assert payload.get("reasoning_effort") == "high"
 
     # 2. Qwen enable_thinking: True and reasoning_effort: "high"
     qwen = OpenAICompatProvider(provider="qwen", api_key="test-key", model_name="qwen3.8-flash")
-    with patch("httpx.Client.post") as mock_post:
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"choices": [{"message": {"content": "Qwen OK"}}]})
+    with patch("httpx.Client.stream") as mock_stream:
+        mock_stream.return_value.__enter__.return_value = MockStreamResponse(content="Qwen OK")
         qwen.generate("Hello Qwen")
-        payload = mock_post.call_args[1].get("json", {})
+        payload = mock_stream.call_args[1].get("json", {})
         assert payload.get("enable_thinking") is True
         assert payload.get("reasoning_effort") == "high"
 
     # 3. MiniMax thinking: {"type": "enabled"} and reasoning_split: True
     minimax = OpenAICompatProvider(provider="minimax", api_key="test-key", model_name="MiniMax-M3")
-    with patch("httpx.Client.post") as mock_post:
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"choices": [{"message": {"content": "MiniMax OK"}}]})
+    with patch("httpx.Client.stream") as mock_stream:
+        mock_stream.return_value.__enter__.return_value = MockStreamResponse(content="MiniMax OK")
         minimax.generate("Hello MiniMax")
-        payload = mock_post.call_args[1].get("json", {})
+        payload = mock_stream.call_args[1].get("json", {})
         assert payload.get("thinking") == {"type": "enabled"}
         assert payload.get("reasoning_split") is True
 
     # 4. Multimodal image input support
     openai = OpenAICompatProvider(provider="openai", api_key="test-key", model_name="gpt-5.6-sol")
-    with patch("httpx.Client.post") as mock_post:
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"choices": [{"message": {"content": "OpenAI Multimodal OK"}}]})
+    with patch("httpx.Client.stream") as mock_stream:
+        mock_stream.return_value.__enter__.return_value = MockStreamResponse(content="OpenAI Multimodal OK")
         openai.generate("Describe image", images=["https://example.com/cat.png"])
-        payload = mock_post.call_args[1].get("json", {})
+        payload = mock_stream.call_args[1].get("json", {})
         assert payload.get("reasoning_effort") == "high"
         user_content = payload["messages"][0]["content"]
         assert isinstance(user_content, list)

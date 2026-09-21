@@ -768,11 +768,11 @@ class XClient:
             "sports": "https://x.com/explore/tabs/sports_unified",
             "entertainment": "https://x.com/explore/tabs/entertainment_unified",
             "news": "https://x.com/explore/tabs/news_unified",
-            "all": "https://x.com/explore/tabs/trending",
-            "business": "https://x.com/explore/tabs/trending",
-            "tech": "https://x.com/explore/tabs/trending",
+            "all": "https://x.com/explore",
+            "business": "https://x.com/explore",
+            "tech": "https://x.com/explore",
         }
-        target_url = cat_urls.get(cat, "https://x.com/explore/tabs/trending")
+        target_url = cat_urls.get(cat, "https://x.com/explore")
 
         timeout_s = timeout or self.timeout_seconds
         timeout_ms = timeout_s * 1000
@@ -795,11 +795,12 @@ class XClient:
             page.on("response", handle_response)
 
             console.print(f"[cyan]🌐 正在打开 X 趋势中心 ({target_url}) 并拦截热点流（超时阈值: {timeout_s} 秒）...[/cyan]")
-            await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
+            await page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
 
-            for _ in range(max(30, timeout_s)):
+            for _ in range(max(20, timeout_s)):
                 await asyncio.sleep(1)
-                if len(intercepted_payloads) >= 2:
+                if len(intercepted_payloads) >= 1:
+                    await asyncio.sleep(2)  # Brief pause to capture any secondary batch
                     break
 
             await browser.close()
