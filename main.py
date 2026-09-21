@@ -247,9 +247,9 @@ async def main() -> None:
         default=None,
         choices=[
             "gemini", "openai", "deepseek", "qwen", "qwen-token-plan",
-            "glm", "glm-code-plan", "minimax", "kimi", "custom"
+            "zhipu", "zhipu-code-plan", "minimax", "kimi", "custom"
         ],
-        help="指定大模型提供商：gemini, openai, deepseek, qwen, qwen-token-plan, glm, glm-code-plan, minimax, kimi, custom"
+        help="指定大模型提供商：gemini, openai, deepseek, qwen, qwen-token-plan, zhipu, zhipu-code-plan, minimax, kimi, custom"
     )
     parser.add_argument(
         "--auth-mode",

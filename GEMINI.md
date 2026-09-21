@@ -44,9 +44,9 @@
 - **阿里通义千问 Qwen**：主力 `qwen-plus`，旗舰 `qwen-max`（映射 Qwen3.8-Max），极速 `qwen-turbo`。
   - 普通按量端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
   - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-sp-` 开头，系统自动识别或指定 `--provider qwen-token-plan`）
-- **智谱 GLM**：主力 `glm-5.3`（旗舰复杂软件工程与智能体长程任务），原生多模态 `glm-5.3-flash`（1M上下文高吞吐），极速 `glm-5.3-flashx`。
-  - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`
-  - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（支持通过 `ZHIPUAI_BASE_URL` 或指定 `--provider glm-code-plan` 接入以享受套餐额度）
+- **智谱清言 Zhipu**：主力 `glm-5.3`（旗舰复杂软件工程与智能体长程任务），原生多模态 `glm-5.3-flash`（1M上下文高吞吐），极速 `glm-5.3-flashx`。
+  - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`（指定 `--provider zhipu`）
+  - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（支持通过 `ZHIPUAI_BASE_URL` 或指定 `--provider zhipu-code-plan` 接入以享受套餐额度）
   - 深度思考：GLM-5 系列原生强制启用深度思考，请求自动携带 `thinking: {"type": "enabled"}`。
 - **MiniMax**：主力 `MiniMax-M3`（1M多模态旗舰），极速 `MiniMax-M2.7-highspeed`，经典 `MiniMax-Text-01`。
 - **月之暗面 Kimi**：主力 `kimi-k3`（2.8T参数1M上下文旗舰），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。

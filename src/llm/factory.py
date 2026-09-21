@@ -40,7 +40,7 @@ def get_llm_provider(
     norm_prov = prov.replace("-", "_")
     if norm_prov in (
         "openai", "gpt", "deepseek", "qwen", "qwen_token_plan",
-        "glm", "zhipu", "glm_code_plan", "zhipu_code_plan",
+        "zhipu", "zhipu_code_plan", "glm", "glm_code_plan",
         "minimax", "kimi", "custom"
     ):
         return OpenAICompatProvider(provider=norm_prov, model_name=target_model)
