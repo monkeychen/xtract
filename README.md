@@ -576,20 +576,45 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ---
 
 ### 4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
-任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换大模型与认证机制：
+任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换 7 大主流厂商大模型与双轨认证机制：
 
-* **支持的提供商 (`--provider`)**：
-  - 国外：`gemini` (Google), `openai` (ChatGPT / GPT-4o)
-  - 国内：`deepseek` (DeepSeek V3/R1), `qwen` (通义千问), `zhipu` (智谱清言), `minimax` (MiniMax), `custom` (自定义 OpenAI 兼容接口)
+* **支持的 7 大主流厂商 (`--provider`) 与 2026 最新官方模型**：
+  1. **Google (`gemini`)**：
+     - 最新主力：`gemini-3.8-flash`（默认，极速与高阶智能兼备）、`gemini-3.1-pro`（长推理）、`gemini-2.5-flash`
+     - 认证支持：账号订阅免 Key 模式（走本地 `agy`，0 API 账单）或官方 API Key
+  2. **OpenAI (`openai` / `gpt`)**：
+     - 最新主力：`gpt-4o`（默认，全模态旗舰）、`gpt-4o-mini`、`o3-mini`、`o1`
+     - 认证支持：账号订阅模式（通过 `--login openai` 捕获 Plus 会话）或官方 API Key
+  3. **DeepSeek (`deepseek`)**：
+     - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态）、`deepseek-v4-pro`
+     - ⚠️ **模型升级警示**：旧版 `deepseek-chat` 与 `deepseek-reasoner` 别名已于 2026 年 7 月正式下线停运，系统已全面切至 `deepseek-flash`
+  4. **阿里通义千问 (`qwen`)**：
+     - 最新主力：`qwen-plus`（默认，平衡性与多模态极强）、`qwen-max`（最新 Qwen3.8-Max 旗舰推理）、`qwen-turbo`
+     - 接入方式：阿里云百炼 DashScope 兼容接口
+  5. **智谱清言 (`glm` / `zhipu`)**：
+     - 最新主力：`glm-4-plus`（默认，超长文本高智能模型）、`glm-4-flash`（超轻量高吞吐）、`glm-4-air`
+     - 接入方式：智谱开放平台 API (`open.bigmodel.cn/api/paas/v4`)
+  6. **MiniMax (`minimax`)**：
+     - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰）、`MiniMax-M2.7-highspeed`、`MiniMax-Text-01`
+     - 接入方式：MiniMax 开放平台 API (`api.minimax.chat/v1`)
+  7. **月之暗面 Kimi (`kimi`)**：
+     - 最新主力：`kimi-k3`（默认，2.8万亿参数 100万 Token 全模态旗舰）、`kimi-k2.7-code`、`kimi-k2.6`
+     - ⚠️ **模型升级警示**：旧版 `moonshot-v1` 系列（8k/32k/128k）及 `kimi-latest` 已下线停运，官方要求全量使用 `kimi-k3`
 * **双轨认证模式 (`--auth-mode`)**：
   - `account`：**账号订阅免 Key 模式**（支持 Google Gemini 与 OpenAI ChatGPT Plus，0 额外账单，白嫖月付配额）
   - `api_key`：**官方 API Key 计费模式**（按 Token 计费，高并发首选）
 * **指定具体模型 (`--model`)**：
-  - 覆盖默认模型（如 `--model deepseek-reasoner`、`--model gpt-4o`、`--model gemini-3.7-flash-high`）
+  - 覆盖默认模型（如 `--model deepseek-v4-pro`、`--model qwen-max`、`--model kimi-k3`、`--model gpt-4o`）
 * **使用示例**：
   ```bash
-  # 使用 DeepSeek 提炼今日关注流早报
+  # 使用 DeepSeek 最新 V4.1-Flash 提炼今日关注流早报
   uv run python main.py --report-only --provider deepseek --auth-mode api_key
+
+  # 使用月之暗面 Kimi 最新旗舰 kimi-k3 生成趋势研报
+  uv run python main.py --trends-digest --provider kimi --auth-mode api_key
+
+  # 使用阿里 Qwen-Max 旗舰推理模型提炼早报
+  uv run python main.py --report-only --provider qwen --model qwen-max
 
   # 使用用户已订阅的 Google 账号配额生成趋势研报（0 额外费用）
   uv run python main.py --trends-digest --provider gemini --auth-mode account

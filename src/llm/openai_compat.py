@@ -14,15 +14,25 @@ PROVIDER_CONFIGS = {
         "default_model": "gpt-4o",
         "env_key": "OPENAI_API_KEY",
     },
+    "gpt": {
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o",
+        "env_key": "OPENAI_API_KEY",
+    },
     "deepseek": {
         "base_url": "https://api.deepseek.com",
-        "default_model": "deepseek-chat",
+        "default_model": "deepseek-flash",
         "env_key": "DEEPSEEK_API_KEY",
     },
     "qwen": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "default_model": "qwen-plus",
         "env_key": "DASHSCOPE_API_KEY",
+    },
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-4-plus",
+        "env_key": "ZHIPUAI_API_KEY",
     },
     "zhipu": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -31,12 +41,17 @@ PROVIDER_CONFIGS = {
     },
     "minimax": {
         "base_url": "https://api.minimax.chat/v1",
-        "default_model": "MiniMax-Text-01",
+        "default_model": "MiniMax-M3",
         "env_key": "MINIMAX_API_KEY",
+    },
+    "kimi": {
+        "base_url": "https://api.moonshot.cn/v1",
+        "default_model": "kimi-k3",
+        "env_key": "MOONSHOT_API_KEY",
     },
     "gemini_api": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.8-flash",
         "env_key": "GEMINI_API_KEY",
     },
     "custom": {

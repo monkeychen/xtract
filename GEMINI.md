@@ -31,11 +31,20 @@
    - **为什么**：解决用户在不知道关键词前置条件时的「信息盲区」。支持分类看板与全自动研报（默认 `tech`，开放 `all`, `business`, `news`, `entertainment`, `sports` 等全分类）。
    - **对用户的影响**：实现「从未知到已知」的情报闭环；零输入全自动发现热点并生成研报。
 8. **统一多大模型驱动与双轨认证（Unified LLM & Dual-Track Auth）**：
-   - **为什么**：打破单一 Gemini 绑定，支持国外（Gemini, OpenAI）与国内（DeepSeek, Qwen, Zhipu, MiniMax）主流大模型；同时支持 API Key 计费与账号认证模式（走用户已订阅的 Google / ChatGPT Plus 配额）。
-   - **对用户的影响**：零额外 API 账单（直接白嫖月付订阅）；模型选择自由度最大化。
+   - **为什么**：打破单一 Gemini 绑定，支持国内外 7 大主流大模型（Google Gemini, OpenAI GPT, DeepSeek, 阿里通义千问 Qwen, 智谱清言 GLM, MiniMax, 月之暗面 Kimi）；同时支持 API Key 计费与账号认证模式（走用户已订阅的 Google / ChatGPT Plus 配额）。
+   - **对用户的影响**：零额外 API 账单（直接白嫖月付订阅）；主流模型选择自由度最大化，杜绝使用已停运的历史废弃版本（如 deepseek-chat/reasoner、moonshot-v1 等）。
 9. **交互式免查 Token 登录 UI（Interactive Browser Login）**：
    - **为什么**：让用户在浏览器开发者工具查 Token 极度违背体验准则。
    - **对用户的影响**：统一使用 `main.py --login [x|openai|gemini]`，弹出浏览器完成登录后系统自动截获并持久化保存凭据，免去任何手动查找复制。
+
+### 7 大主流模型 2026 最新版本与文档约定
+- **Google Gemini**：主力 `gemini-3.8-flash`（高智商超高速），推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。
+- **OpenAI GPT**：主力 `gpt-4o`，轻量 `gpt-4o-mini`，推理 `o3-mini` / `o1`。账号通道走 ChatGPT Plus 会话。
+- **DeepSeek**：主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态），高阶 `deepseek-v4-pro`。通过 `thinking` 参数动态控制思考链。（**禁止使用已下线的 `deepseek-chat` / `deepseek-reasoner`**）。
+- **阿里通义千问 Qwen**：主力 `qwen-plus`，旗舰 `qwen-max`（映射 Qwen3.8-Max），极速 `qwen-turbo`。端点为 DashScope 兼容模式。
+- **智谱 GLM**：主力 `glm-4-plus`，高频轻量 `glm-4-flash`。端点为 `open.bigmodel.cn/api/paas/v4`。
+- **MiniMax**：主力 `MiniMax-M3`（1M多模态旗舰），极速 `MiniMax-M2.7-highspeed`，经典 `MiniMax-Text-01`。
+- **月之暗面 Kimi**：主力 `kimi-k3`（2.8T参数1M上下文旗舰），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。
 
 ---
 

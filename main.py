@@ -245,8 +245,8 @@ async def main() -> None:
         "--provider",
         type=str,
         default=None,
-        choices=["gemini", "openai", "deepseek", "qwen", "zhipu", "minimax", "custom"],
-        help="指定大模型提供商（默认读取配置，支持 gemini, openai, deepseek, qwen, zhipu, minimax, custom）"
+        choices=["gemini", "openai", "gpt", "deepseek", "qwen", "glm", "zhipu", "minimax", "kimi", "custom"],
+        help="指定大模型提供商（默认读取配置，支持 gemini, openai, gpt, deepseek, qwen, glm, zhipu, minimax, kimi, custom）"
     )
     parser.add_argument(
         "--auth-mode",
@@ -260,7 +260,7 @@ async def main() -> None:
         type=str,
         default=None,
         metavar="MODEL_NAME",
-        help="指定具体的模型名称（如 deepseek-chat, gpt-4o, qwen-plus 等，覆盖默认配置）"
+        help="指定具体的模型名称（如 deepseek-flash, gpt-4o, qwen-plus, kimi-k3 等，覆盖默认配置）"
     )
     parser.add_argument(
         "--fetch-only",

@@ -40,6 +40,7 @@ class Config:
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "").strip()
     ZHIPUAI_API_KEY: str = os.getenv("ZHIPUAI_API_KEY", "").strip()
     MINIMAX_API_KEY: str = os.getenv("MINIMAX_API_KEY", "").strip()
+    MOONSHOT_API_KEY: str = os.getenv("MOONSHOT_API_KEY", "").strip()
 
     # Scraping Settings
     FETCH_MAX_PAGES: int = int(os.getenv("FETCH_MAX_PAGES", "3"))
@@ -65,10 +66,10 @@ class Config:
         mode = (auth_mode or cls.LLM_AUTH_MODE).lower()
 
         if mode == "account":
-            if prov == "gemini":
+            if prov in ("gemini", "google"):
                 # Account mode uses agy CLI or google_accounts/oauth_creds
                 return True, ""
-            elif prov == "openai":
+            elif prov in ("openai", "chatgpt", "gpt"):
                 if cls.CHATGPT_AUTH_PATH.exists():
                     return True, ""
                 return False, "未检测到 OpenAI 账号会话凭据，请先执行 `uv run python main.py --login openai` 进行登录。"
@@ -76,17 +77,19 @@ class Config:
                 return False, f"厂商 '{prov}' 暂不支持账号订阅认证，请使用 --auth-mode api_key。"
 
         # mode == "api_key"
-        if prov == "gemini" and not cls.GEMINI_API_KEY:
+        if prov in ("gemini", "google") and not cls.GEMINI_API_KEY:
             return False, "缺少 GEMINI_API_KEY，请在 .env 中配置。"
-        elif prov == "openai" and not cls.OPENAI_API_KEY:
+        elif prov in ("openai", "gpt") and not cls.OPENAI_API_KEY:
             return False, "缺少 OPENAI_API_KEY，请在 .env 中配置。"
         elif prov == "deepseek" and not cls.DEEPSEEK_API_KEY:
             return False, "缺少 DEEPSEEK_API_KEY，请在 .env 中配置。"
         elif prov == "qwen" and not cls.DASHSCOPE_API_KEY:
             return False, "缺少 DASHSCOPE_API_KEY (阿里百炼)，请在 .env 中配置。"
-        elif prov == "zhipu" and not cls.ZHIPUAI_API_KEY:
-            return False, "缺少 ZHIPUAI_API_KEY (智谱)，请在 .env 中配置。"
+        elif prov in ("zhipu", "glm") and not cls.ZHIPUAI_API_KEY:
+            return False, "缺少 ZHIPUAI_API_KEY (智谱 GLM)，请在 .env 中配置。"
         elif prov == "minimax" and not cls.MINIMAX_API_KEY:
             return False, "缺少 MINIMAX_API_KEY，请在 .env 中配置。"
+        elif prov == "kimi" and not cls.MOONSHOT_API_KEY:
+            return False, "缺少 MOONSHOT_API_KEY (Kimi)，请在 .env 中配置。"
 
         return True, ""
