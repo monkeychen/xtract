@@ -14,11 +14,6 @@ PROVIDER_CONFIGS = {
         "default_model": "gpt-4o",
         "env_key": "OPENAI_API_KEY",
     },
-    "gpt": {
-        "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o",
-        "env_key": "OPENAI_API_KEY",
-    },
     "deepseek": {
         "base_url": "https://api.deepseek.com",
         "default_model": "deepseek-flash",
@@ -40,16 +35,6 @@ PROVIDER_CONFIGS = {
         "env_key": "ZHIPUAI_API_KEY",
     },
     "glm_code_plan": {
-        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        "default_model": "glm-5.3",
-        "env_key": "ZHIPUAI_API_KEY",
-    },
-    "zhipu": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "default_model": "glm-5.3",
-        "env_key": "ZHIPUAI_API_KEY",
-    },
-    "zhipu_code_plan": {
         "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
         "default_model": "glm-5.3",
         "env_key": "ZHIPUAI_API_KEY",
@@ -80,7 +65,7 @@ PROVIDER_CONFIGS = {
 class OpenAICompatProvider(BaseLLMProvider):
     """
     Unified client for OpenAI-compatible REST endpoints:
-    OpenAI, DeepSeek, Qwen (DashScope / Token Plan), Zhipu GLM (Standard / Code Plan), MiniMax, Kimi, etc.
+    OpenAI, DeepSeek, Qwen (DashScope / Token Plan), GLM (Standard / Code Plan), MiniMax, Kimi, etc.
     """
 
     def __init__(
@@ -91,7 +76,16 @@ class OpenAICompatProvider(BaseLLMProvider):
         model_name: str | None = None,
         timeout: float = 120.0,
     ) -> None:
-        self._provider = provider.lower().replace("-", "_")
+        prov = provider.lower().replace("-", "_")
+        alias_map = {
+            "gpt": "openai",
+            "zhipu": "glm",
+            "zhipu_code_plan": "glm_code_plan",
+            "glm_coding": "glm_code_plan",
+            "zhipu_coding": "glm_code_plan",
+            "qwen_coding": "qwen_token_plan",
+        }
+        self._provider = alias_map.get(prov, prov)
         cfg = PROVIDER_CONFIGS.get(self._provider, PROVIDER_CONFIGS["custom"])
 
         self._api_key = api_key or getattr(Config, cfg["env_key"], "")
@@ -107,10 +101,10 @@ class OpenAICompatProvider(BaseLLMProvider):
                     resolved_base_url = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
                 else:
                     resolved_base_url = cfg["base_url"]
-            elif "glm" in self._provider or "zhipu" in self._provider:
+            elif "glm" in self._provider:
                 if Config.ZHIPUAI_BASE_URL:
                     resolved_base_url = Config.ZHIPUAI_BASE_URL
-                elif self._provider in ("glm_code_plan", "zhipu_code_plan", "glm_coding", "zhipu_coding"):
+                elif self._provider == "glm_code_plan":
                     # Dedicated GLM Coding Plan endpoint
                     resolved_base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
                 else:
@@ -144,7 +138,7 @@ class OpenAICompatProvider(BaseLLMProvider):
     def provider_name(self) -> str:
         if self._provider == "qwen_token_plan" or "token-plan" in self._base_url:
             return "Qwen (Token Plan · 专属套餐)"
-        if self._provider in ("glm_code_plan", "zhipu_code_plan") or "/coding/" in self._base_url:
+        if self._provider == "glm_code_plan" or "/coding/" in self._base_url:
             return "GLM (Coding Plan · 专属套餐)"
         return f"{self._provider.capitalize()} (API Key)"
 
