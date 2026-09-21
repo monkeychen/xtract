@@ -8,6 +8,8 @@
 - [1. 核心设计与第一性原理](#1-核心设计与第一性原理)
 - [2. 环境依赖与快速安装](#2-环境依赖与快速安装)
 - [3. 凭据与多模型配置指南](#3-凭据与多模型配置指南)
+  - [3.1 端点 URL 默认解析机制与说明 (`XXXX_BASE_URL`)](#31-端点-url-默认解析机制与说明-xxxx_base_url)
+  - [3.2 免查 Cookie 一键登录（最省心）](#32-免查-cookie-一键登录最省心)
 - [4. CLI 完整命令参考手册](#4-cli-完整命令参考手册)
   - [4.1 全量流水线（拉取 + 存储 + 生成早报）](#41-全量流水线拉取--存储--生成早报)
   - [4.2 仅抓取推文入库 (`--fetch-only`)](#42-仅抓取推文入库---fetch-only)
@@ -136,7 +138,28 @@ MOONSHOT_API_KEY=    # 月之暗面 Kimi
 MOONSHOT_BASE_URL=
 ```
 
-### 免查 Cookie 一键登录（最省心）
+### 3.1 端点 URL 默认解析机制与说明 (`XXXX_BASE_URL`)
+
+> [!TIP]
+> **官方端点默认内建，留空自动生效**：`.env` 中的所有 `XXXX_BASE_URL` 均是**可选配置**。只要将其**留空**，系统将 **100% 自动回退至各家厂商官方预设端点**；通常你**只需填写对应的 `XXXX_API_KEY` 即可**。仅当你需要接入**国内自建反向代理、企业内网网关或第三方聚合中转服务**时，才需要显式为 `XXXX_BASE_URL` 赋值。
+
+#### 7 大主流厂商官方预设端点与智能路由对照表
+
+| 厂商 / Provider | 环境变量 Key | 环境变量 Base URL | 官方默认端点（留空自动生效） | 默认模型 (high 思考/推理) | 智能感知与专属特性 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Google Gemini (`gemini`)** | `GEMINI_API_KEY` | `（内置）` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.8-flash` | API 模式走官方转换端点；账号模式走本地 `agy`（自动附带 `--effort high`） |
+| **OpenAI (`openai`)** | `OPENAI_API_KEY` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | `gpt-5.6-sol` | 留空走官方直连，支持国内中转网关覆写；兼容 `gpt-5.6` 别名 |
+| **深度求索 (`deepseek`)** | `DEEPSEEK_API_KEY` | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | `deepseek-flash` | 官方统一兼容端点，默认携带 `thinking: {"type": "enabled"}` |
+| **阿里千问 (`qwen`)** | `DASHSCOPE_API_KEY` | `DASHSCOPE_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen3.8-flash` | **智能感知**：若 Key 为 `sk-sp-` 开头，**无需配置 URL 自动路由至 Token Plan 端点** |
+| **阿里千问专属 (`qwen-token-plan`)** | `DASHSCOPE_API_KEY` | `DASHSCOPE_BASE_URL` | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `qwen3.8-flash` | 个人/团队版 Token Plan 专属端点；支持 `qwen-plus`/`qwen-max` 别名自动平滑映射 |
+| **智谱清言 (`zhipu`)** | `ZHIPUAI_API_KEY` | `ZHIPUAI_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3-flash` | 开放平台标准按量计费端点；默认携带 `reasoning_effort: "high"` |
+| **智谱专属 (`zhipu-code-plan`)** | `ZHIPUAI_API_KEY` | `ZHIPUAI_BASE_URL` | `https://open.bigmodel.cn/api/coding/paas/v4` | `glm-5.3-flash` | Coding Plan 套餐专属端点（享受包月额度，避免扣按量余额） |
+| **MiniMax (`minimax`)** | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` | `https://api.minimax.chat/v1` | `MiniMax-M3` | 官方直连端点；默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true` |
+| **月之暗面 (`kimi`)** | `MOONSHOT_API_KEY` | `MOONSHOT_BASE_URL` | `https://api.moonshot.cn/v1` | `kimi-k3` | 官方兼容端点；原生全模态推理，默认携带 `reasoning_effort: "high"` |
+
+---
+
+### 3.2 免查 Cookie 一键登录（最省心）
 项目支持通过可视化交互式窗口一键捕获合法凭据，**彻底告别手动打开 F12 查 Cookie**：
 - **X 账号登录**：`uv run python main.py --login x`（或直接 `main.py --login`）
 - **OpenAI / ChatGPT Plus 会话凭据**：`uv run python main.py --login openai`
