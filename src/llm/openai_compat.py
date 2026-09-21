@@ -1,5 +1,8 @@
+import base64
 import json
 import logging
+import mimetypes
+from pathlib import Path
 from typing import Any
 import httpx
 
@@ -11,7 +14,7 @@ logger = logging.getLogger("x_digest.llm.openai_compat")
 PROVIDER_CONFIGS = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5.6-sol",
         "env_key": "OPENAI_API_KEY",
     },
     "deepseek": {
@@ -21,22 +24,22 @@ PROVIDER_CONFIGS = {
     },
     "qwen": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "default_model": "qwen-plus",
+        "default_model": "qwen3.8-flash",
         "env_key": "DASHSCOPE_API_KEY",
     },
     "qwen_token_plan": {
         "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-        "default_model": "qwen3.7-plus",
+        "default_model": "qwen3.8-flash",
         "env_key": "DASHSCOPE_API_KEY",
     },
     "zhipu": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "default_model": "glm-5.3",
+        "default_model": "glm-5.3-flash",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "zhipu_code_plan": {
         "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        "default_model": "glm-5.3",
+        "default_model": "glm-5.3-flash",
         "env_key": "ZHIPUAI_API_KEY",
     },
     "minimax": {
@@ -56,7 +59,7 @@ PROVIDER_CONFIGS = {
     },
     "custom": {
         "base_url": "",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5.6-sol",
         "env_key": "OPENAI_API_KEY",
     }
 }
@@ -126,17 +129,22 @@ class OpenAICompatProvider(BaseLLMProvider):
 
         is_token_plan = self._provider == "qwen_token_plan" or "token-plan" in self._base_url
         if is_token_plan:
-            self._default_model = "qwen3.7-plus"
+            self._default_model = "qwen3.8-flash"
 
         target_model = model_name or Config.LLM_MODEL
-        if is_token_plan and target_model:
-            token_plan_map = {
-                "qwen-plus": "qwen3.7-plus",
-                "qwen-max": "qwen3.8-max",
-                "qwen-turbo": "qwen3.8-flash",
-                "qwen-flash": "qwen3.8-flash",
-            }
-            target_model = token_plan_map.get(target_model.lower(), target_model)
+        if target_model:
+            # Normalize GPT-5.6 Sol aliases
+            if target_model.strip().lower() in ("gpt-5.6 sol", "gpt-5.6-sol", "gpt-5.6"):
+                target_model = "gpt-5.6-sol"
+            # Map Token Plan models if needed
+            elif is_token_plan:
+                token_plan_map = {
+                    "qwen-plus": "qwen3.7-plus",
+                    "qwen-max": "qwen3.8-max",
+                    "qwen-turbo": "qwen3.8-flash",
+                    "qwen-flash": "qwen3.8-flash",
+                }
+                target_model = token_plan_map.get(target_model.lower(), target_model)
 
         super().__init__(model_name=target_model)
 
@@ -156,29 +164,71 @@ class OpenAICompatProvider(BaseLLMProvider):
             return "Zhipu (Code Plan · 专属套餐)"
         return f"{self._provider.capitalize()} (API Key)"
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        images: list[str] | None = None,
+    ) -> str:
         if not self._api_key:
             raise ValueError(f"调用 {self.provider_name} 失败：未配置 API Key。请在 .env 中设置相应密钥。")
 
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+
+        # Multimodal user content construction
+        if images:
+            user_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+            for img in images:
+                if img.startswith("http://") or img.startswith("https://") or img.startswith("data:"):
+                    user_parts.append({"type": "image_url", "image_url": {"url": img}})
+                else:
+                    img_path = Path(img)
+                    if img_path.exists():
+                        mime_type, _ = mimetypes.guess_type(img_path)
+                        mime_type = mime_type or "image/jpeg"
+                        b64 = base64.b64encode(img_path.read_bytes()).decode("utf-8")
+                        data_uri = f"data:{mime_type};base64,{b64}"
+                        user_parts.append({"type": "image_url", "image_url": {"url": data_uri}})
+                    else:
+                        logger.warning(f"Image path not found: {img}")
+            messages.append({"role": "user", "content": user_parts})
+        else:
+            messages.append({"role": "user", "content": prompt})
 
         endpoint = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
-            "temperature": 0.3,
         }
 
-        # GLM-5 series models require thinking: {"type": "enabled"} on Chat Completions
-        if "glm-5" in self.model_name.lower():
+        # Reasoning / Thinking mode & high level injection across all providers
+        if "zhipu" in self._provider:
             payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = "high"
+        elif "qwen" in self._provider:
+            payload["enable_thinking"] = True
+            payload["reasoning_effort"] = "high"
+        elif "deepseek" in self._provider:
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = "high"
+        elif "minimax" in self._provider:
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_split"] = True
+        elif "kimi" in self._provider:
+            payload["reasoning_effort"] = "high"
+        elif any(p in self._provider for p in ("openai", "gpt")):
+            payload["reasoning_effort"] = "high"
+        elif "gemini" in self._provider:
+            payload["reasoning_effort"] = "high"
+            payload["thinking_config"] = {"thinking_level": "HIGH"}
+        else:
+            payload["reasoning_effort"] = "high"
 
         proxies = Config.HTTP_PROXY if Config.HTTP_PROXY and any(p in self._provider for p in ["openai", "gemini"]) else None
 
@@ -194,4 +244,8 @@ class OpenAICompatProvider(BaseLLMProvider):
             if not choices:
                 raise RuntimeError(f"LLM 未返回有效内容: {data}")
 
-            return choices[0].get("message", {}).get("content", "")
+            msg = choices[0].get("message", {})
+            content = msg.get("content") or ""
+            if not content and msg.get("reasoning_content"):
+                content = msg.get("reasoning_content")
+            return content

@@ -23,6 +23,11 @@ class BaseLLMProvider(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
-        """Synchronously or internally executes text generation."""
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        images: list[str] | None = None,
+    ) -> str:
+        """Synchronously or internally executes text generation with optional multimodal image inputs."""
         pass

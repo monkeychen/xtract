@@ -17,11 +17,11 @@ class ChatGPTAccountProvider(BaseLLMProvider):
 
     def __init__(self, model_name: str | None = None, timeout: float = 120.0) -> None:
         self._timeout = timeout
-        super().__init__(model_name=model_name or "gpt-4o")
+        super().__init__(model_name=model_name or "gpt-5.6-sol")
 
     @property
     def default_model(self) -> str:
-        return "gpt-4o"
+        return "gpt-5.6-sol"
 
     @property
     def provider_name(self) -> str:
@@ -39,7 +39,12 @@ class ChatGPTAccountProvider(BaseLLMProvider):
         with open(Config.CHATGPT_AUTH_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        images: list[str] | None = None,
+    ) -> str:
         creds = self._load_credentials()
         access_token = creds.get("access_token")
         if not access_token:
@@ -101,7 +106,7 @@ class ChatGPTAccountProvider(BaseLLMProvider):
         if Config.OPENAI_API_KEY:
             from .openai_compat import OpenAICompatProvider
             api_provider = OpenAICompatProvider(provider="openai", model_name=self.model_name)
-            return api_provider.generate(prompt=prompt, system_prompt=system_prompt)
+            return api_provider.generate(prompt=prompt, system_prompt=system_prompt, images=images)
 
         raise RuntimeError(
             "ChatGPT 账号接口请求未成功响应（可能会话过期）。\n"

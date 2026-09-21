@@ -37,19 +37,18 @@
    - **为什么**：让用户在浏览器开发者工具查 Token 极度违背体验准则。
    - **对用户的影响**：统一使用 `main.py --login [x|openai|gemini]`，弹出浏览器完成登录后系统自动截获并持久化保存凭据，免去任何手动查找复制。
 
-### 7 大主流模型 2026 最新版本与文档约定
-- **Google Gemini**：主力 `gemini-3.8-flash`（高智商超高速），推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。
-- **OpenAI GPT**：主力 `gpt-4o`，轻量 `gpt-4o-mini`，推理 `o3-mini` / `o1`。账号通道走 ChatGPT Plus 会话。
-- **DeepSeek**：主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态），高阶 `deepseek-v4-pro`。通过 `thinking` 参数动态控制思考链。（**禁止使用已下线的 `deepseek-chat` / `deepseek-reasoner`**）。
-- **阿里通义千问 Qwen**：主力 `qwen-plus`，旗舰 `qwen-max`（映射 Qwen3.8-Max），极速 `qwen-turbo`。
+### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
+- **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。
+- **OpenAI GPT**：默认主力 `gpt-5.6-sol`（GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，兼容 `gpt-5.6` 别名），账号通道走 ChatGPT Plus 会话。
+- **DeepSeek**：默认主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态，默认 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），高阶 `deepseek-v4-pro`。（**禁止使用已下线的 `deepseek-chat` / `deepseek-reasoner`**）。
+- **阿里通义千问 Qwen**：默认主力 `qwen3.8-flash`（原生全模态推理，默认携带 `enable_thinking: true` 与 `reasoning_effort: "high"`），旗舰 `qwen3.8-max`，平衡版 `qwen3.7-plus`。
   - 普通按量端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
   - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-sp-` 开头，系统自动识别或指定 `--provider qwen-token-plan`）
-- **智谱清言 Zhipu**：主力 `glm-5.3`（旗舰复杂软件工程与智能体长程任务），原生多模态 `glm-5.3-flash`（1M上下文高吞吐），极速 `glm-5.3-flashx`。
+- **智谱清言 Zhipu**：默认主力 `glm-5.3-flash`（原生多模态高吞吐，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），旗舰复杂工程 `glm-5.3`，极速 `glm-5.3-flashx`。
   - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`（指定 `--provider zhipu`）
   - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（支持通过 `ZHIPUAI_BASE_URL` 或指定 `--provider zhipu-code-plan` 接入以享受套餐额度）
-  - 深度思考：GLM-5 系列原生强制启用深度思考，请求自动携带 `thinking: {"type": "enabled"}`。
-- **MiniMax**：主力 `MiniMax-M3`（1M多模态旗舰），极速 `MiniMax-M2.7-highspeed`，经典 `MiniMax-Text-01`。
-- **月之暗面 Kimi**：主力 `kimi-k3`（2.8T参数1M上下文旗舰），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。
+- **MiniMax**：默认主力 `MiniMax-M3`（1M多模态旗舰，默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true`），极速 `MiniMax-M2.7-highspeed`。
+- **月之暗面 Kimi**：默认主力 `kimi-k3`（2.8T参数1M上下文旗舰，原生全模态推理，默认携带 `reasoning_effort: "high"`），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。
 
 ---
 

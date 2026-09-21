@@ -578,32 +578,32 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ### 4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
 任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换 7 大主流厂商大模型与双轨认证机制：
 
-* **支持的 7 大主流厂商 (`--provider`) 与 2026 最新官方模型**：
+* **支持的 7 大主流厂商 (`--provider`) 与 2026 最新官方模型（全量默认启用深度思考/推理模式与多模态，等级为 high）**：
   1. **Google (`gemini`)**：
-     - 最新主力：`gemini-3.8-flash`（默认，极速与高阶智能兼备）、`gemini-3.1-pro`（长推理）、`gemini-2.5-flash`
+     - 最新主力：`gemini-3.8-flash`（默认，极速与高阶智能兼备，全模态，`--effort high` / `thinking_level: HIGH`）、`gemini-3.1-pro`（长推理）、`gemini-2.5-flash`
      - 认证支持：账号订阅免 Key 模式（走本地 `agy`，0 API 账单）或官方 API Key
   2. **OpenAI (`openai` / `gpt`)**：
-     - 最新主力：`gpt-4o`（默认，全模态旗舰）、`gpt-4o-mini`、`o3-mini`、`o1`
+     - 最新主力：`gpt-5.6-sol`（默认，GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，亦兼容 `gpt-5.6` 别名）、`gpt-4o`、`o3-mini`、`o1`
      - 认证支持：账号订阅模式（通过 `--login openai` 捕获 Plus 会话）或官方 API Key
   3. **DeepSeek (`deepseek`)**：
-     - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态）、`deepseek-v4-pro`
+     - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`）、`deepseek-v4-pro`
      - ⚠️ **模型升级警示**：旧版 `deepseek-chat` 与 `deepseek-reasoner` 别名已于 2026 年 7 月正式下线停运，系统已全面切至 `deepseek-flash`
   4. **阿里通义千问 (`qwen` / `qwen-token-plan`)**：
-     - 最新主力：`qwen-plus`（默认，平衡性与多模态极强）、`qwen-max`（最新 Qwen3.8-Max 旗舰推理）、`qwen-turbo`
+     - 最新主力：`qwen3.8-flash`（默认，原生全模态推理，默认携带 `enable_thinking: true` 与 `reasoning_effort: "high"`）、`qwen3.8-max`（旗舰推理）、`qwen3.7-plus`
      - **普通按量端点**：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
      - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
        - *智能感知*：若 API Key 为 `sk-sp-` 开头，系统自动切换至 Token Plan 端点；亦可显式指定 `--provider qwen-token-plan` 或配置 `DASHSCOPE_BASE_URL`
   5. **智谱清言 (`zhipu` / `zhipu-code-plan`)**：
-     - 最新主力：`glm-5.3`（默认，旗舰复杂软件工程与智能体长程任务）、`glm-5.3-flash`（1M 上下文原生多模态主力）、`glm-5.3-flashx`（200 tokens/s 极速版）
+     - 最新主力：`glm-5.3-flash`（默认，1M 上下文原生多模态主力高吞吐，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`）、`glm-5.3`（旗舰复杂软件工程与智能体长程任务）、`glm-5.3-flashx`（极速版）
      - **普通开放平台端点**：`https://open.bigmodel.cn/api/paas/v4`（指定 `--provider zhipu`）
      - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（指定 `--provider zhipu-code-plan`）
        - *享用套餐额度*：配置 `ZHIPUAI_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4` 或指定 `--provider zhipu-code-plan`，避免消耗普通按量余额
-     - **深度思考机制**：GLM-5 系列原生要求启用思考链，系统调用时已自动注入 `thinking: {"type": "enabled"}`
+     - **深度思考机制**：默认注入 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`
   6. **MiniMax (`minimax`)**：
-     - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰）、`MiniMax-M2.7-highspeed`、`MiniMax-Text-01`
+     - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰，默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true`）、`MiniMax-M2.7-highspeed`
      - 接入方式：MiniMax 开放平台 API (`api.minimax.chat/v1`)
   7. **月之暗面 Kimi (`kimi`)**：
-     - 最新主力：`kimi-k3`（默认，2.8万亿参数 100万 Token 全模态旗舰）、`kimi-k2.7-code`、`kimi-k2.6`
+     - 最新主力：`kimi-k3`（默认，2.8万亿参数 100万 Token 原生全模态推理旗舰，默认携带 `reasoning_effort: "high"`）、`kimi-k2.7-code`
      - ⚠️ **模型升级警示**：旧版 `moonshot-v1` 系列（8k/32k/128k）及 `kimi-latest` 已下线停运，官方要求全量使用 `kimi-k3`
 * **双轨认证模式 (`--auth-mode`)**：
   - `account`：**账号订阅免 Key 模式**（支持 Google Gemini 与 OpenAI ChatGPT Plus，0 额外账单，白嫖月付配额）

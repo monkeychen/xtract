@@ -18,25 +18,31 @@ class GeminiAccountProvider(BaseLLMProvider):
 
     def __init__(self, model_name: str | None = None, timeout: int = 180) -> None:
         self._timeout = timeout
-        super().__init__(model_name=model_name or "gemini-3.7-flash-high")
+        super().__init__(model_name=model_name or "gemini-3.8-flash")
 
     @property
     def default_model(self) -> str:
-        return "gemini-3.7-flash-high"
+        return "gemini-3.8-flash"
 
     @property
     def provider_name(self) -> str:
         return "Google Gemini (Account Mode · 订阅配额)"
 
-    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        images: list[str] | None = None,
+    ) -> str:
         full_prompt = f"{system_prompt}\n\n---\n\n{prompt}" if system_prompt else prompt
 
-        # 1. Attempt using local agy CLI (Google account channel)
+        # 1. Attempt using local agy CLI (Google account channel with high reasoning effort)
         try:
             cmd = [
                 "agy",
                 "-p", full_prompt,
                 "--model", self.model_name,
+                "--effort", "high",
                 "--output-format", "text",
                 "--dangerously-skip-permissions",
             ]
@@ -59,10 +65,15 @@ class GeminiAccountProvider(BaseLLMProvider):
         if Config.GEMINI_API_KEY:
             try:
                 from google import genai
+                from google.genai import types
                 client = genai.Client(api_key=Config.GEMINI_API_KEY)
+                config = types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="HIGH")
+                )
                 resp = client.models.generate_content(
-                    model=Config.GEMINI_MODEL or "gemini-2.5-flash",
-                    contents=[{"role": "user", "parts": [{"text": full_prompt}]}]
+                    model=Config.GEMINI_MODEL or "gemini-3.8-flash",
+                    contents=[{"role": "user", "parts": [{"text": full_prompt}]}],
+                    config=config,
                 )
                 return resp.text or ""
             except Exception as e:
