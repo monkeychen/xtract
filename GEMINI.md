@@ -36,6 +36,12 @@
 9. **交互式免查 Token 登录 UI（Interactive Browser Login）**：
    - **为什么**：让用户在浏览器开发者工具查 Token 极度违背体验准则。
    - **对用户的影响**：统一使用 `main.py --login [x|openai|gemini]`，弹出浏览器完成登录后系统自动截获并持久化保存凭据，免去任何手动查找复制。
+10. **AI 辅助搜索词提炼与安全串行节流（AI Query Refinement & Safe Sequential Crawling）**：
+    - **为什么**：X Explore 趋势话题多为一整句新闻长标题，直接全句在推特搜索几乎搜不到推文并会导致等待超时；而如果简单粗暴字符截断会破坏语义，盲目搞多线程并发极易被 X 识别为爬虫导致 429 限制或账号封禁。
+    - **对用户的影响**：在抓取前让大模型快速提炼高命中核心搜索词（如 `DeepSeek Huawei chips`），大幅提升推文抓取质量；坚持安全串行与适度停顿，零封禁风险且避免冗长空等待。
+11. **SSE 流式传输与全量 High 级长推理保障（Streaming & High Reasoning by Default）**：
+    - **为什么**：面对大体量推文语料，各模型在 `reasoning_effort: "high"` 下思考推演可能长达数分钟。非流式 HTTP 连接长时间无字节传输易被反向代理断开。
+    - **对用户的影响**：全面引入 SSE 流式连接与国内节点隔离直连，彻底根除超时中断；保留完整 High 等级思考推演，产出具有深度辩证、事实核验与行动启示的顶级研报。
 
 ### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
 - **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。

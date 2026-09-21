@@ -1,9 +1,12 @@
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from .config import Config
 from .llm import BaseLLMProvider, get_llm_provider
+
+logger = logging.getLogger(__name__)
 
 
 DAILY_SYSTEM_PROMPT = """你是一名敏锐的科技与AI行业主编兼高级情报分析师。
@@ -82,6 +85,49 @@ class Summarizer:
             self.llm = llm_instance
         else:
             self.llm = get_llm_provider(provider=provider, auth_mode=auth_mode, model=model)
+
+    def refine_search_queries(self, topics: list[str]) -> dict[str, str]:
+        """
+        Uses LLM to distill long news headlines or noisy trend names into
+        clean, high-hit-rate X (Twitter) search keywords (2-4 core entities/keywords).
+        """
+        if not topics:
+            return {}
+
+        results = {t: t for t in topics}
+        # Filter out empty topics
+        valid_topics = [t for t in topics if t.strip()]
+        if not valid_topics:
+            return results
+
+        prompt = (
+            "你是一名 X (Twitter) 搜索与舆情情报专家。\n"
+            "请将以下从 X 趋势榜抓取到的长标题或新闻句子，转换为最容易在 X 站内搜到真实用户高赞讨论的核心搜索词（提取 2~4 个最具辨识度的核心实体或关键词，去除冗长虚词与修饰性从句，使其符合推特用户的发帖习惯）：\n\n"
+            "待转换话题列表：\n"
+            + "\n".join(f"{i}. {t}" for i, t in enumerate(valid_topics, 1))
+            + "\n\n请直接返回纯 JSON 格式的字典（键为待转换的原话题名字符串，值为提炼后的精简搜索词，不要附带任何多余解释）："
+        )
+
+        try:
+            resp_str = self.llm.generate(prompt=prompt)
+            cleaned = resp_str.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                cleaned = "\n".join(lines).strip()
+
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                for orig, refined in parsed.items():
+                    if orig in results and isinstance(refined, str) and refined.strip():
+                        results[orig] = refined.strip()
+        except Exception as e:
+            logger.warning(f"AI 提炼搜索关键词受限或解析失败: {e}，将使用原始话题词")
+
+        return results
 
     def _format_tweets_for_prompt(self, tweets: list[dict[str, Any]]) -> str:
         lines = []

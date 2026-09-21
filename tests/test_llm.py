@@ -1,3 +1,4 @@
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from src.llm.factory import get_llm_provider
@@ -226,3 +227,24 @@ def test_reasoning_and_multimodal_payloads():
         assert user_content[0]["type"] == "text"
         assert user_content[1]["type"] == "image_url"
         assert user_content[1]["image_url"]["url"] == "https://example.com/cat.png"
+
+
+def test_refine_search_queries():
+    from src.summarizer import Summarizer
+    mock_llm = MagicMock()
+    mock_llm.generate.return_value = json.dumps({
+        "DeepSeek Bets Big on Huawei Chips to Train Massive AI Models": "DeepSeek Huawei chips",
+        "World of Warcraft Forever Beta Draws Players and Design Debates": "WoW Classic beta",
+    })
+    summarizer = Summarizer(llm_instance=mock_llm)
+
+    topics = [
+        "DeepSeek Bets Big on Huawei Chips to Train Massive AI Models",
+        "World of Warcraft Forever Beta Draws Players and Design Debates",
+        "#IDontWantToOverreactBUT",
+    ]
+    res = summarizer.refine_search_queries(topics)
+    assert res["DeepSeek Bets Big on Huawei Chips to Train Massive AI Models"] == "DeepSeek Huawei chips"
+    assert res["World of Warcraft Forever Beta Draws Players and Design Debates"] == "WoW Classic beta"
+    assert res["#IDontWantToOverreactBUT"] == "#IDontWantToOverreactBUT"
+

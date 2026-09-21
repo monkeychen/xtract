@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -268,20 +269,29 @@ class Pipeline:
             console.print("[yellow]⚠️ 未能获取到趋势话题，终止研报生成。[/yellow]")
             return None
 
+        # 1. Initialize Summarizer first
+        summarizer = Summarizer(provider=provider, auth_mode=auth_mode, model=model)
+
+        # 2. AI-assisted search query refinement
+        topic_names = [item.get("name", "") for item in trends if item.get("name")]
+        console.print(f"\n[cyan]🧠 正在通过 {summarizer.llm.provider_name} 提炼高命中推特搜索关键词...[/cyan]")
+        refined_queries = summarizer.refine_search_queries(topic_names)
+
         enriched_trends = []
         for idx, item in enumerate(trends, 1):
             topic_name = item.get("name", "")
-            query = item.get("query") or topic_name
-            console.print(f"\n[cyan]🔍 ({idx}/{len(trends)}) 正在全网挖掘趋势【{topic_name}】的高赞代表性讨论...[/cyan]")
+            refined_query = refined_queries.get(topic_name, item.get("query") or topic_name)
+            console.print(f"\n[cyan]🔍 ({idx}/{len(trends)}) 正在全网挖掘趋势【{topic_name}】的高赞代表性讨论 (搜索词: '{refined_query}')...[/cyan]")
 
             try:
+                # Safe sequential execution with 25s default timeout
                 topic_tweets = await self.fetch_search_and_store(
-                    query=query,
+                    query=refined_query,
                     search_type="top",
                     limit=10,
                     min_likes=min_likes,
                     min_retweets=min_retweets,
-                    timeout=timeout,
+                    timeout=timeout or 25,
                 )
             except Exception as e:
                 console.print(f"[yellow]⚠️ 话题【{topic_name}】推文抓取受限: {e}，将使用基础趋势信息...[/yellow]")
@@ -294,9 +304,12 @@ class Pipeline:
                 "tweets": topic_tweets,
             })
 
-        # Summarize via LLM
+            # Safe human-like delay between requests to protect account from rate limiting
+            if idx < len(trends):
+                await asyncio.sleep(2.0)
+
+        # 3. Summarize via LLM
         today = datetime.now().strftime("%Y-%m-%d")
-        summarizer = Summarizer(provider=provider, auth_mode=auth_mode, model=model)
         console.print(
             f"\n[cyan]🧠 正在调用 {summarizer.llm.provider_name} [{summarizer.llm.model_name}] 深度聚合提炼趋势研报...[/cyan]"
         )
