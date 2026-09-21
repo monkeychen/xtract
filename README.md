@@ -31,6 +31,7 @@
 - [7. 存储架构与数据目录规范](#7-存储架构与数据目录规范)
 - [8. 自动化测试与质量保障](#8-自动化测试与质量保障)
 - [9. 常见问题排查 (FAQ)](#9-常见问题排查-faq)
+- [10. Vibe Coding 开发复盘与踩坑实录 (`vibe-coding-log.md`)](#10-vibe-coding-开发复盘与踩坑实录)
 
 ---
 
@@ -596,6 +597,9 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
   # 指定使用 DeepSeek 或本地 Google 账号订阅驱动
   uv run python main.py --trends-digest --provider deepseek --auth-mode api_key
   uv run python main.py --trends-digest --provider gemini --auth-mode account
+
+  # 指定时效回溯窗口（例如只看近 24 小时或扩展到近 72 小时，杜绝历史陈旧旧帖）
+  uv run python main.py --trends-digest --hours 24
   ```
 * **研报产出样例**：
   保存在 `output/reports/trends_YYYY-MM-DD.md`，包含以下模块：
@@ -829,3 +833,13 @@ uv run pytest
 
 ### Q3: 为什么抓取到的推文中没有看到推广广告？
 - **设计特性**：系统在解析 GraphQL 响应时，已自动基于 `entryId` 特征将带有 `promoted-tweet` 的广告全部剥离，仅保留你关注的博主的真实内容。
+
+---
+
+## 10. Vibe Coding 开发复盘与踩坑实录
+
+本项目采用全流程 AI 结对协同（Vibe Coding / Pair Programming）模式开发，并在生产演进中攻克了多项高危反爬封控、协议脱敏、长思维链推理流式传输及多厂商专属端点适配难题。
+
+完整的开发演进历程、第一性原理思考、真实踩坑记录与解决方案详见专属复盘文档：
+👉 **[vibe-coding-log.md](file:///Users/chenzhian/lab/x/vibe-coding-log.md)**
+

@@ -66,6 +66,7 @@
 ```
 /Users/chenzhian/lab/x/
 ├── GEMINI.md               # 项目规范与架构约定（本文件）
+├── vibe-coding-log.md      # 项目全周期复盘与踩坑设计日志
 ├── pyproject.toml          # uv 项目与依赖配置
 ├── .env.example            # 环境变量模板
 ├── .gitignore              # Git 忽略配置
@@ -111,7 +112,7 @@
 - 仅生成今日报告：`uv run python main.py --report-only [--hours N] [--min-likes N] [--provider X] [--auth-mode Y]`
 - 关键词与高级语法搜索：`uv run python main.py --search "<关键词或语法>" [--search-type live|top] [--limit N] [--min-likes N]`
 - 查看全网趋势榜单（模式1）：`uv run python main.py --trends [--category tech|all|business|news|entertainment|sports] [--top N]`
-- 全自动趋势研报（模式2）：`uv run python main.py --trends-digest [--category tech|all|business|news] [--top N] [--provider X] [--auth-mode Y]`
+- 全自动趋势研报（模式2）：`uv run python main.py --trends-digest [--category tech|all|business|news] [--top N] [--hours N] [--provider X] [--auth-mode Y]`
 - 交互式浏览器登录：`uv run python main.py --login [x|openai|gemini]`
 - 在线抓取指定博主推文：`uv run python main.py --user <博主用户名> [--limit N]`
 - 抓取指定 X 列表最新推文：`uv run python main.py --x-list <列表ID或URL> [--limit N]`
