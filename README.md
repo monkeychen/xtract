@@ -32,6 +32,7 @@
 - [8. 自动化测试与质量保障](#8-自动化测试与质量保障)
 - [9. 常见问题排查 (FAQ)](#9-常见问题排查-faq)
 - [10. Vibe Coding 开发复盘与踩坑实录 (`vibe-coding-log.md`)](#10-vibe-coding-开发复盘与踩坑实录)
+- [11. 系统工程设计与架构文档 (`docs/`)](#11-系统工程设计与架构文档)
 
 ---
 
@@ -842,4 +843,14 @@ uv run pytest
 
 完整的开发演进历程、第一性原理思考、真实踩坑记录与解决方案详见专属复盘文档：
 👉 **[vibe-coding-log.md](file:///Users/chenzhian/lab/x/vibe-coding-log.md)**
+
+---
+
+## 11. 系统工程设计与架构文档
+
+为了满足工业级系统的可维护性与二次开发扩展需求，本项目输出了完备的系统级设计与机制文档：
+
+- **[系统总体架构设计文档 (HLD)](file:///Users/chenzhian/lab/x/docs/architecture.md)**：包含 5 层物理架构拓扑、全网趋势研报与推文离线归档的端到端数据流时序、技术选型矩阵、防封控安全与网络智能旁路设计。
+- **[系统详细设计与核心机制文档 (LLD)](file:///Users/chenzhian/lab/x/docs/detailed_design.md)**：包含核心 UML 类图、接口契约、GraphQL 拦截与防抖状态机、免查 Token 会话捕获流程、时效性双重过滤算法、SSE 长思维链流式调度及厂商专属端点配置字典。
+
 
