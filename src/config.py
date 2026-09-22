@@ -22,7 +22,7 @@ class Config:
     X_CT0: str = os.getenv("X_CT0", "").strip()
 
     # Network / Proxy Settings
-    HTTP_PROXY: str = os.getenv("HTTP_PROXY", os.getenv("ALL_PROXY", "http://127.0.0.1:8118")).strip()
+    HTTP_PROXY: str = os.getenv("HTTP_PROXY", os.getenv("ALL_PROXY", "")).strip()
 
     # ==========================================
     # Unified LLM Settings

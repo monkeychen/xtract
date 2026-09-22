@@ -31,7 +31,7 @@
 - [7. 存储架构与数据目录规范](#7-存储架构与数据目录规范)
 - [8. 自动化测试与质量保障](#8-自动化测试与质量保障)
 - [9. 常见问题排查 (FAQ)](#9-常见问题排查-faq)
-- [10. Vibe Coding 开发复盘与踩坑实录 (`vibe-coding-log.md`)](#10-vibe-coding-开发复盘与踩坑实录)
+- [10. Vibe Coding 开发复盘与踩坑实录 (`docs/vibe-coding-log.md`)](#10-vibe-coding-开发复盘与踩坑实录)
 - [11. 系统工程设计与架构文档 (`docs/`)](#11-系统工程设计与架构文档)
 
 ---
@@ -69,7 +69,8 @@
 
 ### 2.1 克隆并进入目录
 ```bash
-cd /Users/chenzhian/lab/x
+git clone https://github.com/your_username/x.git
+cd x
 ```
 
 ### 2.2 创建虚拟环境并同步依赖
@@ -253,7 +254,7 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
   ```text
   🔍 正在从本地数据库检索近 12 小时的推文...
   ℹ️ 找到 86 条相关推文，正在调用 Gemini 模型进行主题聚类与提炼...
-  🎉 早报已生成：/Users/chenzhian/lab/x/output/reports/2026-09-10.md
+  🎉 早报已生成：output/reports/2026-09-10.md
   ```
 
 ---
@@ -711,8 +712,8 @@ uv run python main.py --export 300
 在终端运行 `crontab -e`，添加定时规则（以每天早晨 8:30 执行为例）：
 
 ```cron
-# 每天 8:30 自动抓取并生成早报
-30 8 * * * cd /Users/chenzhian/lab/x && /Users/chenzhian/.local/bin/uv run python main.py >> data/cron.log 2>&1
+# 每天 8:30 自动抓取并生成早报（请将 /path/to/x 替换为你的项目绝对路径）
+30 8 * * * cd /path/to/x && $(which uv) run python main.py >> data/cron.log 2>&1
 ```
 
 ### 方案 2：macOS 原生 `launchd`（Mac 推荐，支持休眠唤醒补跑）
@@ -725,10 +726,11 @@ uv run python main.py --export 300
     <key>Label</key>
     <string>com.x.digest</string>
     <key>WorkingDirectory</key>
-    <string>/Users/chenzhian/lab/x</string>
+    <string>/path/to/x</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/chenzhian/.local/bin/uv</string>
+        <!-- 请使用 `which uv` 查得的绝对路径，例如 /usr/local/bin/uv 或 ~/.local/bin/uv -->
+        <string>/usr/local/bin/uv</string>
         <string>run</string>
         <string>python</string>
         <string>main.py</string>
@@ -741,9 +743,9 @@ uv run python main.py --export 300
         <integer>30</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/chenzhian/lab/x/data/cron.log</string>
+    <string>/path/to/x/data/cron.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/chenzhian/lab/x/data/cron.log</string>
+    <string>/path/to/x/data/cron.log</string>
 </dict>
 </plist>
 ```
@@ -759,9 +761,13 @@ launchctl load ~/Library/LaunchAgents/com.x.digest.plist
 项目严格遵守结构分层与安全规范：
 
 ```
-/Users/chenzhian/lab/x/
+x/                          # 项目根目录
 ├── GEMINI.md               # 项目架构约束与设计记录
 ├── README.md               # 本项目全量使用指南
+├── docs/                   # 正式工程设计与架构文档
+│   ├── architecture.md     # 系统总体架构设计 (HLD)
+│   ├── detailed_design.md  # 详细设计与核心机制 (LLD)
+│   └── vibe-coding-log.md  # Vibe Coding 全周期复盘与踩坑实录
 ├── pyproject.toml          # uv 依赖管理
 ├── .env.example            # 环境变量配置模板
 ├── .env                    # 敏感会话凭据与代理（Git 忽略）
@@ -842,7 +848,7 @@ uv run pytest
 本项目采用全流程 AI 结对协同（Vibe Coding / Pair Programming）模式开发，并在生产演进中攻克了多项高危反爬封控、协议脱敏、长思维链推理流式传输及多厂商专属端点适配难题。
 
 完整的开发演进历程、第一性原理思考、真实踩坑记录与解决方案详见专属复盘文档：
-👉 **[vibe-coding-log.md](file:///Users/chenzhian/lab/x/vibe-coding-log.md)**
+👉 **[docs/vibe-coding-log.md](docs/vibe-coding-log.md)**
 
 ---
 
@@ -850,7 +856,7 @@ uv run pytest
 
 为了满足工业级系统的可维护性与二次开发扩展需求，本项目输出了完备的系统级设计与机制文档：
 
-- **[系统总体架构设计文档 (HLD)](file:///Users/chenzhian/lab/x/docs/architecture.md)**：包含 5 层物理架构拓扑、全网趋势研报与推文离线归档的端到端数据流时序、技术选型矩阵、防封控安全与网络智能旁路设计。
-- **[系统详细设计与核心机制文档 (LLD)](file:///Users/chenzhian/lab/x/docs/detailed_design.md)**：包含核心 UML 类图、接口契约、GraphQL 拦截与防抖状态机、免查 Token 会话捕获流程、时效性双重过滤算法、SSE 长思维链流式调度及厂商专属端点配置字典。
+- **[系统总体架构设计文档 (HLD)](docs/architecture.md)**：包含 5 层物理架构拓扑、全网趋势研报与推文离线归档的端到端数据流时序、技术选型矩阵、防封控安全与网络智能旁路设计。
+- **[系统详细设计与核心机制文档 (LLD)](docs/detailed_design.md)**：包含核心 UML 类图、接口契约、GraphQL 拦截与防抖状态机、免查 Token 会话捕获流程、时效性双重过滤算法、SSE 长思维链流式调度及厂商专属端点配置字典。
 
 

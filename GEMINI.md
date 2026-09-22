@@ -64,12 +64,12 @@
 ## 3. 目录与命名规范
 
 ```
-/Users/chenzhian/lab/x/
+x/                          # 项目根目录
 ├── GEMINI.md               # 项目规范与架构约定（本文件）
-├── vibe-coding-log.md      # 项目全周期复盘与踩坑设计日志
 ├── docs/                   # 正式工程设计与架构文档
 │   ├── architecture.md     # 系统总体架构设计 (HLD)
-│   └── detailed_design.md  # 详细设计与核心机制 (LLD)
+│   ├── detailed_design.md  # 详细设计与核心机制 (LLD)
+│   └── vibe-coding-log.md  # 项目全周期复盘与踩坑设计日志
 ├── pyproject.toml          # uv 项目与依赖配置
 ├── .env.example            # 环境变量模板
 ├── .gitignore              # Git 忽略配置
