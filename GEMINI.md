@@ -64,8 +64,9 @@
 ## 3. 目录与命名规范
 
 ```
-x/                          # 项目根目录
+xtract/                     # 项目根目录
 ├── GEMINI.md               # 项目规范与架构约定（本文件）
+├── LICENSE                 # Apache-2.0 开源协议
 ├── docs/                   # 正式工程设计与架构文档
 │   ├── architecture.md     # 系统总体架构设计 (HLD)
 │   ├── detailed_design.md  # 详细设计与核心机制 (LLD)

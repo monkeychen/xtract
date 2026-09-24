@@ -1111,7 +1111,7 @@ wheels = [
 ]
 
 [[package]]
-name = "x-digest"
+name = "xtract"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

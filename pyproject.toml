@@ -1,8 +1,12 @@
 [project]
-name = "x-digest"
+name = "xtract"
 version = "0.1.0"
-description = "Add your description here"
+description = "Production-grade X (Twitter) intelligence radar & AI digest."
 readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "chenzhian", email = "cza55007@gmail.com" }
+]
 requires-python = ">=3.12"
 dependencies = [
     "google-genai>=2.22.0",

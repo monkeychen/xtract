@@ -1,4 +1,7 @@
-# 🗞️ X (Twitter) Following Timeline & Trends AI Digest
+# 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-brightgreen.svg)](https://www.python.org/)
 
 > **基于 Playwright 官方流无损拦截 + SQLite 本地增量去重 + 全网实时热搜雷达 + 国内外多大模型统一调度（双轨认证：API-Key / 账号订阅免Key）的个人情报与深度研报系统。**
 
@@ -33,6 +36,7 @@
 - [9. 常见问题排查 (FAQ)](#9-常见问题排查-faq)
 - [10. Vibe Coding 开发复盘与踩坑实录 (`docs/vibe-coding-log.md`)](#10-vibe-coding-开发复盘与踩坑实录)
 - [11. 系统工程设计与架构文档 (`docs/`)](#11-系统工程设计与架构文档)
+- [12. 开源协议 (License)](#12-开源协议-license)
 
 ---
 
@@ -858,5 +862,14 @@ uv run pytest
 
 - **[系统总体架构设计文档 (HLD)](docs/architecture.md)**：包含 5 层物理架构拓扑、全网趋势研报与推文离线归档的端到端数据流时序、技术选型矩阵、防封控安全与网络智能旁路设计。
 - **[系统详细设计与核心机制文档 (LLD)](docs/detailed_design.md)**：包含核心 UML 类图、接口契约、GraphQL 拦截与防抖状态机、免查 Token 会话捕获流程、时效性双重过滤算法、SSE 长思维链流式调度及厂商专属端点配置字典。
+
+---
+
+## 12. 开源协议 (License)
+
+本项目采用 [Apache-2.0 许可证](LICENSE) 开源。
+
+欢迎自由使用、分发与修改。商业使用与二次开发请保留原作者版权声明及免责声明。
+
 
 
