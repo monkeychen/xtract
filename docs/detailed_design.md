@@ -271,7 +271,19 @@ CREATE INDEX IF NOT EXISTS idx_tweets_source ON tweets(source_type);
 - `data/raw/raw_YYYYMMDD_HHMM.json`：保存近 30 天调试捕获的原始网络快照。
 - `output/reports/YYYY-MM-DD.md`：每日关注流智能早报。
 - `output/reports/trends_YYYY-MM-DD.md`：全网趋势深度研报。
-- `output/tweet_{id}_{author}.md`：离线单篇/长推文无损归档文档。
+- `output/{author}/{tweet_id}/index.md`：自包含单篇推文/长文 Page Bundle，专属配图保存在 `images/`。
+
+### 3.3 数据清理与级联删除机制 (Cascade Purge Guarantee)
+为防止本地推文库无序膨胀并保证数据库与文件系统强一致，系统提供统一的级联删除核心能力：
+1. **多维条件过滤**：支持按推文 ID/URL、博主用户名（忽略大小写与 `@` 符号）、发布或入库时间范围（`--since`、`--until`）、过期存留周期（`--older-than 30d/48h`）精确定位待删除推文集合。
+2. **两阶段原子操作**：
+   - 先查询定位所有命中的推文列表；
+   - 物理清理文件：遍历命中推文，彻底删除 `output/{author}/{tweet_id}/` 目录（及其下 `index.md` 与配图）；兼容清理可能遗留的旧版文件；若清理后 `{author}` 目录为空，自动修剪清理空目录；
+   - SQLite 事务删除：开启事务执行 `DELETE FROM tweets WHERE tweet_id IN (...)`，确保元数据与磁盘文件同步销毁。
+3. **安全交互防护 (Defensive Safety)**：
+   - 严禁空条件盲删：必须提供推文 ID、`--user`、`--since`、`--until` 或 `--older-than` 中至少一项；
+   - 预演支持：提供 `--dry-run` 标志，只返回命中行数及拟删除目录树，不触发任何真实写操作；
+   - 人机交互确认：终端非 `--json` 且未携带 `-y/--yes` 时，强制提示输入 `y/N` 确认，防止自动化失控或手滑误删。
 
 ---
 

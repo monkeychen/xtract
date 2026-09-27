@@ -85,4 +85,24 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
       expect(stderr).toContain('认证');
     }
   }, 15000);
+
+  it('E2E: --delete without filter aborts with safety error', async () => {
+    const { stderr, exitCode } = await runCli(['--delete']);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('至少一个筛选条件');
+  }, 15000);
+
+  it('E2E: --delete --user <name> --dry-run --json returns dryRun preview', async () => {
+    const { stdout, exitCode } = await runCli([
+      '--delete',
+      '--user',
+      'non_existent_author',
+      '--dry-run',
+      '--json',
+    ]);
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toHaveProperty('matchedCount', 0);
+  }, 15000);
 });
+

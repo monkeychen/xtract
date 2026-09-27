@@ -3,11 +3,30 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { Config } from '../config.js';
-import type { Tweet } from '../types.js';
+import type { Tweet, DeleteFilter, DeleteResult } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
   const lower = url.toLowerCase();
   return lower.includes('.mp4') || lower.includes('.m3u8') || lower.includes('video.twimg.com');
+}
+
+export function parseDurationMs(durationStr: string): number | null {
+  const match = durationStr.trim().match(/^(\d+)\s*([dhwm])$/i);
+  if (!match) return null;
+  const num = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  switch (unit) {
+    case 'm':
+      return num * 60 * 1000;
+    case 'h':
+      return num * 3600 * 1000;
+    case 'd':
+      return num * 24 * 3600 * 1000;
+    case 'w':
+      return num * 7 * 24 * 3600 * 1000;
+    default:
+      return null;
+  }
 }
 
 export async function downloadImage(
@@ -60,9 +79,11 @@ export async function downloadImage(
 export class Storage {
   private db: Database.Database;
   public readonly dbPath: string;
+  public readonly baseOutputDir: string;
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, baseOutputDir?: string) {
     this.dbPath = dbPath || Config.DB_PATH;
+    this.baseOutputDir = baseOutputDir || path.join(Config.PROJECT_ROOT, 'output');
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -362,7 +383,7 @@ export class Storage {
     const authorUser = primaryTweet.author_username || 'unknown';
     const primaryId = String(primaryTweet.tweet_id);
 
-    let bundleDir = path.join(Config.PROJECT_ROOT, 'output', authorUser, primaryId);
+    let bundleDir = path.join(this.baseOutputDir, authorUser, primaryId);
     let mdFile = path.join(bundleDir, 'index.md');
 
     if (options.outputPath) {
@@ -475,6 +496,181 @@ export class Storage {
 
     fs.writeFileSync(mdFile, lines.join('\n'), 'utf-8');
     return { filePath: mdFile, downloadedImagesCount: dlCount };
+  }
+
+  public async deleteTweets(filter: DeleteFilter): Promise<DeleteResult> {
+    const { tweetId, username, since, until, olderThan, dryRun } = filter;
+
+    if (!tweetId && !username && !since && !until && !olderThan) {
+      throw new Error(
+        '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until 或 --older-than）。'
+      );
+    }
+
+    let sql = 'SELECT * FROM tweets WHERE 1=1';
+    const params: unknown[] = [];
+
+    if (tweetId) {
+      const match = tweetId.match(/\d{5,}/)?.[0] || tweetId.trim();
+      sql += ' AND tweet_id = ?';
+      params.push(match);
+    }
+
+    if (username) {
+      const cleanUser = username.replace(/^@/, '').trim();
+      sql += ' AND LOWER(author_username) = LOWER(?)';
+      params.push(cleanUser);
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as Record<string, unknown>[];
+    let candidates = rows.map((r) => this.mapRowToTweet(r));
+
+    const now = Date.now();
+
+    if (olderThan) {
+      const ms = parseDurationMs(olderThan);
+      if (ms === null) {
+        throw new Error(`无效的时间跨度格式 '${olderThan}'，请使用如 '30d'、'48h'、'7d'。`);
+      }
+      const cutoffTime = now - ms;
+      candidates = candidates.filter((t) => {
+        let time = NaN;
+        if (t.created_at) time = new Date(t.created_at).getTime();
+        if (isNaN(time) && t.fetched_at) time = new Date(t.fetched_at).getTime();
+        return !isNaN(time) && time <= cutoffTime;
+      });
+    }
+
+    if (since) {
+      const sinceTime = new Date(`${since.slice(0, 10)}T00:00:00.000Z`).getTime();
+      if (!isNaN(sinceTime)) {
+        candidates = candidates.filter((t) => {
+          let time = NaN;
+          if (t.created_at) time = new Date(t.created_at).getTime();
+          if (isNaN(time) && t.fetched_at) time = new Date(t.fetched_at).getTime();
+          return !isNaN(time) && time >= sinceTime;
+        });
+      }
+    }
+
+    if (until) {
+      const untilTime = new Date(`${until.slice(0, 10)}T23:59:59.999Z`).getTime();
+      if (!isNaN(untilTime)) {
+        candidates = candidates.filter((t) => {
+          let time = NaN;
+          if (t.created_at) time = new Date(t.created_at).getTime();
+          if (isNaN(time) && t.fetched_at) time = new Date(t.fetched_at).getTime();
+          return !isNaN(time) && time <= untilTime;
+        });
+      }
+    }
+
+    const matchedCount = candidates.length;
+    const deletedDirs: string[] = [];
+    const deletedFiles: string[] = [];
+    const affectedAuthors = new Set<string>();
+
+    for (const t of candidates) {
+      const author = t.author_username || 'unknown';
+      affectedAuthors.add(author);
+
+      // Page bundle directory: output/{author}/{tweet_id}
+      const bundleDir = path.join(this.baseOutputDir, author, t.tweet_id);
+      if (fs.existsSync(bundleDir)) {
+        deletedDirs.push(bundleDir);
+      }
+
+      // Legacy flat markdown: output/tweet_{tweet_id}_{author}.md
+      const legacyMd = path.join(this.baseOutputDir, `tweet_${t.tweet_id}_${author}.md`);
+      if (fs.existsSync(legacyMd)) {
+        deletedFiles.push(legacyMd);
+      }
+
+      // Legacy images directory: output/images/{tweet_id}
+      const legacyImgDir = path.join(this.baseOutputDir, 'images', t.tweet_id);
+      if (fs.existsSync(legacyImgDir)) {
+        deletedDirs.push(legacyImgDir);
+      }
+    }
+
+    if (dryRun) {
+      return {
+        matchedCount,
+        deletedCount: 0,
+        deletedDirs,
+        deletedFiles,
+        dryRun: true,
+      };
+    }
+
+    if (matchedCount === 0) {
+      return {
+        matchedCount: 0,
+        deletedCount: 0,
+        deletedDirs: [],
+        deletedFiles: [],
+        dryRun: false,
+      };
+    }
+
+    // 1. Remove files and bundle directories
+    for (const dirPath of deletedDirs) {
+      try {
+        if (fs.existsSync(dirPath)) {
+          fs.rmSync(dirPath, { recursive: true, force: true });
+        }
+      } catch (err) {
+        console.error(`Failed to delete directory ${dirPath}:`, err);
+      }
+    }
+
+    for (const filePath of deletedFiles) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete file ${filePath}:`, err);
+      }
+    }
+
+    // 2. Prune empty author directories & empty images directory
+    for (const author of affectedAuthors) {
+      const authorDir = path.join(this.baseOutputDir, author);
+      if (fs.existsSync(authorDir)) {
+        try {
+          if (fs.readdirSync(authorDir).length === 0) {
+            fs.rmdirSync(authorDir);
+          }
+        } catch {}
+      }
+    }
+    const legacyImagesDir = path.join(this.baseOutputDir, 'images');
+    if (fs.existsSync(legacyImagesDir)) {
+      try {
+        if (fs.readdirSync(legacyImagesDir).length === 0) {
+          fs.rmdirSync(legacyImagesDir);
+        }
+      } catch {}
+    }
+
+    // 3. Delete records from SQLite in transaction
+    const deleteTx = this.db.transaction((tweetIds: string[]) => {
+      const stmt = this.db.prepare('DELETE FROM tweets WHERE tweet_id = ?');
+      for (const id of tweetIds) {
+        stmt.run(id);
+      }
+    });
+
+    deleteTx(candidates.map((t) => t.tweet_id));
+
+    return {
+      matchedCount,
+      deletedCount: matchedCount,
+      deletedDirs,
+      deletedFiles,
+      dryRun: false,
+    };
   }
 
   public close(): void {

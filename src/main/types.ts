@@ -41,3 +41,21 @@ export interface StreamChunk {
   type: 'reasoning' | 'content';
   text: string;
 }
+
+export interface DeleteFilter {
+  tweetId?: string;
+  username?: string;
+  since?: string;
+  until?: string;
+  olderThan?: string;
+  dryRun?: boolean;
+}
+
+export interface DeleteResult {
+  matchedCount: number;
+  deletedCount: number;
+  deletedDirs: string[];
+  deletedFiles: string[];
+  dryRun: boolean;
+}
+

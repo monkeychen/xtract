@@ -247,5 +247,104 @@ describe('Storage Module (100% Python Parity)', () => {
       fs.rmSync(upgradeTmpDir, { recursive: true, force: true });
     }
   });
+
+  it('test_storage_delete_tweets (cascade file cleanup and multi-condition filtering)', async () => {
+    const delTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract-del-test-'));
+    const delOutputDir = path.join(delTmpDir, 'output');
+    const delDb = path.join(delTmpDir, 'del_test.db');
+    const delStorage = new Storage(delDb, delOutputDir);
+
+    try {
+      // 1. Insert test tweets:
+      // Tweet 1: user 'alice', 40 days old
+      // Tweet 2: user 'alice', 5 days old
+      // Tweet 3: user 'bob', 2 days old
+      const now = Date.now();
+      const d40 = new Date(now - 40 * 24 * 3600 * 1000).toISOString();
+      const d5 = new Date(now - 5 * 24 * 3600 * 1000).toISOString();
+      const d2 = new Date(now - 2 * 24 * 3600 * 1000).toISOString();
+
+      delStorage.saveTweets([
+        {
+          tweet_id: '101',
+          author_name: 'Alice',
+          author_username: 'alice',
+          text: 'Alice tweet 1 (40d ago)',
+          created_at: d40,
+        },
+        {
+          tweet_id: '102',
+          author_name: 'Alice',
+          author_username: 'alice',
+          text: 'Alice tweet 2 (5d ago)',
+          created_at: d5,
+        },
+        {
+          tweet_id: '103',
+          author_name: 'Bob',
+          author_username: 'bob',
+          text: 'Bob tweet (2d ago)',
+          created_at: d2,
+        },
+      ]);
+
+      expect(delStorage.getTotalCount()).toBe(3);
+
+      // Create page bundle files for all 3 tweets
+      await delStorage.exportSingleTweetMarkdown('101', { downloadImages: false });
+      await delStorage.exportSingleTweetMarkdown('102', { downloadImages: false });
+      await delStorage.exportSingleTweetMarkdown('103', { downloadImages: false });
+
+      const alice101Dir = path.join(delOutputDir, 'alice', '101');
+      const alice102Dir = path.join(delOutputDir, 'alice', '102');
+      const bob103Dir = path.join(delOutputDir, 'bob', '103');
+
+      expect(fs.existsSync(path.join(alice101Dir, 'index.md'))).toBe(true);
+      expect(fs.existsSync(path.join(alice102Dir, 'index.md'))).toBe(true);
+      expect(fs.existsSync(path.join(bob103Dir, 'index.md'))).toBe(true);
+
+      // 2. Test safety: error when no condition is provided
+      await expect(delStorage.deleteTweets({})).rejects.toThrow('至少一个筛选条件');
+
+      // 3. Test dry-run on older-than 30d
+      const dryRes = await delStorage.deleteTweets({ olderThan: '30d', dryRun: true });
+      expect(dryRes.matchedCount).toBe(1);
+      expect(dryRes.deletedCount).toBe(0);
+      expect(dryRes.dryRun).toBe(true);
+      expect(dryRes.deletedDirs).toContain(alice101Dir);
+      // Ensure file and DB row still exist after dry-run
+      expect(fs.existsSync(alice101Dir)).toBe(true);
+      expect(delStorage.getTotalCount()).toBe(3);
+
+      // 4. Test actual deletion with older-than 30d (should delete tweet 101)
+      const realRes = await delStorage.deleteTweets({ olderThan: '30d' });
+      expect(realRes.matchedCount).toBe(1);
+      expect(realRes.deletedCount).toBe(1);
+      expect(fs.existsSync(alice101Dir)).toBe(false);
+      expect(delStorage.getTweetById('101')).toBeNull();
+      expect(delStorage.getTotalCount()).toBe(2);
+      // Alice still has tweet 102, so alice directory still exists
+      expect(fs.existsSync(path.join(delOutputDir, 'alice'))).toBe(true);
+
+      // 5. Test deletion by single tweet ID (tweet 102)
+      const del102Res = await delStorage.deleteTweets({ tweetId: '102' });
+      expect(del102Res.deletedCount).toBe(1);
+      expect(fs.existsSync(alice102Dir)).toBe(false);
+      expect(delStorage.getTweetById('102')).toBeNull();
+      // Alice has no more tweets, so author directory should be pruned
+      expect(fs.existsSync(path.join(delOutputDir, 'alice'))).toBe(false);
+      expect(delStorage.getTotalCount()).toBe(1);
+
+      // 6. Test deletion by username (bob) with @ symbol
+      const delBobRes = await delStorage.deleteTweets({ username: '@BOB' });
+      expect(delBobRes.deletedCount).toBe(1);
+      expect(fs.existsSync(bob103Dir)).toBe(false);
+      expect(fs.existsSync(path.join(delOutputDir, 'bob'))).toBe(false);
+      expect(delStorage.getTotalCount()).toBe(0);
+    } finally {
+      delStorage.close();
+      fs.rmSync(delTmpDir, { recursive: true, force: true });
+    }
+  });
 });
 

@@ -35,6 +35,12 @@ if (isCLI) {
     .option('--list [limit]', '查看已抓取推文列表 (默认 20 条)')
     .option('--view <tweetId>', '查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档')
     .option('--no-export-md', '查看单篇推文时关闭自动导出 Markdown')
+    .option('--delete [tweetId]', '删除已获取的推文/文章（同时清理数据库记录及本地文件）')
+    .option('--since <date>', '起始日期过滤 (YYYY-MM-DD)')
+    .option('--until <date>', '截止日期过滤 (YYYY-MM-DD)')
+    .option('--older-than <duration>', '早于指定时长的推文 (例如 30d, 48h, 7d)')
+    .option('--dry-run', '演练预览模式，仅展示待删除列表，不执行真实删除')
+    .option('-y, --yes', '跳过删除确认提示直接执行')
     .option('--export [limit]', '将已抓取的推文导出为结构化 Markdown 文档')
     .option('-o, --output <path>', '自定义导出 Markdown 文件的路径或目标目录')
     // Filtering & Pacing Options
@@ -163,6 +169,105 @@ if (isCLI) {
           if (exportedMdPath) {
             process.stdout.write(`🎉 推文已导出为 Markdown 文档: ${exportedMdPath}\n`);
           }
+        }
+        process.exit(0);
+      }
+
+      // 4.5 Delete tweets
+      if (options.delete !== undefined) {
+        const tweetId = typeof options.delete === 'string' ? options.delete : undefined;
+        const username = options.user;
+        const since = options.since;
+        const until = options.until;
+        const olderThan = options.olderThan;
+        const dryRun = Boolean(options.dryRun);
+
+        if (!tweetId && !username && !since && !until && !olderThan) {
+          throw new Error(
+            '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until 或 --older-than），以防误删全库。'
+          );
+        }
+
+        // Preview matches first
+        const preview = await storage.deleteTweets({
+          tweetId,
+          username,
+          since,
+          until,
+          olderThan,
+          dryRun: true,
+        });
+
+        if (preview.matchedCount === 0) {
+          if (isJson) {
+            process.stdout.write(
+              JSON.stringify({
+                status: 'ok',
+                matchedCount: 0,
+                deletedCount: 0,
+                message: '未检索到符合条件的推文。',
+              }) + '\n'
+            );
+          } else {
+            process.stdout.write('🔍 未检索到符合条件的推文，无需删除。\n');
+          }
+          process.exit(0);
+        }
+
+        if (dryRun) {
+          if (isJson) {
+            process.stdout.write(JSON.stringify(preview, null, 2) + '\n');
+          } else {
+            process.stdout.write(`🔎 [演练模式] 命中 ${preview.matchedCount} 篇推文：\n`);
+            if (preview.deletedDirs.length) {
+              process.stdout.write(`📁 拟清理目录 (${preview.deletedDirs.length} 个):\n`);
+              for (const d of preview.deletedDirs) {
+                process.stdout.write(`  - ${d}\n`);
+              }
+            }
+            if (preview.deletedFiles.length) {
+              process.stdout.write(`📄 拟清理文件 (${preview.deletedFiles.length} 个):\n`);
+              for (const f of preview.deletedFiles) {
+                process.stdout.write(`  - ${f}\n`);
+              }
+            }
+            process.stdout.write('ℹ️ 演练模式未执行实际删除。添加 -y 可直接执行删除。\n');
+          }
+          process.exit(0);
+        }
+
+        // Confirmation if not -y and interactive
+        if (!options.yes && process.stdin.isTTY && !isJson) {
+          const readline = await import('node:readline/promises');
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          const answer = await rl.question(
+            `⚠️ 即将从 SQLite 数据库和本地磁盘永久删除 ${preview.matchedCount} 篇推文及 ${preview.deletedDirs.length} 个相关目录，是否确认？(y/N): `
+          );
+          rl.close();
+          if (answer.trim().toLowerCase() !== 'y') {
+            process.stdout.write('🚫 操作已取消。\n');
+            process.exit(0);
+          }
+        }
+
+        const result = await storage.deleteTweets({
+          tweetId,
+          username,
+          since,
+          until,
+          olderThan,
+          dryRun: false,
+        });
+
+        if (isJson) {
+          process.stdout.write(JSON.stringify({ status: 'ok', ...result }, null, 2) + '\n');
+        } else {
+          process.stdout.write(
+            `✅ 成功删除 ${result.deletedCount} 篇推文记录，清理了 ${result.deletedDirs.length} 个本地目录与 ${result.deletedFiles.length} 个文件。\n`
+          );
         }
         process.exit(0);
       }
