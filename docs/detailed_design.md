@@ -140,7 +140,7 @@ sequenceDiagram
     participant PW as Playwright (有头窗口)
     participant FS as 磁盘 (data/auth_state.json)
 
-    User->>Auth: main.py --login x
+    User->>Auth: xtract --login x
     Auth->>PW: 启动可见 Chromium 窗口 (headless=False)
     PW->>PW: 导航至 https://x.com/login
     Auth-->>User: 终端提示："请在弹出的浏览器中完成登录..."
@@ -169,22 +169,22 @@ sequenceDiagram
 
 #### 2.3.2 双重拦截算法逻辑
 
-```python
-# 第一层：精确构造注入 X 搜索算子
-now_utc = datetime.now(timezone.utc)
-since_date = (now_utc - timedelta(hours=hours)).strftime("%Y-%m-%d")
-search_query = f"{refined_keyword} since:{since_date}"
+```typescript
+// 第一层：精确构造注入 X 搜索算子
+const nowUtc = new Date();
+const sinceDate = new Date(nowUtc.getTime() - hours * 3600 * 1000).toISOString().slice(0, 10);
+const searchQuery = `${refinedKeyword} since:${sinceDate}`;
 
-# 第二层：语料进入大模型前的内存 UTC 硬校验
-def is_tweet_within_hours(created_at_str: str, hours: int = 48) -> bool:
-    if not created_at_str:
-        return True
-    try:
-        # X 官方时间格式: "Fri Sep 21 14:32:00 +0000 2026"
-        dt = datetime.strptime(created_at_str, "%a %b %d %H:%M:%S %z %Y")
-        return (datetime.now(timezone.utc) - dt).total_seconds() <= hours * 3600
-    except Exception:
-        return True
+// 第二层：语料进入大模型前的内存 UTC 硬校验
+export function isTweetWithinHours(createdAtStr: string, hours: number = 48): boolean {
+  if (!createdAtStr) return true;
+  try {
+    const dt = new Date(createdAtStr);
+    return (Date.now() - dt.getTime()) <= hours * 3600 * 1000;
+  } catch {
+    return true;
+  }
+}
 ```
 
 ---

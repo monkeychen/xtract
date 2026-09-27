@@ -39,50 +39,13 @@ dist-electron/
 *.tsbuildinfo
 
 # ==============================================================================
-# 4. Python 虚拟环境与依赖 (Environments & Packages)
+# 4. 测试与代码质量工具缓存 (Testing & Linter Caches)
 # ==============================================================================
-.venv/
-venv/
-ENV/
-env/
-.env/
-
-# ==============================================================================
-# 4. Python 字节码与构建产物 (Bytecode & Build Artifacts)
-# ==============================================================================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-build/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# ==============================================================================
-# 5. 测试与代码质量工具缓存 (Testing & Linter Caches)
-# ==============================================================================
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-.hypothesis/
-.ruff_cache/
-.mypy_cache/
 test-results/
 playwright-report/
+coverage/
+.turbo/
+
 
 # ==============================================================================
 # 6. 操作系统与编辑器配置 (OS & IDE Artifacts)

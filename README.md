@@ -1,7 +1,10 @@
 # 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-brightgreen.svg)](https://www.python.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-34-47848F.svg)](https://www.electronjs.org/)
+[![Vitest](https://img.shields.io/badge/Tested%20with-Vitest-yellow.svg)](https://vitest.dev/)
 
 > **基于 Playwright 官方流无损拦截 + SQLite 本地增量去重 + 全网实时热搜雷达 + 国内外多大模型统一调度（双轨认证：API-Key / 账号订阅免Key）的个人情报与深度研报系统。**
 
@@ -29,6 +32,7 @@
   - [4.13 全网热搜与趋势看板（模式 1：`--trends`）](#413-全网热搜与趋势看板模式-1---trends)
   - [4.14 全自动趋势深度研报（模式 2：`--trends-digest`）](#414-全自动趋势深度研报模式-2---trends-digest)
   - [4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)](#415-多大模型与双轨认证参数)
+  - [4.16 推文级联删除与本地文件清理 (`--delete`)](#416-推文级联删除与本地文件清理---delete)
 - [5. 典型工作流与使用场景](#5-典型工作流与使用场景)
 - [6. 定时任务自动化配置 (Cron / launchd)](#6-定时任务自动化配置-cron--launchd)
 - [7. 存储架构与数据目录规范](#7-存储架构与数据目录规范)
@@ -69,7 +73,7 @@
 
 ## 2. 环境依赖与快速安装
 
-项目推荐使用现代化 Python 包管理器 [`uv`](https://docs.astral.sh/uv/)，环境完全隔离在项目内部的 `.venv` 中，不污染系统全局环境。
+本项目采用纯 Node.js / Electron（TypeScript）工业级架构，推荐使用 `pnpm` 进行依赖管理。运行环境需要 **Node.js ≥ 22.0.0**。
 
 ### 2.1 克隆并进入目录
 ```bash
@@ -77,16 +81,13 @@ git clone https://github.com/monkeychen/xtract.git
 cd xtract
 ```
 
-### 2.2 创建虚拟环境并同步依赖
+### 2.2 安装依赖与浏览器内核
 ```bash
-# 1. 创建独立 Python 虚拟环境
-uv venv
+# 1. 安装项目锁定依赖
+pnpm install
 
-# 2. 安装全部锁定依赖
-uv pip install -r requirements.txt
-
-# 3. 安装 Playwright 专用的 Chromium 内核
-uv run playwright install chromium
+# 2. 安装 Playwright 专用的 Chromium 内核
+pnpm exec playwright install chromium
 ```
 
 ---
@@ -105,7 +106,7 @@ cp .env.example .env
 # 1. X (Twitter) 会话认证凭据
 # ==========================================
 # 方式 A（推荐交互式登录，免查 Cookie）：
-# 运行 uv run python main.py --login 弹出浏览器窗口直接登录并自动保存
+# 运行 pnpm dev:cli -- --login 弹出浏览器窗口直接登录并自动保存
 # 方式 B（手动填入已有 Cookie）：
 X_AUTH_TOKEN=你的auth_token
 X_CT0=你的ct0
@@ -168,41 +169,70 @@ MOONSHOT_BASE_URL=
 
 ### 3.2 免查 Cookie 一键登录（最省心）
 项目支持通过可视化交互式窗口一键捕获合法凭据，**彻底告别手动打开 F12 查 Cookie**：
-- **X 账号登录**：`uv run python main.py --login x`（或直接 `main.py --login`）
-- **OpenAI / ChatGPT Plus 会话凭据**：`uv run python main.py --login openai`
-- **Google Gemini 账号凭据**：`uv run python main.py --login gemini`
+- **X 账号登录**：`pnpm dev:cli -- --login x`（或直接使用桌面端原生窗口）
+- **OpenAI / ChatGPT Plus 会话凭据**：`pnpm dev:cli -- --login openai`
+- **Google Gemini 账号凭据**：`pnpm dev:cli -- --login gemini`
 
 ---
 
 ## 4. CLI 完整命令参考手册
 
-所有命令均支持 `uv run python main.py [选项]` 执行，保证在隔离虚拟环境中运行。
+开发态通过 `pnpm dev:cli -- [选项]` 执行，打包后直接运行 `xtract [选项]` 即可。
 
 ```
-usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
-               [--trends-digest]
-               [-c {tech,all,business,news,entertainment,sports}] [--top N]
-               [--provider {gemini,openai,deepseek,qwen,qwen-token-plan,zhipu,zhipu-code-plan,minimax,kimi,custom}]
-               [--auth-mode {api_key,account}] [--model MODEL_NAME]
-               [--fetch-only] [--report-only] [--user USERNAME]
-               [--x-list LIST_ID_OR_URL] [--search QUERY]
-               [--search-type {live,top}] [--min-likes N] [--min-retweets N]
-               [--limit N] [--list [N]] [--view TWEET_ID]
-               [--export-md | --no-export-md] [--export [N]] [-o PATH]
-               [--pages PAGES] [--hours HOURS] [--timeout TIMEOUT]
+Usage: xtract [options]
+
+Production-grade X (Twitter) intelligence radar & AI digest.
+
+Options:
+  -V, --version                         output the version number
+  --login [service]                     打开可视化浏览器登录并自动截获保存凭据 (x, openai, gemini)
+  --check-auth                          验证 X Cookie 凭证或本地会话是否有效
+  --trends                              查看全网热门趋势榜单看板
+  --trends-digest                       全自动趋势研报（抓取热榜、主动挖掘代表性讨论并生成研报）
+  --fetch-only                          仅抓取 Following 推文并存入本地 SQLite，不生成总结
+  --report-only                         仅根据本地已有推文生成今日早报，不发起网络请求
+  --search <query>                      按关键词或高级语法搜索推文
+  --search-type <type>                  搜索结果类型：live (实时最新) 或 top (热门) (default: "live")
+  --user <username>                     指定博主用户名进行针对性抓取或本地检索
+  --x-list <listId>                     指定 X 列表 ID 或 URL，抓取该列表的最新推文
+  --list [limit]                        查看已抓取推文列表 (默认 20 条)
+  --view <tweetId>                      查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档
+  --no-export-md                        查看单篇推文时关闭自动导出 Markdown
+  --delete [tweetId]                    删除已获取的推文/文章（同时清理数据库记录及本地文件）
+  --since <date>                        起始日期过滤 (YYYY-MM-DD)
+  --until <date>                        截止日期过滤 (YYYY-MM-DD)
+  --older-than <duration>               早于指定时长的推文 (例如 30d, 48h, 7d)
+  --dry-run                             演练预览模式，仅展示待删除列表，不执行真实删除
+  -y, --yes                             跳过删除确认提示直接执行
+  --export [limit]                      将已抓取的推文导出为结构化 Markdown 文档
+  -o, --output <path>                   自定义导出 Markdown 文件的路径或目标目录
+  -c, --category <category>             趋势分类主题 (tech, all, business, news, entertainment, sports) (default: "tech")
+  --top <n>                             趋势榜单展示或研报挖掘的前 N 个热点话题 (default: "10")
+  --hours <hours>                       统计与研报回溯时间窗口（小时） (default: "24")
+  --pages <n>                           本次抓取的页数
+  --limit <n>                           限制获取或展示的推文条数 (default: "20")
+  --min-likes <n>                       最低点赞门槛过滤 (default: "0")
+  --min-retweets <n>                    最低转发门槛过滤 (default: "0")
+  --timeout <seconds>                   网络请求与页面加载超时时间（秒）
+  --provider <provider>                 指定大模型提供商
+  --auth-mode <mode>                    指定大模型认证模式 (api_key, account)
+  --model <modelName>                   指定具体的模型名称 (覆盖默认配置)
+  --json                                以纯 JSON 格式输出结果至 stdout（面向 Agent 与终端管道）
+  -h, --help                            display help for command
 ```
 
 ### 4.1 全量流水线（拉取 + 存储 + 生成早报）
-一键执行端到端闭环任务：自动挂载监听器打开 X Following 时间线 ➔ 增量拉取最新推文 ➔ 本地 SQLite 去重入库 ➔ 备份原始快照 ➔ 调用 Gemini 生成结构化早报 ➔ 输出 Markdown 归档。
+一键执行端到端闭环任务：自动挂载监听器打开 X Following 时间线 ➔ 增量拉取最新推文 ➔ 本地 SQLite 去重入库 ➔ 备份原始快照 ➔ 调用大模型生成结构化早报 ➔ 输出 Markdown 归档。
 
 * **基本语法**：
   ```bash
-  uv run python main.py
+  pnpm dev:cli
   ```
 * **可选参数组合**：
   ```bash
   # 抓取 5 页推文，回溯过去 12 小时内容生成早报
-  uv run python main.py --pages 5 --hours 12
+  pnpm dev:cli -- --pages 5 --hours 12
   ```
 * **输出成果**：
   生成的 Markdown 早报保存在 `output/reports/YYYY-MM-DD.md`。
@@ -214,7 +244,7 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 
 * **基本语法**：
   ```bash
-  uv run python main.py --fetch-only
+  pnpm dev:cli -- --fetch-only
   ```
 * **参数选项**：
   * `--pages <N>`：抓取页数（默认读取 `.env` 中的 `FETCH_MAX_PAGES`，通常 1 页约 25~35 条）。
@@ -222,7 +252,7 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **使用示例**：
   ```bash
   # 抓取 3 页推文
-  uv run python main.py --fetch-only --pages 3
+  pnpm dev:cli -- --fetch-only --pages 3
   ```
 * **终端输出示例**：
   ```text
@@ -239,11 +269,11 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ---
 
 ### 4.3 仅离线生成早报 (`--report-only`)
-**纯离线运行**，不发起任何推特网络请求。直接从本地 SQLite 数据库中提取指定时间段的推文，调用 Gemini 进行主题聚类并生成早报。
+**纯离线运行**，不发起任何推特网络请求。直接从本地 SQLite 数据库中提取指定时间段的推文，调用大模型进行主题聚类并生成早报。
 
 * **基本语法**：
   ```bash
-  uv run python main.py --report-only
+  pnpm dev:cli -- --report-only
   ```
 * **参数选项**：
   * `--hours <N>`：早报统计回溯时间窗口（默认近 24 小时）。
@@ -252,12 +282,12 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **使用示例**：
   ```bash
   # 仅基于过去 12 小时内抓取且点赞 >= 50 的高质推文提炼早报
-  uv run python main.py --report-only --hours 12 --min-likes 50
+  pnpm dev:cli -- --report-only --hours 12 --min-likes 50
   ```
 * **终端输出示例**：
   ```text
   🔍 正在从本地数据库检索近 12 小时的推文...
-  ℹ️ 找到 86 条相关推文，正在调用 Gemini 模型进行主题聚类与提炼...
+  ℹ️ 找到 86 条相关推文，正在调用大模型进行主题聚类与提炼...
   🎉 早报已生成：output/reports/2026-09-10.md
   ```
 
@@ -269,13 +299,13 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 默认展示最近 20 条
-  uv run python main.py --list
+  pnpm dev:cli -- --list
 
   # 指定展示最近 N 条（如展示 50 条）
-  uv run python main.py --list 50
+  pnpm dev:cli -- --list 50
 
   # 按互动门槛筛选（如仅看点赞 >= 500 的爆款推文）
-  uv run python main.py --list 20 --min-likes 500
+  pnpm dev:cli -- --list 20 --min-likes 500
   ```
 * **展示字段**：
   * `#`：序号
@@ -302,25 +332,26 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ### 4.5 查看/抓取单篇推文并导出 Markdown (`--view`)
 支持传入**推文 ID** 或 **X 原文链接**。如果本地数据库已有则秒级展示；如果本地未检索到，系统会**自动从 X 在线实时抓取**、解析其连帖 Thread 并落库保存后展示。
 
-系统**默认自动导出为单篇独立 Markdown 文档**（受参数 `--export-md` 控制，默认开启）：
-- **图片自动回传本地**：正文及连帖所有图片会自动下载保存在 Markdown 文档所在目录的 `images/` 子目录下，文档中自动转换为本地相对路径 `![图片](images/...)`，离线阅读或迁移知识库无损展示。
-- **视频提供在线直链**：视频不会占用海量带宽下载大体积文件，而是保留高清 MP4 播放与下载链接。
+系统**默认自动导出为单篇独立 Markdown 文档**（受参数 `--no-export-md` 控制）：
+- **Page Bundle 自包含归档**：默认自动落盘为 `output/{author}/{tweet_id}/index.md`，正文及连帖所有图片下载保存在同级 `images/` 子目录，正文相对引用 `images/...`，完全自包含，随处移动不丢图。
+- **视频提供在线直链**：视频保留高清 MP4 播放与下载链接，不占用海量本地存储。
 - **完整连帖展开**：若目标推文是作者的多条连帖（Thread），自动合并整理为结构化各章节展开。
-- **灵活目录配置**：默认输出至 `output/`（图片存 `output/images/`），可配合 `-o / --output` 指定存放目录或自定义文件名。
+- **长专栏 X Article 无损提取**：自动还原富文本排版、标题层级、引用块及内联图表。
+- **灵活目录配置**：默认输出至 `output/{author}/{tweet_id}/`，可配合 `-o / --output` 指定存放目录或自定义文件名。
 
 * **基本语法**：
   ```bash
-  # 抓取/查看单篇推文（默认自动导出 Markdown 并下载图片至 output/images/）
-  uv run python main.py --view https://x.com/username/status/2086710313219727862
+  # 抓取/查看单篇推文（默认自动导出 Page Bundle Markdown 并下载图片至 output/{author}/{tweet_id}/images/）
+  pnpm dev:cli -- --view https://x.com/username/status/2086710313219727862
 
-  # 指定自定义存放目录（文档存入 my_folder/，图片自动存入 my_folder/images/）
-  uv run python main.py --view <推文ID或URL> -o my_folder/
+  # 指定自定义存放目录
+  pnpm dev:cli -- --view <推文ID或URL> -o my_folder/
 
-  # 指定自定义文件名（图片存入 custom_notes/images/）
-  uv run python main.py --view <推文ID或URL> -o custom_notes/article.md
+  # 指定自定义文件名
+  pnpm dev:cli -- --view <推文ID或URL> -o custom_notes/article.md
 
   # 仅在终端查看卡片，不导出 Markdown 也不下载图片
-  uv run python main.py --view <推文ID或URL> --no-export-md
+  pnpm dev:cli -- --view <推文ID或URL> --no-export-md
   ```
 * **终端输出示例**：
   ```text
@@ -339,8 +370,8 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
   │   - https://pbs.twimg.com/media/HR0i8iNaUAAYrrW.jpg                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   💾 正在导出单篇推文 Markdown 文档并下载图片资源...
-  🎉 推文已导出为 Markdown 文档: output/tweet_2097871610414067757_miles_mazy.md
-  🖼️ 已同步下载 1 张图片至: output/images
+  🎉 推文已导出为 Markdown 文档: output/miles_mazy/2097871610414067757/index.md
+  🖼️ 已同步下载 1 张图片至: output/miles_mazy/2097871610414067757/images
   可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。
   ```
 
@@ -352,21 +383,21 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 默认导出最近 200 条至 output/tweets_YYYY-MM-DD.md
-  uv run python main.py --export
+  pnpm dev:cli -- --export
 
   # 指定导出条数（如 50 条）
-  uv run python main.py --export 50
+  pnpm dev:cli -- --export 50
 
   # 自定义导出文件路径或目标目录（配合 -o / --output）
-  uv run python main.py --export 50 -o my_notes.md
-  uv run python main.py --export 100 -o ~/Documents/ObsidianVault/
+  pnpm dev:cli -- --export 50 -o my_notes.md
+  pnpm dev:cli -- --export 100 -o ~/Documents/ObsidianVault/
 
   # 配合互动指标筛选高价值推文归档（如仅导出点赞 >= 100 的推文）
-  uv run python main.py --export 100 --min-likes 100 -o output/high_value.md
+  pnpm dev:cli -- --export 100 --min-likes 100 -o output/high_value.md
 
   # 抓取时自动连带导出（链式组合）
-  uv run python main.py --x-list 1903106960452620743 --limit 10 --export
-  uv run python main.py --user elonmusk --limit 10 --export -o output/elon.md
+  pnpm dev:cli -- --x-list 1903106960452620743 --limit 10 --export
+  pnpm dev:cli -- --user elonmusk --limit 10 --export -o output/elon.md
   ```
 * **参数选项**：
   * `--min-likes <N>`：按点赞量门槛过滤导出推文。
@@ -390,14 +421,14 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 在线抓取指定博主最新 20 条推文（默认）
-  uv run python main.py --user <博主用户名>
+  pnpm dev:cli -- --user <博主用户名>
 
   # 配合 --limit 指定抓取条数（如最新 10 条）
-  uv run python main.py --user <博主用户名> --limit 10
+  pnpm dev:cli -- --user <博主用户名> --limit 10
   ```
 * **使用示例**：
   ```bash
-  uv run python main.py --user elonmusk --limit 5
+  pnpm dev:cli -- --user elonmusk --limit 5
   ```
 * **终端输出示例**：
   ```text
@@ -419,10 +450,10 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 从本地库筛选该博主最近 20 条推文
-  uv run python main.py --list --user <博主用户名>
+  pnpm dev:cli -- --list --user <博主用户名>
 
   # 结合条数筛选（如展示最近 10 条）
-  uv run python main.py --list 10 --user <博主用户名>
+  pnpm dev:cli -- --list 10 --user <博主用户名>
   ```
 
 ---
@@ -436,10 +467,10 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 抓取列表最新 20 条推文（支持传入完整 URL 或纯数字 ID）
-  uv run python main.py --x-list https://x.com/i/lists/1838848123456789012
+  pnpm dev:cli -- --x-list https://x.com/i/lists/1838848123456789012
 
   # 传入纯数字 ID 并指定抓取条数（如最新 10 条）
-  uv run python main.py --x-list 1838848123456789012 --limit 10
+  pnpm dev:cli -- --x-list 1838848123456789012 --limit 10
   ```
 * **参数选项**：
   * `--limit <N>`：抓取推文条数（默认 20 条，按需向下滚动翻页）。
@@ -456,18 +487,18 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 实时搜索包含 "DeepSeek" 的最新推文（默认抓取最新 20 条，按时间倒序）
-  uv run python main.py --search "DeepSeek"
+  pnpm dev:cli -- --search "DeepSeek"
 
   # 配合 --limit 指定抓取数量（如抓取 50 条）
-  uv run python main.py --search "DeepSeek" --limit 50
+  pnpm dev:cli -- --search "DeepSeek" --limit 50
 
   # 切换为「热门 (Top)」排序流（默认是「最新 (Live)」）
-  uv run python main.py --search "Claude" --search-type top --limit 20
+  pnpm dev:cli -- --search "Claude" --search-type top --limit 20
   ```
 * **常用 X 高级搜索语法示例**：
   * **按语言筛选**：`--search "AI agent lang:zh"`（仅搜中文推文）
   * **按互动阈值初筛**：`--search "OpenAI min_faves:500"`（X 官方服务端只返回 500+ 点赞推文）
-  * **排除指定词**：`--search "Python -snake -reptile"`（排除特定干扰词）
+  * **排除指定词**：`--search "AI -crypto -airdrop"`（排除特定干扰词）
   * **指定来源用户**：`--search "release from:sama"`（搜索特定用户发布的关键词）
 * **参数选项**：
   * `--search-type {live,top}`：搜索流排序类型，`live` 为最新实时（默认），`top` 为全网热门。
@@ -484,25 +515,25 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **1. 在搜索抓取时过滤（入库前初筛）**：
   ```bash
   # 抓取并只入库点赞 >= 50、转推 >= 10 的高价值推文
-  uv run python main.py --search "Claude" --min-likes 50 --min-retweets 10
+  pnpm dev:cli -- --search "Claude" --min-likes 50 --min-retweets 10
   ```
 * **2. 本地已存推文查阅过滤 (`--list`)**：
   ```bash
   # 在终端快速查看点赞过千（>= 1000）的爆款推文
-  uv run python main.py --list 10 --min-likes 1000
+  pnpm dev:cli -- --list 10 --min-likes 1000
 
   # 查阅某位博主的高赞推文
-  uv run python main.py --list 10 --user elonmusk --min-likes 500
+  pnpm dev:cli -- --list 10 --user elonmusk --min-likes 500
   ```
 * **3. 结构化早报生成过滤 (`--report-only` / 默认流水线)**：
   ```bash
   # 早报仅提炼点赞 >= 20 的核心推文，彻底隔绝闲聊噪音
-  uv run python main.py --report-only --min-likes 20
+  pnpm dev:cli -- --report-only --min-likes 20
   ```
 * **4. 批量导出 Markdown 文档过滤 (`--export`)**：
   ```bash
   # 仅导出点赞数 >= 100 的精选推文到知识库
-  uv run python main.py --export 50 --min-likes 100 -o output/high_signal_tweets.md
+  pnpm dev:cli -- --export 50 --min-likes 100 -o output/high_signal_tweets.md
   ```
 
 ---
@@ -513,14 +544,14 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 登录 X (Twitter) 并持久化保存凭据（默认）
-  uv run python main.py --login
-  uv run python main.py --login x
+  pnpm dev:cli -- --login
+  pnpm dev:cli -- --login x
 
   # 登录 OpenAI / ChatGPT Plus（用于无 API Key 费用白嫖订阅配额）
-  uv run python main.py --login openai
+  pnpm dev:cli -- --login openai
 
   # 登录 Google Gemini
-  uv run python main.py --login gemini
+  pnpm dev:cli -- --login gemini
   ```
 * **参数选项**：
   * `--timeout <N>`：浏览器登录窗口等待超时阈值（秒，默认 120 秒）。
@@ -536,7 +567,7 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 
 * **基本语法**：
   ```bash
-  uv run python main.py --check-auth
+  pnpm dev:cli -- --check-auth
   ```
 * **终端输出示例**：
   ```text
@@ -558,17 +589,17 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 查看当前科技/AI领域前 10 大热搜（默认）
-  uv run python main.py --trends
+  pnpm dev:cli -- --trends
 
   # 指定前 N 名（如 Top 5）
-  uv run python main.py --trends --top 5
+  pnpm dev:cli -- --trends --top 5
 
   # 切换不同分类看板
-  uv run python main.py --trends -c all            # 全网综合热榜
-  uv run python main.py --trends -c business       # 商业财经
-  uv run python main.py --trends -c news           # 全球要闻
-  uv run python main.py --trends -c entertainment  # 娱乐影视
-  uv run python main.py --trends -c sports         # 体育赛事
+  pnpm dev:cli -- --trends -c all            # 全网综合热榜
+  pnpm dev:cli -- --trends -c business       # 商业财经
+  pnpm dev:cli -- --trends -c news           # 全球要闻
+  pnpm dev:cli -- --trends -c entertainment  # 娱乐影视
+  pnpm dev:cli -- --trends -c sports         # 体育赛事
   ```
 * **终端展示效果**：
   ```text
@@ -595,17 +626,17 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **基本语法**：
   ```bash
   # 对科技热榜 Top 3 生成深度全自动研报（默认）
-  uv run python main.py --trends-digest
+  pnpm dev:cli -- --trends-digest
 
   # 对全网综合热搜 Top 5 生成研报
-  uv run python main.py --trends-digest -c all --top 5
+  pnpm dev:cli -- --trends-digest -c all --top 5
 
   # 指定使用 DeepSeek 或本地 Google 账号订阅驱动
-  uv run python main.py --trends-digest --provider deepseek --auth-mode api_key
-  uv run python main.py --trends-digest --provider gemini --auth-mode account
+  pnpm dev:cli -- --trends-digest --provider deepseek --auth-mode api_key
+  pnpm dev:cli -- --trends-digest --provider gemini --auth-mode account
 
   # 指定时效回溯窗口（例如只看近 24 小时或扩展到近 72 小时，杜绝历史陈旧旧帖）
-  uv run python main.py --trends-digest --hours 24
+  pnpm dev:cli -- --trends-digest --hours 24
   ```
 * **研报产出样例**：
   保存在 `output/reports/trends_YYYY-MM-DD.md`，包含以下模块：
@@ -653,20 +684,49 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 * **使用示例**：
   ```bash
   # 使用 DeepSeek 最新 V4.1-Flash 提炼今日关注流早报
-  uv run python main.py --report-only --provider deepseek --auth-mode api_key
+  pnpm dev:cli -- --report-only --provider deepseek --auth-mode api_key
 
   # 使用月之暗面 Kimi 最新旗舰 kimi-k3 生成趋势研报
-  uv run python main.py --trends-digest --provider kimi --auth-mode api_key
+  pnpm dev:cli -- --trends-digest --provider kimi --auth-mode api_key
 
   # 使用阿里 Qwen-Max 旗舰推理模型提炼早报
-  uv run python main.py --report-only --provider qwen --model qwen-max
+  pnpm dev:cli -- --report-only --provider qwen --model qwen-max
 
   # 使用用户已订阅的 Google 账号配额生成趋势研报（0 额外费用）
-  uv run python main.py --trends-digest --provider gemini --auth-mode account
+  pnpm dev:cli -- --trends-digest --provider gemini --auth-mode account
 
   # 使用 OpenAI ChatGPT Plus 网页配额生成早报
-  uv run python main.py --report-only --provider openai --auth-mode account
+  pnpm dev:cli -- --report-only --provider openai --auth-mode account
   ```
+
+---
+
+### 4.16 级联删除推文与本地文件 (`--delete`)
+支持按单篇推文 ID/URL、指定博主用户名、日期范围（`--since` / `--until`）或留存时长（`--older-than`）执行删除。
+该操作保证 SQLite 数据库与本地文件强一致级联清理：同步物理删除对应推文的 `output/{author}/{tweet_id}/` 目录，若作者目录为空则顺带修剪空目录。
+
+* **基本语法**：
+  ```bash
+  # 按单篇推文 ID 或 URL 删除
+  pnpm dev:cli -- --delete 2094624092015992854 -y
+  pnpm dev:cli -- --delete https://x.com/dotey/status/2094624092015992854 -y
+
+  # 按博主批量删除推文及本地目录
+  pnpm dev:cli -- --delete --user dotey -y
+
+  # 按日期范围删除（支持 UTC 格式或 YYYY-MM-DD）
+  pnpm dev:cli -- --delete --since 2026-09-01 --until 2026-09-15 -y
+
+  # 按过期时长清理（如删除 30 天前的内容）
+  pnpm dev:cli -- --delete --older-than 30d -y
+
+  # 演练预览（仅查看将删除的推文与本地文件，不执行实际删除）
+  pnpm dev:cli -- --delete --user dotey --dry-run
+  ```
+* **防误删保护**：
+  * 要求至少提供一项筛选条件（ID/URL、`--user`、`--since`/`--until` 或 `--older-than`），禁止无条件全量清空；
+  * 支持 `--dry-run` 预览演练机制；
+  * 脚本化或免确认执行需带 `-y / --yes`。
 
 ---
 
@@ -675,7 +735,7 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ### 场景 A：日常全自动情报早报（最常用）
 每天早上起床或开工前，一键拉取最新推文并生成今日简报：
 ```bash
-uv run python main.py
+pnpm dev:cli
 ```
 阅读生成的 `output/reports/YYYY-MM-DD.md`，3 分钟通览关注圈全貌。
 
@@ -683,26 +743,26 @@ uv run python main.py
 为了覆盖全天完整动态，建议上午和下午仅抓取入库（不跑 LLM）：
 ```bash
 # 上午 11:00 执行仅拉取：
-uv run python main.py --fetch-only --pages 3
+pnpm dev:cli -- --fetch-only --pages 3
 
 # 下午 17:00 执行仅拉取：
-uv run python main.py --fetch-only --pages 3
+pnpm dev:cli -- --fetch-only --pages 3
 
 # 晚上 20:00 集中基于过去 12 小时的数据生成一份全天汇总：
-uv run python main.py --report-only --hours 12
+pnpm dev:cli -- --report-only --hours 12
 ```
 
 ### 场景 C：早报 Prompt 调优与格式重构
-当你需要调整早报生成的 Prompt 风格或分类维度时，修改 `src/summarizer.py` 后：
+当你需要调整早报生成的 Prompt 风格或分类维度时，修改 `src/main/pipeline/` 中的相关模板后：
 ```bash
 # 直接离线重跑，几秒内出结果，0 风险 0 成本
-uv run python main.py --report-only
+pnpm dev:cli -- --report-only
 ```
 
 ### 场景 D：沉浸式浏览原始推文素材
 不希望看 AI 总结，只想在本地编辑器里像看书一样划重点或归档到 Obsidian：
 ```bash
-uv run python main.py --export 300
+pnpm dev:cli -- --export 300
 ```
 直接在编辑器打开 `output/tweets_YYYY-MM-DD.md` 划线做笔记。
 
@@ -717,7 +777,7 @@ uv run python main.py --export 300
 
 ```cron
 # 每天 8:30 自动抓取并生成早报（请将 /path/to/xtract 替换为你的项目绝对路径）
-30 8 * * * cd /path/to/xtract && $(which uv) run python main.py >> data/cron.log 2>&1
+30 8 * * * cd /path/to/xtract && pnpm dev:cli >> data/cron.log 2>&1
 ```
 
 ### 方案 2：macOS 原生 `launchd`（Mac 推荐，支持休眠唤醒补跑）
@@ -733,11 +793,9 @@ uv run python main.py --export 300
     <string>/path/to/xtract</string>
     <key>ProgramArguments</key>
     <array>
-        <!-- 请使用 `which uv` 查得的绝对路径，例如 /usr/local/bin/uv 或 ~/.local/bin/uv -->
-        <string>/usr/local/bin/uv</string>
-        <string>run</string>
-        <string>python</string>
-        <string>main.py</string>
+        <!-- 请使用 `which pnpm` 查得的绝对路径，例如 /usr/local/bin/pnpm 或 ~/.nvm/versions/node/v22.21.1/bin/pnpm -->
+        <string>/usr/local/bin/pnpm</string>
+        <string>dev:cli</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -765,42 +823,40 @@ launchctl load ~/Library/LaunchAgents/com.xtract.digest.plist
 项目严格遵守结构分层与安全规范：
 
 ```
-xtract/                     # 项目根目录
-├── GEMINI.md               # 项目架构约束与设计记录
-├── README.md               # 本项目全量使用指南
+xtract/
+├── GEMINI.md               # 项目规范与架构约定
+├── LICENSE                 # Apache-2.0 开源协议
+├── README.md               # 项目产品指南与使用手册
+├── package.json            # Node.js 项目配置与构建脚本
+├── pnpm-lock.yaml          # pnpm 依赖锁定
+├── tsconfig.json           # TypeScript 全局配置
+├── electron-builder.yml    # 跨平台安装包构建配置
 ├── docs/                   # 正式工程设计与架构文档
 │   ├── architecture.md     # 系统总体架构设计 (HLD)
 │   ├── detailed_design.md  # 详细设计与核心机制 (LLD)
-│   └── vibe-coding-log.md  # Vibe Coding 全周期复盘与踩坑实录
-├── pyproject.toml          # uv 依赖管理
-├── .env.example            # 环境变量配置模板
-├── .env                    # 敏感会话凭据与代理（Git 忽略）
-├── src/                    # 核心模块
-│   ├── __init__.py
-│   ├── config.py           # 集中配置管理
-│   ├── client.py           # Playwright 无头官方流拦截器
-│   ├── storage.py          # SQLite 增量存储与 Markdown 导出
-│   ├── auth.py             # 交互式浏览器登录与凭证自动捕获
-│   ├── llm/                # 统一多大模型驱动层
-│   │   ├── __init__.py
-│   │   ├── base.py         # 抽象基类与通用 Message / 多模态
-│   │   ├── factory.py      # 提供商调度工厂
-│   │   ├── openai_compat.py# OpenAI 协议驱动 (DeepSeek/Qwen/Zhipu/MiniMax/OpenAI)
-│   │   ├── gemini_account.py# Gemini 账号免 Key 驱动 (agy / OAuth)
-│   │   └── chatgpt_account.py# OpenAI Plus 账号驱动
-│   ├── summarizer.py       # 结构化聚类分析与趋势研报提炼器
-│   └── pipeline.py         # 流水线编排中枢
-├── data/                   # 本地持久化数据（Git 忽略）
-│   ├── tweets.db           # SQLite 数据库（存储去重推文元数据）
-│   ├── auth_state.json     # X 登录凭据
-│   ├── chatgpt_auth.json   # ChatGPT Plus 会话凭据
-│   ├── gemini_auth.json    # Gemini 会话凭据
-│   └── raw/                # 原始 JSON 快照备份（灾备，保留 30 天）
-├── output/                 # 输出结果
-│   ├── reports/            # 生成的 Markdown 早报与趋势研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
-│   └── tweets_YYYY-MM-DD.md# 导出的全量推文归档清单
-├── tests/                  # 自动化单元测试集
-└── main.py                 # 统一 CLI 入口
+│   └── vibe-coding-log.md  # 项目全周期复盘与踩坑设计日志
+├── src/
+│   ├── main/               # Electron 主进程 & CLI 核心引擎
+│   │   ├── index.ts        # 双模入口分发器 (无参启动 GUI / 有参进入 CLI)
+│   │   ├── config.ts       # 配置加载与持久化
+│   │   ├── client/         # Playwright 拦截与推特官方流嗅探
+│   │   ├── storage/        # better-sqlite3 存储与 Markdown 导出
+│   │   ├── llm/            # 7 大主流大模型统一驱动与 SSE 流式长推理
+│   │   └── pipeline/       # 全生命周期流水线 (Trends/Search/Digest 编排)
+│   ├── preload/            # 安全隔离桥梁 (ContextBridge)
+│   │   └── index.ts        # 强类型 IPC 通信接口
+│   └── renderer/           # GUI 渲染进程前端 (SPA)
+│       ├── index.html      # 主视窗入口
+│       └── src/            # 界面视图组件 (趋势雷达/监控信箱/搜索/阅读器/设置)
+├── data/                   # 本地数据持久化（Git 忽略）
+│   ├── tweets.db           # SQLite 数据库
+│   └── auth_state.json     # X 登录持久化凭据
+└── output/                 # 输出结果
+    ├── reports/            # 导出的 Markdown 研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
+    └── {author}/           # 按博主与文章 ID 组织的自包含单篇推文包 (Page Bundle)
+        └── {tweet_id}/     # 单篇推文独立归档目录
+            ├── index.md    # 推文全文 Markdown 文档（图片直接相对引用 images/...）
+            └── images/     # 该推文专属的本地配图文件夹
 ```
 
 ### SQLite 数据表结构 (`tweets`)
@@ -825,7 +881,7 @@ xtract/                     # 项目根目录
 项目配备了严格的自动化测试用例，覆盖 SQLite 去重机制、数据分页切片、GraphQL 节点解析与字段提取：
 
 ```bash
-uv run pytest
+pnpm test
 ```
 
 ---

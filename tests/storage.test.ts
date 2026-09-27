@@ -5,7 +5,7 @@ import os from 'node:os';
 import { Storage } from '../src/main/storage/index.js';
 import type { Tweet } from '../src/main/types.js';
 
-describe('Storage Module (100% Python Parity)', () => {
+describe('Storage Module', () => {
   let tmpDir: string;
   let dbPath: string;
   let storage: Storage;
@@ -21,7 +21,7 @@ describe('Storage Module (100% Python Parity)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('test_storage_init_and_deduplication (1:1 mirror of Python test)', () => {
+  it('test_storage_init_and_deduplication', () => {
     const sampleTweets: Partial<Tweet>[] = [
       {
         tweet_id: '1001',
@@ -182,7 +182,7 @@ describe('Storage Module (100% Python Parity)', () => {
       });
   });
 
-  it('test_storage_upgrade_and_article_markdown_export (1:1 mirror of Python test)', async () => {
+  it('test_storage_upgrade_and_article_markdown_export', async () => {
     const upgradeTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract-upgrade-test-'));
     const upgradeDb = path.join(upgradeTmpDir, 'upgrade_test.db');
     const upgradeStorage = new Storage(upgradeDb);

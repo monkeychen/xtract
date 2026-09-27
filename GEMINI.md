@@ -13,9 +13,9 @@
 `Fetch (Following / List / User / Search / Trends Playwright 拦截)` -> `Deduplicate & Store (better-sqlite3 去重落库)` -> `Filter (互动门槛与无效过滤)` -> `Summarize (多模型 SSE 流式调度)` -> `Output (Markdown 归档与 GUI 视图渲染)`
 
 ### 设计决策说明
-1. **纯 Node.js / Electron 架构（彻底摒弃 Python 混合架构）**：
-   - **为什么**：消灭「双重 Chromium」（Electron 内核 + Python Playwright 后台内核）导致的内存吞噬与卡顿；消除 Python 子进程 IPC 管道通信脆弱性；彻底根除 PyInstaller 打包臃肿（500MB+）与 macOS 公证签名报毒隐患。
-   - **对用户的影响**：安装包体积缩减 70%（仅 ~100MB），内存占用减半，启动秒开，极致丝滑。
+1. **纯 Node.js / Electron 工业级单运行时架构**：
+   - **为什么**：采用单一 Node.js / Electron 运行时，彻底消灭外挂进程或「双重 Chromium」带来的内存吞噬与性能卡顿；杜绝多进程 IPC 管道通信脆弱性，安装包轻量且跨平台原生签名体验极佳。
+   - **对用户的影响**：安装包体积仅 ~100MB，内存占用极低，启动秒开，极致丝滑。
 2. **GUI + CLI 同一二进制双模契约（参考 wx-kit 沉淀模式）**：
    - **为什么**：兼顾无技术背景大众（开箱即用图形交互）与高阶开发者/Agent 自动化需求（纯 JSON CLI 管道）。
    - **对用户的影响**：大众双击图标直接用，极客与自动化运维可通过终端无缝调用。

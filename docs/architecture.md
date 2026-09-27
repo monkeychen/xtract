@@ -33,38 +33,38 @@
 ```mermaid
 flowchart TD
     subgraph UI ["1. 交互与展示层 (Presentation Layer)"]
-        CLI["main.py (Click/Argparse CLI)"]
-        AUTH_UI["交互式登录窗口 (Chromium Interactive Login)"]
+        CLI["src/main/index.ts (Commander CLI & GUI 分发器)"]
+        AUTH_UI["原生登录视窗 (Electron Session / 凭据自动捕获)"]
         MD_VIEW["Markdown 研报 / 离线推文文档"]
     end
 
     subgraph ORCH ["2. 业务编排层 (Pipeline Orchestration Layer)"]
-        CORE_PIPE["pipeline.py\n(Fetch / Digest / Trends / Export 调度控制器)"]
+        CORE_PIPE["src/main/pipeline/index.ts\n(Fetch / Digest / Trends / Export 调度控制器)"]
         FRESH_LOCK["时效性时间锁控制器 (since: 注入 & UTC 校验)"]
         SERIAL_CTRL["安全串行节流控制器 (Safe Sequential Pacing)"]
     end
 
     subgraph CRAWL ["3. 数据拦截与采集层 (Data Interception Layer)"]
-        PLAYWRIGHT["client.py (Playwright 异步无头 Chromium 引擎)"]
-        AUTH_MGR["auth.py (Cookie 会话持久化与状态探测)"]
+        PLAYWRIGHT["src/main/client/index.ts (Playwright 异步网络流嗅探引擎)"]
+        AUTH_MGR["src/main/config.ts (Cookie 会话持久化与状态探测)"]
         ROUTE_FILTER["GraphQL 网络流嗅探器 (Network Route Interceptor)"]
-        HTML_PARSER["离线富文本 / 图片清洗提取器"]
+        HTML_PARSER["src/main/client/parser.ts (离线富文本 / X Article 提取器)"]
     end
 
     subgraph LLM ["4. 统一多模型调度层 (Unified LLM Layer)"]
-        FACTORY["llm/factory.py (大模型提供商统一工厂)"]
-        BASE_LLM["llm/base.py (抽象驱动与通用 Message 契约)"]
-        OAI_COMPAT["llm/openai_compat.py (OpenAI / DeepSeek / Qwen / Zhipu / MiniMax / Kimi)"]
-        ACC_DRV["llm/gemini_account.py & chatgpt_account.py (账号免Key驱动)"]
+        FACTORY["src/main/llm/index.ts (大模型提供商统一驱动工厂)"]
+        BASE_LLM["src/main/types.ts (抽象驱动与通用 Message 契约)"]
+        OAI_COMPAT["OpenAI 兼容协议驱动 (DeepSeek / Qwen / Zhipu / MiniMax / Kimi)"]
+        ACC_DRV["账号免 Key / Token Plan 专属端点路由"]
         SSE_STREAM["SSE 流式处理器 (长思维链实时流式接收)"]
-        SUMMARIZER["summarizer.py (AI 搜索词提炼 & 结构化研报生成)"]
+        SUMMARIZER["src/main/pipeline/summarizer.ts (AI 搜索词提炼 & 结构化研报生成)"]
     end
 
     subgraph STORAGE ["5. 本地持久化与资产层 (Persistence Layer)"]
-        SQLITE[("data/tweets.db (SQLite 增量去重存储)")]
+        SQLITE[("data/tweets.db (better-sqlite3 增量去重存储)")]
         AUTH_FILES[("data/*.json (会话状态凭据)")]
         RAW_BACKUP[("data/raw/ (原始 GraphQL 快照备份)")]
-        OUTPUT_ASSETS[("output/ (Markdown 研报与图片隔离存储)")]
+        OUTPUT_ASSETS[("output/ (Page Bundle 独立推文包与图片隔离存储)")]
     end
 
     UI --> ORCH
@@ -80,11 +80,11 @@ flowchart TD
 
 | 架构层级 | 核心模块 | 职责与边界 |
 | :--- | :--- | :--- |
-| **1. 交互与展示层** | `main.py` | 解析命令行指令参数，分发单篇查看、关注流抓取、全网搜索、趋势分析、账号登录等任务；向终端提供彩色进度反馈。 |
-| **2. 业务编排层** | `src/pipeline.py` | 串联全生命周期流水线，执行时效性计算（`--hours`）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
-| **3. 数据拦截层** | `src/client.py`<br>`src/auth.py` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应并抽离广告。 |
-| **4. 模型调度层** | `src/llm/*`<br>`src/summarizer.py` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的流式支持，负责 Prompt 组装与研报渲染。 |
-| **5. 本地持久化层** | `src/storage.py` | 基于 SQLite 管理推文唯一索引去重，维护媒体资产的本地持久化与快照文件归档。 |
+| **1. 交互与展示层** | `src/main/index.ts` | 双模入口分发，解析命令行指令参数，分发单篇查看、关注流抓取、全网搜索、趋势分析、推文删除等任务；提供纯 JSON 及终端进度反馈。 |
+| **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
+| **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、X 专栏长文并抽离广告。 |
+| **4. 模型调度层** | `src/main/llm/index.ts`<br>`src/main/pipeline/summarizer.ts` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的原生流式支持，负责 Prompt 组装与研报渲染。 |
+| **5. 本地持久化层** | `src/main/storage/index.ts` | 基于 better-sqlite3 管理推文唯一索引去重，维护 Page Bundle 本地媒体资产持久化与级联删除清理。 |
 
 ---
 
@@ -105,7 +105,7 @@ sequenceDiagram
     participant DB as SQLite 存储
     participant FS as 磁盘输出 (Markdown)
 
-    User->>Pipe: main.py --trends-digest --hours 24
+    User->>Pipe: xtract --trends-digest --hours 24
     Pipe->>Client: 获取 Explore Trends 列表
     Client->>X: 访问 /explore/tabs/keyword (带 Cookie)
     X-->>Client: 返回 ExplorePage GraphQL 响应

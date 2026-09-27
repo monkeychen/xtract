@@ -6,8 +6,8 @@ import {
   parseTrendsFromGraphQL,
 } from '../src/main/client/parser.js';
 
-describe('Client Parser Module (100% Python Parity)', () => {
-  it('test_parse_tweet_result_standard (1:1 mirror of Python test)', () => {
+describe('Client Parser Module', () => {
+  it('test_parse_tweet_result_standard', () => {
     const rawTweet = {
       rest_id: '1234567890',
       core: {
@@ -50,7 +50,7 @@ describe('Client Parser Module (100% Python Parity)', () => {
     expect(tweet?.media_urls).toEqual(['https://pbs.twimg.com/media/pic1.jpg']);
   });
 
-  it('test_parse_tweet_result_long_tweet_and_video (1:1 mirror of Python test)', () => {
+  it('test_parse_tweet_result_long_tweet_and_video', () => {
     const longTweetPayload = {
       rest_id: '9999999999',
       core: {
@@ -103,7 +103,7 @@ describe('Client Parser Module (100% Python Parity)', () => {
     expect(parsed?.media_urls).not.toContain('https://video.twimg.com/vid_low.mp4');
   });
 
-  it('test_parse_timeline_instructions (1:1 mirror of Python test)', () => {
+  it('test_parse_timeline_instructions', () => {
     const instructions = [
       {
         type: 'TimelineAddEntries',
@@ -140,7 +140,7 @@ describe('Client Parser Module (100% Python Parity)', () => {
     expect(tweets[0].text).toBe('Sample tweet in timeline');
   });
 
-  it('test_extract_timeline_instructions (1:1 mirror of Python test)', () => {
+  it('test_extract_timeline_instructions', () => {
     // List structure
     const listPayload = {
       data: {
@@ -186,7 +186,7 @@ describe('Client Parser Module (100% Python Parity)', () => {
     expect(extractedFallback[0].type).toBe('TimelinePinEntry');
   });
 
-  it('test_parse_trends_from_graphql (1:1 mirror of Python test)', () => {
+  it('test_parse_trends_from_graphql', () => {
     const payload = {
       data: {
         timeline: {

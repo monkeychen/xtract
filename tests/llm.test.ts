@@ -6,7 +6,7 @@ import {
 } from '../src/main/llm/index.js';
 import { Summarizer } from '../src/main/pipeline/summarizer.js';
 
-describe('LLM Module (100% Python Parity)', () => {
+describe('LLM Module', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
