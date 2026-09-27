@@ -1,0 +1,432 @@
+import Database from 'better-sqlite3';
+import path from 'node:path';
+import fs from 'node:fs';
+import { Config } from '../config.js';
+import type { Tweet } from '../types.js';
+
+export function isVideoUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes('.mp4') || lower.includes('.m3u8') || lower.includes('video.twimg.com');
+}
+
+export async function downloadImage(
+  url: string,
+  destPath: string,
+  timeoutMs = 15000
+): Promise<boolean> {
+  if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+    return true;
+  }
+
+  const dir = path.dirname(destPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        Referer: 'https://x.com/',
+      },
+      signal: controller.signal,
+    });
+
+    if (res.ok) {
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length > 0) {
+        fs.writeFileSync(destPath, buffer);
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export class Storage {
+  private db: Database.Database;
+  public readonly dbPath: string;
+
+  constructor(dbPath?: string) {
+    this.dbPath = dbPath || Config.DB_PATH;
+    const dir = path.dirname(this.dbPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    this.db = new Database(this.dbPath);
+    this.initDb();
+  }
+
+  private initDb(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tweets (
+        tweet_id TEXT PRIMARY KEY,
+        author_id TEXT,
+        author_name TEXT,
+        author_username TEXT,
+        text TEXT NOT NULL,
+        created_at TEXT,
+        is_retweet INTEGER DEFAULT 0,
+        retweeted_author TEXT,
+        retweeted_text TEXT,
+        is_quote INTEGER DEFAULT 0,
+        quoted_author TEXT,
+        quoted_text TEXT,
+        like_count INTEGER DEFAULT 0,
+        retweet_count INTEGER DEFAULT 0,
+        reply_count INTEGER DEFAULT 0,
+        view_count INTEGER DEFAULT 0,
+        urls TEXT,
+        media_urls TEXT,
+        fetched_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
+      CREATE INDEX IF NOT EXISTS idx_fetched_at ON tweets(fetched_at);
+    `);
+  }
+
+  public saveTweets(tweets: Partial<Tweet>[]): { inserted: number; skipped: number } {
+    let inserted = 0;
+    let skipped = 0;
+    const nowIso = new Date().toISOString();
+
+    const insertStmt = this.db.prepare(`
+      INSERT INTO tweets (
+        tweet_id, author_id, author_name, author_username,
+        text, created_at, is_retweet, retweeted_author, retweeted_text,
+        is_quote, quoted_author, quoted_text, like_count, retweet_count,
+        reply_count, view_count, urls, media_urls, fetched_at
+      ) VALUES (
+        @tweet_id, @author_id, @author_name, @author_username,
+        @text, @created_at, @is_retweet, @retweeted_author, @retweeted_text,
+        @is_quote, @quoted_author, @quoted_text, @like_count, @retweet_count,
+        @reply_count, @view_count, @urls, @media_urls, @fetched_at
+      )
+    `);
+
+    const transaction = this.db.transaction((items: Partial<Tweet>[]) => {
+      for (const item of items) {
+        if (!item.tweet_id || !item.text) continue;
+        try {
+          insertStmt.run({
+            tweet_id: item.tweet_id,
+            author_id: item.author_id || '',
+            author_name: item.author_name || 'Unknown',
+            author_username: item.author_username || 'unknown',
+            text: item.text,
+            created_at: item.created_at || '',
+            is_retweet: item.is_retweet ? 1 : 0,
+            retweeted_author: item.retweeted_author || null,
+            retweeted_text: item.retweeted_text || null,
+            is_quote: item.is_quote ? 1 : 0,
+            quoted_author: item.quoted_author || null,
+            quoted_text: item.quoted_text || null,
+            like_count: item.like_count || 0,
+            retweet_count: item.retweet_count || 0,
+            reply_count: item.reply_count || 0,
+            view_count: item.view_count || 0,
+            urls: JSON.stringify(item.urls || []),
+            media_urls: JSON.stringify(item.media_urls || []),
+            fetched_at: item.fetched_at || nowIso,
+          });
+          inserted++;
+        } catch (err: unknown) {
+          if (err && typeof err === 'object' && 'code' in err && err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+            skipped++;
+          } else {
+            throw err;
+          }
+        }
+      }
+    });
+
+    transaction(tweets);
+    return { inserted, skipped };
+  }
+
+  public getUnsummarizedTweets(options: {
+    hours?: number;
+    limit?: number;
+    minLikes?: number;
+    minRetweets?: number;
+  } = {}): Tweet[] {
+    const hours = options.hours ?? 24;
+    const limit = options.limit ?? 150;
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+
+    const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM tweets
+      WHERE fetched_at >= ? AND like_count >= ? AND retweet_count >= ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+
+    const rows = stmt.all(cutoff, minLikes, minRetweets, limit) as Record<string, unknown>[];
+    return rows.map(this.mapRowToTweet);
+  }
+
+  public getTotalCount(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM tweets').get() as { count: number };
+    return row ? row.count : 0;
+  }
+
+  public getRecentTweets(options: {
+    limit?: number;
+    offset?: number;
+    minLikes?: number;
+    minRetweets?: number;
+  } = {}): Tweet[] {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM tweets
+      WHERE like_count >= ? AND retweet_count >= ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `);
+
+    const rows = stmt.all(minLikes, minRetweets, limit, offset) as Record<string, unknown>[];
+    return rows.map(this.mapRowToTweet);
+  }
+
+  public getTweetById(tweetId: string): Tweet | null {
+    const row = this.db.prepare('SELECT * FROM tweets WHERE tweet_id = ?').get(tweetId) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.mapRowToTweet(row) : null;
+  }
+
+  public getTweetsByUser(
+    username: string,
+    options: { limit?: number; minLikes?: number; minRetweets?: number } = {}
+  ): Tweet[] {
+    const cleanName = username.replace(/^@/, '').trim();
+    const limit = options.limit ?? 50;
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM tweets
+      WHERE LOWER(author_username) = LOWER(?) AND like_count >= ? AND retweet_count >= ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+
+    const rows = stmt.all(cleanName, minLikes, minRetweets, limit) as Record<string, unknown>[];
+    return rows.map(this.mapRowToTweet);
+  }
+
+  public getThreadTweets(tweetId: string): Tweet[] {
+    const primary = this.getTweetById(tweetId);
+    if (!primary || !primary.fetched_at) return [];
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM tweets
+      WHERE LOWER(author_username) = LOWER(?) AND fetched_at = ?
+      ORDER BY tweet_id ASC
+    `);
+
+    const rows = stmt.all(primary.author_username, primary.fetched_at) as Record<string, unknown>[];
+    return rows.map(this.mapRowToTweet);
+  }
+
+  public exportMarkdown(options: {
+    outputFile?: string;
+    limit?: number;
+    minLikes?: number;
+    minRetweets?: number;
+  } = {}): string {
+    const limit = options.limit ?? 200;
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+
+    const tweets = this.getRecentTweets({ limit, minLikes, minRetweets });
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultFile = path.join(Config.PROJECT_ROOT, 'output', `tweets_${today}.md`);
+    let filePath = options.outputFile || defaultFile;
+
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+      filePath = path.join(filePath, `tweets_${today}.md`);
+    }
+
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const filterDesc: string[] = [];
+    if (minLikes > 0) filterDesc.push(`赞数 ≥ ${minLikes}`);
+    if (minRetweets > 0) filterDesc.push(`转发 ≥ ${minRetweets}`);
+    const filterStr = filterDesc.length ? `（筛选: ${filterDesc.join(', ')}）` : '';
+
+    const lines: string[] = [
+      `# 📚 X 推文存档 (${today})`,
+      `\n> 本地数据库共计 **${this.getTotalCount()}** 条推文，本文件展示符合条件的最近 **${tweets.length}** 条推文${filterStr}。\n`,
+      '---\n',
+    ];
+
+    tweets.forEach((t, idx) => {
+      const urlTwitter = `https://x.com/${t.author_username}/status/${t.tweet_id}`;
+      lines.push(`### ${idx + 1}. [${t.author_name} (@${t.author_username})](${urlTwitter})`);
+      lines.push(
+        `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\` | **ID**: \`${t.tweet_id}\``
+      );
+      lines.push(`\n${t.text}\n`);
+
+      if (t.is_retweet) {
+        lines.push(`> 🔁 **转推自 @${t.retweeted_author}**:\n> ${t.retweeted_text}\n`);
+      } else if (t.is_quote) {
+        lines.push(`> 💬 **引用推文 @${t.quoted_author}**:\n> ${t.quoted_text}\n`);
+      }
+
+      if (t.urls && t.urls.length > 0) {
+        lines.push(`- 🔗 包含链接: ${t.urls.map((u) => `[${u}](${u})`).join(', ')}`);
+      }
+      if (t.media_urls && t.media_urls.length > 0) {
+        lines.push(
+          `- 🖼️ 媒体附件: ${t.media_urls.map((m, i) => `[附件 ${i + 1}](${m})`).join(', ')}`
+        );
+      }
+      lines.push('\n---\n');
+    });
+
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    return filePath;
+  }
+
+  public async exportSingleTweetMarkdown(
+    tweetId: string,
+    options: { outputPath?: string; downloadImages?: boolean } = {}
+  ): Promise<{ filePath: string; downloadedImagesCount: number }> {
+    const primaryTweet = this.getTweetById(tweetId);
+    if (!primaryTweet) {
+      throw new Error(`推文 ID \`${tweetId}\` 不存在于本地数据库中。`);
+    }
+
+    const thread = this.getThreadTweets(tweetId);
+    const allTweets = thread.length ? thread : [primaryTweet];
+
+    const authorUser = primaryTweet.author_username || 'unknown';
+    let mdDir = path.join(Config.PROJECT_ROOT, 'output');
+    let mdFile = path.join(mdDir, `tweet_${primaryTweet.tweet_id}_${authorUser}.md`);
+
+    if (options.outputPath) {
+      const p = path.resolve(options.outputPath);
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+        mdDir = p;
+        mdFile = path.join(mdDir, `tweet_${primaryTweet.tweet_id}_${authorUser}.md`);
+      } else {
+        mdFile = p;
+        mdDir = path.dirname(mdFile);
+      }
+    }
+
+    if (!fs.existsSync(mdDir)) fs.mkdirSync(mdDir, { recursive: true });
+
+    const primaryId = String(primaryTweet.tweet_id);
+    const tweetImagesDir = path.join(mdDir, 'images', primaryId);
+    const shouldDownload = options.downloadImages ?? true;
+
+    if (shouldDownload && !fs.existsSync(tweetImagesDir)) {
+      fs.mkdirSync(tweetImagesDir, { recursive: true });
+    }
+
+    let dlCount = 0;
+    const lines: string[] = [
+      `# 📝 推文归档: @${authorUser} (${primaryTweet.tweet_id})`,
+      `\n> 来源博主: **${primaryTweet.author_name}** (@${authorUser}) | 原文链接: https://x.com/${authorUser}/status/${primaryId}\n`,
+      '---\n',
+    ];
+
+    for (let idx = 0; idx < allTweets.length; idx++) {
+      const t = allTweets[idx];
+      lines.push(`### 篇章 ${idx + 1} (ID: \`${t.tweet_id}\`)`);
+      lines.push(
+        `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\``
+      );
+      lines.push(`\n${t.text}\n`);
+
+      if (t.is_retweet) {
+        lines.push(`> 🔁 **转推自 @${t.retweeted_author}**:\n> ${t.retweeted_text}\n`);
+      } else if (t.is_quote) {
+        lines.push(`> 💬 **引用推文 @${t.quoted_author}**:\n> ${t.quoted_text}\n`);
+      }
+
+      if (t.media_urls && t.media_urls.length > 0) {
+        lines.push(`\n#### 媒体附件:`);
+        for (let mIdx = 0; mIdx < t.media_urls.length; mIdx++) {
+          const mediaUrl = t.media_urls[mIdx];
+          if (isVideoUrl(mediaUrl)) {
+            lines.push(`- 🎥 [视频/音频流](${mediaUrl})`);
+          } else if (shouldDownload) {
+            const ext = path.extname(new URL(mediaUrl).pathname) || '.jpg';
+            const imgFilename = `${idx + 1}_${mIdx + 1}${ext}`;
+            const localDest = path.join(tweetImagesDir, imgFilename);
+            const ok = await downloadImage(mediaUrl, localDest);
+            if (ok) {
+              dlCount++;
+              lines.push(`![图片 ${mIdx + 1}](images/${primaryId}/${imgFilename})`);
+            } else {
+              lines.push(`![图片 ${mIdx + 1}](${mediaUrl})`);
+            }
+          } else {
+            lines.push(`![图片 ${mIdx + 1}](${mediaUrl})`);
+          }
+        }
+      }
+      lines.push('\n---\n');
+    }
+
+    fs.writeFileSync(mdFile, lines.join('\n'), 'utf-8');
+    return { filePath: mdFile, downloadedImagesCount: dlCount };
+  }
+
+  public close(): void {
+    this.db.close();
+  }
+
+  private mapRowToTweet(row: Record<string, unknown>): Tweet {
+    let urls: string[] = [];
+    let mediaUrls: string[] = [];
+    try {
+      urls = JSON.parse((row.urls as string) || '[]');
+    } catch {}
+    try {
+      mediaUrls = JSON.parse((row.media_urls as string) || '[]');
+    } catch {}
+
+    return {
+      tweet_id: String(row.tweet_id),
+      author_id: (row.author_id as string) || undefined,
+      author_name: String(row.author_name || 'Unknown'),
+      author_username: String(row.author_username || 'unknown'),
+      text: String(row.text || ''),
+      created_at: String(row.created_at || ''),
+      is_retweet: Boolean(row.is_retweet),
+      retweeted_author: (row.retweeted_author as string) || undefined,
+      retweeted_text: (row.retweeted_text as string) || undefined,
+      is_quote: Boolean(row.is_quote),
+      quoted_author: (row.quoted_author as string) || undefined,
+      quoted_text: (row.quoted_text as string) || undefined,
+      like_count: Number(row.like_count || 0),
+      retweet_count: Number(row.retweet_count || 0),
+      reply_count: Number(row.reply_count || 0),
+      view_count: Number(row.view_count || 0),
+      urls,
+      media_urls: mediaUrls,
+      fetched_at: String(row.fetched_at || ''),
+    };
+  }
+}
