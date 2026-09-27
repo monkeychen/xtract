@@ -73,8 +73,8 @@
 
 ### 2.1 克隆并进入目录
 ```bash
-git clone https://github.com/your_username/x.git
-cd x
+git clone https://github.com/monkeychen/xtract.git
+cd xtract
 ```
 
 ### 2.2 创建虚拟环境并同步依赖
@@ -716,21 +716,21 @@ uv run python main.py --export 300
 在终端运行 `crontab -e`，添加定时规则（以每天早晨 8:30 执行为例）：
 
 ```cron
-# 每天 8:30 自动抓取并生成早报（请将 /path/to/x 替换为你的项目绝对路径）
-30 8 * * * cd /path/to/x && $(which uv) run python main.py >> data/cron.log 2>&1
+# 每天 8:30 自动抓取并生成早报（请将 /path/to/xtract 替换为你的项目绝对路径）
+30 8 * * * cd /path/to/xtract && $(which uv) run python main.py >> data/cron.log 2>&1
 ```
 
 ### 方案 2：macOS 原生 `launchd`（Mac 推荐，支持休眠唤醒补跑）
-在 `~/Library/LaunchAgents/com.x.digest.plist` 创建文件：
+在 `~/Library/LaunchAgents/com.xtract.digest.plist` 创建文件：
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.x.digest</string>
+    <string>com.xtract.digest</string>
     <key>WorkingDirectory</key>
-    <string>/path/to/x</string>
+    <string>/path/to/xtract</string>
     <key>ProgramArguments</key>
     <array>
         <!-- 请使用 `which uv` 查得的绝对路径，例如 /usr/local/bin/uv 或 ~/.local/bin/uv -->
@@ -747,15 +747,15 @@ uv run python main.py --export 300
         <integer>30</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/path/to/x/data/cron.log</string>
+    <string>/path/to/xtract/data/cron.log</string>
     <key>StandardErrorPath</key>
-    <string>/path/to/x/data/cron.log</string>
+    <string>/path/to/xtract/data/cron.log</string>
 </dict>
 </plist>
 ```
 加载任务：
 ```bash
-launchctl load ~/Library/LaunchAgents/com.x.digest.plist
+launchctl load ~/Library/LaunchAgents/com.xtract.digest.plist
 ```
 
 ---
@@ -765,7 +765,7 @@ launchctl load ~/Library/LaunchAgents/com.x.digest.plist
 项目严格遵守结构分层与安全规范：
 
 ```
-x/                          # 项目根目录
+xtract/                     # 项目根目录
 ├── GEMINI.md               # 项目架构约束与设计记录
 ├── README.md               # 本项目全量使用指南
 ├── docs/                   # 正式工程设计与架构文档

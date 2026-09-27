@@ -1,4 +1,4 @@
-# Project: X Following Timeline & Search AI Digest
+# Project: Xtract (X Intelligence Radar & AI Digest)
 
 ## 1. 目标与背景
 从 X（Twitter）个人的 Following（时间线关注流）、指定 Lists（列表）、特定博主、全网热门趋势（Explore Trends）以及关键词高级搜索（Search Timeline）中自动拉取最新实时推文，通过本地 SQLite 存储去重与互动指标信噪比过滤，利用国内外多大模型（双轨认证：API-Key / 账号订阅免Key）对核心讨论、要闻资讯与全网突发热点进行结构化聚类与研报生成。

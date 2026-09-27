@@ -1,4 +1,4 @@
-# 🚀 Vibe Coding 全周期复盘与实录：从 0 到 1 打造 X Intelligence Digest
+# 🚀 Vibe Coding 全周期复盘与实录：从 0 到 1 打造 Xtract
 
 > **“把任何重复 3 遍的事 AI 化或自动化。”**  
 > 本文完整记录本项目在与 AI 结对编程（Vibe Coding / Pair Programming）过程中的核心产品决策、演进路线、踩过的深坑及终极解法。
