@@ -1,5 +1,9 @@
 import { type BaseLLMProvider, getLLMProvider } from '../llm/index.js';
-import type { Tweet } from '../types.js';
+import type { Tweet, StreamChunk } from '../types.js';
+
+export interface SummarizeOptions {
+  onChunk?: (chunk: StreamChunk) => void;
+}
 
 export const DAILY_SYSTEM_PROMPT = `你是一名敏锐的科技与AI行业主编兼高级情报分析师。
 你的任务是将用户在 X (Twitter) 关注流中抓取到的最新推文，加工成一份高信息密度、结论先行、结构清晰的「每日关注圈情报简报」。
@@ -142,7 +146,11 @@ export class Summarizer {
     return results;
   }
 
-  async summarize(tweets: Tweet[], targetDate?: string): Promise<string> {
+  async summarize(
+    tweets: Tweet[],
+    targetDate?: string,
+    options?: SummarizeOptions
+  ): Promise<string> {
     if (!tweets || tweets.length === 0) {
       return '# 🗞️ X 关注流情报早报\n\n今日未采集到有效推文，暂无报告。';
     }
@@ -152,7 +160,7 @@ export class Summarizer {
     const formattedTweets = this.formatTweetsForPrompt(tweets);
 
     const userPrompt = `以下是抓取到的 ${tweets.length} 条关注流推文数据：\n\n${formattedTweets}\n\n请按规范生成今日情报简报。`;
-    return this.llm.generate(userPrompt, { systemPrompt });
+    return this.llm.generate(userPrompt, { systemPrompt, onChunk: options?.onChunk });
   }
 
   async summarizeTrends(
@@ -163,7 +171,8 @@ export class Summarizer {
       tweets?: Tweet[];
     }>,
     category = 'tech',
-    targetDate?: string
+    targetDate?: string,
+    options?: SummarizeOptions
   ): Promise<string> {
     if (!trendsPayload || trendsPayload.length === 0) {
       return '# 🔥 X 全网趋势研报\n\n未采集到有效趋势数据，暂无研报。';
@@ -206,6 +215,6 @@ export class Summarizer {
       contentBlocks.join('\n\n---\n\n') +
       '\n\n请按规范生成今日趋势深度研报。';
 
-    return this.llm.generate(userPrompt, { systemPrompt });
+    return this.llm.generate(userPrompt, { systemPrompt, onChunk: options?.onChunk });
   }
 }

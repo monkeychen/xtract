@@ -436,7 +436,14 @@ if (isCLI) {
   program.parse(cleanArgs);
 } else {
   // Lazy import electron only when launching GUI
-  import('electron').then(({ app, BrowserWindow }) => {
+  import('electron').then(async ({ app, BrowserWindow }) => {
+    const { registerIpcHandlers } = await import('./ipc/index.js');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const preloadPath = path.resolve(__dirname, '../preload/index.js');
+
     app.whenReady().then(() => {
       const win = new BrowserWindow({
         width: 1280,
@@ -444,11 +451,15 @@ if (isCLI) {
         minWidth: 900,
         minHeight: 600,
         title: 'Xtract - Intelligence Radar & AI Digest',
+        backgroundColor: '#0f172a',
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
+          preload: preloadPath,
         },
       });
+
+      registerIpcHandlers(win);
 
       win.loadURL(
         'data:text/html;charset=utf-8,' +

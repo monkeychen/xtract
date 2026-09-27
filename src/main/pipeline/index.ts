@@ -4,9 +4,44 @@ import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
 import { Summarizer } from './summarizer.js';
-import type { Tweet, TrendTopic } from '../types.js';
+import type { Tweet, TrendTopic, StreamChunk } from '../types.js';
 
 export { Summarizer };
+
+export interface PipelineProgressEvent {
+  stage: 'init' | 'fetch_trends' | 'refine_query' | 'fetch_topic' | 'summarize' | 'done' | 'error';
+  message: string;
+  progress?: number;
+  meta?: Record<string, unknown>;
+}
+
+export interface GenerateReportOptions {
+  hours?: number;
+  minLikes?: number;
+  minRetweets?: number;
+  provider?: string;
+  authMode?: string;
+  model?: string;
+  dateStr?: string;
+  summarizerInstance?: Summarizer;
+  onChunk?: (chunk: StreamChunk) => void;
+  onProgress?: (event: PipelineProgressEvent) => void;
+}
+
+export interface RunTrendsDigestOptions {
+  category?: string;
+  top?: number;
+  hours?: number;
+  minLikes?: number;
+  minRetweets?: number;
+  provider?: string;
+  authMode?: string;
+  model?: string;
+  timeout?: number;
+  summarizerInstance?: Summarizer;
+  onChunk?: (chunk: StreamChunk) => void;
+  onProgress?: (event: PipelineProgressEvent) => void;
+}
 
 export function isTweetWithinHours(tweet: Tweet, hours: number): boolean {
   if (!tweet.created_at) return true;
@@ -164,20 +199,16 @@ export class Pipeline {
     return filtered;
   }
 
-  async generateReport(options?: {
-    hours?: number;
-    dateStr?: string;
-    minLikes?: number;
-    minRetweets?: number;
-    provider?: string;
-    authMode?: string;
-    model?: string;
-    summarizerInstance?: Summarizer;
-  }): Promise<string | null> {
+  async generateReport(options?: GenerateReportOptions): Promise<string | null> {
     const hours = options?.hours || 24;
     const minLikes = options?.minLikes || 0;
     const minRetweets = options?.minRetweets || 0;
     const filterMsg = minLikes > 0 ? `（最低赞数 ≥ ${minLikes}）` : '';
+
+    options?.onProgress?.({
+      stage: 'init',
+      message: `正在从本地数据库检索近 ${hours} 小时的推文...`,
+    });
 
     process.stderr.write(`🔍 正在从本地数据库检索近 ${hours} 小时的推文${filterMsg}...\n`);
     const tweets = this.storage.getUnsummarizedTweets({
@@ -190,6 +221,10 @@ export class Pipeline {
       process.stderr.write(
         '⚠️ 本地数据库在指定时间窗口内没有符合条件的推文数据，无法生成早报。\n'
       );
+      options?.onProgress?.({
+        stage: 'error',
+        message: '本地数据库在指定时间窗口内没有符合条件的推文数据',
+      });
       return null;
     }
 
@@ -201,15 +236,30 @@ export class Pipeline {
         model: options?.model,
       });
 
+    options?.onProgress?.({
+      stage: 'summarize',
+      message: `找到 ${tweets.length} 条相关推文，正在调用 ${summarizer.llm.providerName} 进行主题聚类与提炼...`,
+      progress: 30,
+    });
+
     process.stderr.write(
       `ℹ️ 找到 ${tweets.length} 条相关推文，正在调用 ${summarizer.llm.providerName} [${summarizer.llm.modelName}] 进行主题聚类与提炼...\n`
     );
 
     const today = options?.dateStr || new Date().toISOString().slice(0, 10);
-    const reportContent = await summarizer.summarize(tweets, today);
+    const reportContent = await summarizer.summarize(tweets, today, {
+      onChunk: options?.onChunk,
+    });
 
     const reportFile = path.join(Config.REPORTS_DIR, `${today}.md`);
     fs.writeFileSync(reportFile, reportContent, 'utf-8');
+
+    options?.onProgress?.({
+      stage: 'done',
+      message: `早报已生成：${reportFile}`,
+      progress: 100,
+      meta: { reportFile },
+    });
 
     process.stderr.write(`🎉 早报已生成：${reportFile}\n`);
     return reportFile;
@@ -233,18 +283,7 @@ export class Pipeline {
     return trends;
   }
 
-  async runTrendsDigest(options?: {
-    category?: string;
-    top?: number;
-    hours?: number;
-    minLikes?: number;
-    minRetweets?: number;
-    provider?: string;
-    authMode?: string;
-    model?: string;
-    timeout?: number;
-    summarizerInstance?: Summarizer;
-  }): Promise<string | null> {
+  async runTrendsDigest(options?: RunTrendsDigestOptions): Promise<string | null> {
     const category = options?.category || 'tech';
     const top = options?.top || 3;
     const hours = options?.hours || 48;
@@ -252,9 +291,20 @@ export class Pipeline {
     const minRetweets = options?.minRetweets || 0;
     const timeout = options?.timeout;
 
+    options?.onProgress?.({
+      stage: 'init',
+      message: `启动全自动趋势研报流水线（分类: ${category}, Top ${top} 热点，近 ${hours} 小时）...`,
+    });
+
     process.stderr.write(
       `🚀 启动全自动趋势研报流水线（分类: ${category}, Top ${top} 热点，时效窗口: 近 ${hours} 小时）...\n`
     );
+
+    options?.onProgress?.({
+      stage: 'fetch_trends',
+      message: `正在拉取【${category}】分类实时趋势榜单...`,
+      progress: 10,
+    });
 
     const trends = await this.client.fetchExploreTrends({
       category,
@@ -263,6 +313,10 @@ export class Pipeline {
     });
     if (trends.length === 0) {
       process.stderr.write('⚠️ 未能获取到趋势话题，终止研报生成。\n');
+      options?.onProgress?.({
+        stage: 'error',
+        message: '未能获取到趋势话题，终止研报生成。',
+      });
       return null;
     }
 
@@ -276,6 +330,11 @@ export class Pipeline {
 
     // AI-assisted search query refinement
     const topicNames = trends.map((t) => t.name).filter(Boolean);
+    options?.onProgress?.({
+      stage: 'refine_query',
+      message: `正在通过 ${summarizer.llm.providerName} 提炼高命中推特搜索词...`,
+      progress: 20,
+    });
     process.stderr.write(`\n🧠 正在通过 ${summarizer.llm.providerName} 提炼高命中推特搜索关键词...\n`);
     const refinedQueries = await summarizer.refineSearchQueries(topicNames);
 
@@ -295,6 +354,13 @@ export class Pipeline {
       const topicName = item.name;
       const baseQuery = refinedQueries[topicName] || item.query || topicName;
       const targetQuery = baseQuery.includes('since:') ? baseQuery : `${baseQuery} since:${sinceDate}`;
+
+      const fetchProgress = 20 + Math.round(((idx + 1) / trends.length) * 45);
+      options?.onProgress?.({
+        stage: 'fetch_topic',
+        message: `正在挖掘趋势【${topicName}】推文 (${idx + 1}/${trends.length})...`,
+        progress: fetchProgress,
+      });
 
       process.stderr.write(
         `\n🔍 (${idx + 1}/${trends.length}) 正在全网挖掘趋势【${topicName}】的高赞实时讨论 (搜索词: '${targetQuery}')...\n`
@@ -334,6 +400,11 @@ export class Pipeline {
     }
 
     const today = new Date().toISOString().slice(0, 10);
+    options?.onProgress?.({
+      stage: 'summarize',
+      message: `正在调用 ${summarizer.llm.providerName} [${summarizer.llm.modelName}] 深度聚合提炼研报...`,
+      progress: 70,
+    });
     process.stderr.write(
       `\n🧠 正在调用 ${summarizer.llm.providerName} [${summarizer.llm.modelName}] 深度聚合提炼趋势研报...\n`
     );
@@ -341,11 +412,19 @@ export class Pipeline {
     const reportContent = await summarizer.summarizeTrends(
       enrichedTrends,
       category,
-      today
+      today,
+      { onChunk: options?.onChunk }
     );
 
     const reportFile = path.join(Config.REPORTS_DIR, `trends_${today}.md`);
     fs.writeFileSync(reportFile, reportContent, 'utf-8');
+
+    options?.onProgress?.({
+      stage: 'done',
+      message: `全网趋势研报已生成：${reportFile}`,
+      progress: 100,
+      meta: { reportFile },
+    });
 
     process.stderr.write(`🎉 全网趋势研报已生成：${reportFile}\n`);
     return reportFile;
