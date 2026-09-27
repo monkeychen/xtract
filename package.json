@@ -26,12 +26,18 @@
     "better-sqlite3": "^11.8.1",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
+    "lucide-react": "^1.48.0",
     "playwright-core": "^1.50.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "undici": "^8.11.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
     "tsx": "^4.19.3",

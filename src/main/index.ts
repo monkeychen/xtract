@@ -451,7 +451,7 @@ if (isCLI) {
         minWidth: 900,
         minHeight: 600,
         title: 'Xtract - Intelligence Radar & AI Digest',
-        backgroundColor: '#0f172a',
+        backgroundColor: '#faf7f0',
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -461,56 +461,19 @@ if (isCLI) {
 
       registerIpcHandlers(win);
 
-      win.loadURL(
-        'data:text/html;charset=utf-8,' +
-          encodeURIComponent(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-              background: #0f172a;
-              color: #f8fafc;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              height: 100vh;
-              margin: 0;
-            }
-            .card {
-              background: #1e293b;
-              border: 1px solid #334155;
-              border-radius: 12px;
-              padding: 32px 48px;
-              text-align: center;
-              box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
-            }
-            h1 { font-size: 24px; margin-bottom: 8px; color: #38bdf8; }
-            p { color: #94a3b8; font-size: 14px; margin-top: 0; }
-            .badge {
-              display: inline-block;
-              background: #0284c7;
-              color: #fff;
-              font-size: 12px;
-              padding: 4px 12px;
-              border-radius: 9999px;
-              margin-top: 16px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>🗞️ Xtract Desktop Ready</h1>
-            <p>Production-Grade Node.js / Electron Architecture</p>
-            <div class="badge">Electron Native GUI Active</div>
-          </div>
-        </body>
-        </html>
-      `)
-      );
+      const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+      if (devServerUrl) {
+        win.loadURL(devServerUrl);
+      } else {
+        const prodIndexPath = path.resolve(__dirname, '../../dist/renderer/index.html');
+        import('node:fs').then(({ default: fs }) => {
+          if (fs.existsSync(prodIndexPath)) {
+            win.loadFile(prodIndexPath);
+          } else {
+            win.loadURL('http://localhost:5173');
+          }
+        });
+      }
     });
 
     app.on('window-all-closed', () => {
