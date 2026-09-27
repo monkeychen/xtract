@@ -151,8 +151,8 @@ describe('Storage Module (100% Python Parity)', () => {
         expect(singleContent).toContain('转推自 @charlie');
         expect(singleContent).toContain('https://example.com/img.jpg');
 
-        // Test export_single_tweet_markdown with pre-existing local image in per-tweet subdirectory
-        const subImgDir = path.join(tmpDir, 'images', '1002');
+        // Test export_single_tweet_markdown with pre-existing local image in images subdirectory
+        const subImgDir = path.join(tmpDir, 'images');
         fs.mkdirSync(subImgDir, { recursive: true });
         const localImg = path.join(subImgDir, '1_img.jpg');
         fs.writeFileSync(localImg, 'mock_image_bytes');
@@ -167,7 +167,17 @@ describe('Storage Module (100% Python Parity)', () => {
             expect(fs.existsSync(filePath2)).toBe(true);
             expect(dlCount2).toBe(1);
             const singleContent2 = fs.readFileSync(filePath2, 'utf-8');
-            expect(singleContent2).toContain('images/1002/1_img.jpg');
+            expect(singleContent2).toContain('images/1_img.jpg');
+
+            // Test default Scheme B Page Bundle path: output/{author}/{tweet_id}/index.md
+            return storage
+              .exportSingleTweetMarkdown('1002', { downloadImages: false })
+              .then(({ filePath: bundlePath }) => {
+                expect(fs.existsSync(bundlePath)).toBe(true);
+                expect(path.basename(bundlePath)).toBe('index.md');
+                expect(path.basename(path.dirname(bundlePath))).toBe('1002');
+                expect(path.basename(path.dirname(path.dirname(bundlePath)))).toBe('bob');
+              });
           });
       });
   });

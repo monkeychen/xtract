@@ -360,24 +360,25 @@ export class Storage {
     const allTweets = thread.length ? thread : [primaryTweet];
 
     const authorUser = primaryTweet.author_username || 'unknown';
-    let mdDir = path.join(Config.PROJECT_ROOT, 'output');
-    let mdFile = path.join(mdDir, `tweet_${primaryTweet.tweet_id}_${authorUser}.md`);
+    const primaryId = String(primaryTweet.tweet_id);
+
+    let bundleDir = path.join(Config.PROJECT_ROOT, 'output', authorUser, primaryId);
+    let mdFile = path.join(bundleDir, 'index.md');
 
     if (options.outputPath) {
       const p = path.resolve(options.outputPath);
       if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-        mdDir = p;
-        mdFile = path.join(mdDir, `tweet_${primaryTweet.tweet_id}_${authorUser}.md`);
+        bundleDir = path.join(p, authorUser, primaryId);
+        mdFile = path.join(bundleDir, 'index.md');
       } else {
         mdFile = p;
-        mdDir = path.dirname(mdFile);
+        bundleDir = path.dirname(mdFile);
       }
     }
 
-    if (!fs.existsSync(mdDir)) fs.mkdirSync(mdDir, { recursive: true });
+    if (!fs.existsSync(bundleDir)) fs.mkdirSync(bundleDir, { recursive: true });
 
-    const primaryId = String(primaryTweet.tweet_id);
-    const tweetImagesDir = path.join(mdDir, 'images', primaryId);
+    const tweetImagesDir = path.join(bundleDir, 'images');
     const shouldDownload = options.downloadImages ?? true;
 
     if (shouldDownload && !fs.existsSync(tweetImagesDir)) {
@@ -432,7 +433,7 @@ export class Storage {
             ? `${mIdx + 1}_${cleanStem}${ext}`
             : `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
           const localDest = path.join(tweetImagesDir, imgFilename);
-          const localRel = `images/${primaryId}/${imgFilename}`;
+          const localRel = `images/${imgFilename}`;
           return { mediaUrl, mIdx, localDest, localRel };
         });
 

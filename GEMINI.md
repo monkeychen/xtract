@@ -97,7 +97,11 @@ xtract/
 │   ├── tweets.db           # SQLite 数据库
 │   └── auth_state.json     # X 登录持久化凭据
 └── output/                 # 输出结果
-    └── reports/            # 导出的 Markdown 研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
+    ├── reports/            # 导出的 Markdown 研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
+    └── {author}/           # 按博主与文章 ID 组织的自包含单篇推文包 (Page Bundle)
+        └── {tweet_id}/     # 单篇推文独立归档目录
+            ├── index.md    # 推文全文 Markdown 文档（图片直接相对引用 images/...）
+            └── images/     # 该推文专属的本地配图文件夹
 ```
 
 ### 规范约定
@@ -105,6 +109,7 @@ xtract/
 - **数据保留策略**：
   - `data/tweets.db`：持久化保留推文元数据用于历史去重。
   - `output/reports/`：早报输出文件命名为 `YYYY-MM-DD.md`，趋势研报命名为 `trends_YYYY-MM-DD.md`。
+  - `output/{author}/{tweet_id}/`：单篇推文自包含归档包（Page Bundle 模式），正文固定命名为 `index.md`，配图统一落盘于同级 `images/`，移动或迁移时不破坏相对链接。
 
 ---
 
