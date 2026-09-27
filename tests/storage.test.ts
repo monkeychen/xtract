@@ -181,4 +181,71 @@ describe('Storage Module (100% Python Parity)', () => {
           });
       });
   });
+
+  it('test_storage_upgrade_and_article_markdown_export (1:1 mirror of Python test)', async () => {
+    const upgradeTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract-upgrade-test-'));
+    const upgradeDb = path.join(upgradeTmpDir, 'upgrade_test.db');
+    const upgradeStorage = new Storage(upgradeDb);
+
+    try {
+      // 1. Initial insert with truncated short link (as fetched from timeline)
+      const truncatedTweet = {
+        tweet_id: '2094624092015992854',
+        author_id: 'u_dotey',
+        author_name: '宝玉',
+        author_username: 'dotey',
+        text: 'https://t.co/w9w8G0m6Fv',
+        created_at: 'Tue Sep 01 03:11:14 +0000 2026',
+        media_urls: [],
+        urls: ['https://t.co/w9w8G0m6Fv'],
+        like_count: 100,
+      };
+      upgradeStorage.saveTweets([truncatedTweet]);
+      const tBefore = upgradeStorage.getTweetById('2094624092015992854');
+      expect(tBefore?.text.length).toBe(23);
+
+      // 2. Upgrade insert with full X Article content and images
+      const fullArticleTweet = {
+        tweet_id: '2094624092015992854',
+        author_id: 'u_dotey',
+        author_name: '宝玉',
+        author_username: 'dotey',
+        text: '# 腾讯学堂：AI 原生思维\n\n![封面图](https://pbs.twimg.com/media/cover.jpg)\n\n## 一、找需求\n\n完整万字正文内容...',
+        created_at: 'Tue Sep 01 03:11:14 +0000 2026',
+        media_urls: ['https://pbs.twimg.com/media/cover.jpg'],
+        urls: ['https://x.com/i/article/2094620108811390976'],
+        like_count: 1090,
+        retweet_count: 221,
+      };
+      upgradeStorage.saveTweets([fullArticleTweet]);
+      const tAfter = upgradeStorage.getTweetById('2094624092015992854');
+      expect(tAfter?.text).toContain('腾讯学堂：AI 原生思维');
+      expect(tAfter?.text.length).toBeGreaterThan(50);
+      expect(tAfter?.like_count).toBe(1090);
+
+      // 3. Export markdown with pre-existing local image to check path substitution
+      const imgDir = path.join(upgradeTmpDir, 'images');
+      fs.mkdirSync(imgDir, { recursive: true });
+      const localCover = path.join(imgDir, '1_cover.jpg');
+      fs.writeFileSync(localCover, 'cover_bytes');
+
+      const outMdPath = path.join(upgradeTmpDir, 'article.md');
+      const { filePath: exportedPath } = await upgradeStorage.exportSingleTweetMarkdown(
+        '2094624092015992854',
+        {
+          outputPath: outMdPath,
+          downloadImages: true,
+        }
+      );
+      expect(fs.existsSync(exportedPath)).toBe(true);
+      const mdText = fs.readFileSync(exportedPath, 'utf-8');
+      expect(mdText).toContain('images/1_cover.jpg');
+      // Inlined image should be replaced in place and not duplicated under 附图
+      expect(mdText).not.toContain('### 🖼️ 附图');
+    } finally {
+      upgradeStorage.close();
+      fs.rmSync(upgradeTmpDir, { recursive: true, force: true });
+    }
+  });
 });
+

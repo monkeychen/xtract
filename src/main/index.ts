@@ -124,10 +124,21 @@ if (isCLI) {
       if (options.view) {
         const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
-        if (!tweet) {
-          process.stderr.write(`🔍 本地数据库未检索到推文 ${tweetId}，正在实时抓取...\n`);
-          await pipeline.fetchTweetAndStore(tweetId, timeout);
-          tweet = storage.getTweetById(tweetId);
+        const isTruncated = Boolean(
+          tweet?.text && tweet.text.length < 60 && tweet.text.includes('https://t.co/')
+        );
+        if (!tweet || isTruncated) {
+          const msg = !tweet
+            ? `本地数据库未检索到推文 ${tweetId}`
+            : `本地数据库推文 ${tweetId} 仅包含短链接`;
+          process.stderr.write(`🔍 ${msg}，正在从 X 实时抓取完整内容...\n`);
+          try {
+            await pipeline.fetchTweetAndStore(tweetId, timeout);
+            tweet = storage.getTweetById(tweetId);
+          } catch (err: any) {
+            process.stderr.write(`❌ 抓取推文失败: ${err.message}\n`);
+            if (!tweet) throw err;
+          }
         }
 
         if (!tweet) {
