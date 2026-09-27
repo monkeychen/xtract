@@ -371,8 +371,29 @@ export class Storage {
           if (isVideoUrl(mediaUrl)) {
             lines.push(`- 🎥 [视频/音频流](${mediaUrl})`);
           } else if (shouldDownload) {
-            const ext = path.extname(new URL(mediaUrl).pathname) || '.jpg';
-            const imgFilename = `${idx + 1}_${mIdx + 1}${ext}`;
+            let ext = '.jpg';
+            let rawStem = `img_${mIdx + 1}`;
+            try {
+              const urlObj = new URL(mediaUrl);
+              const cleanPath = urlObj.pathname;
+              const origName = path.basename(cleanPath);
+              const detectedExt = path.extname(origName).toLowerCase();
+              if (detectedExt && ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(detectedExt)) {
+                ext = detectedExt;
+              } else {
+                const format = urlObj.searchParams.get('format');
+                ext = format ? `.${format.toLowerCase()}` : '.jpg';
+              }
+              const stem = path.basename(origName, path.extname(origName));
+              if (stem) rawStem = stem;
+            } catch {
+              // fallback to default
+            }
+            const cleanStem = rawStem.replace(/[^\w\-_\.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
+            const isPrimary = idx === 0;
+            const imgFilename = isPrimary
+              ? `${mIdx + 1}_${cleanStem}${ext}`
+              : `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
             const localDest = path.join(tweetImagesDir, imgFilename);
             const ok = await downloadImage(mediaUrl, localDest);
             if (ok) {
