@@ -19,7 +19,15 @@ export class Config {
   static readonly X_CT0 = (process.env.X_CT0 || '').trim();
 
   // Network / Proxy Settings
-  static readonly HTTP_PROXY = (process.env.HTTP_PROXY || process.env.ALL_PROXY || '').trim();
+  static readonly HTTP_PROXY = (
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy ||
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.ALL_PROXY ||
+    process.env.all_proxy ||
+    ''
+  ).trim();
 
   // LLM Settings
   static readonly LLM_PROVIDER = (process.env.LLM_PROVIDER || 'gemini').toLowerCase().trim();

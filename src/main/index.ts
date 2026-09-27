@@ -122,7 +122,7 @@ if (isCLI) {
 
       // 4. View single tweet
       if (options.view) {
-        const tweetId = options.view.match(/\d{5,}/)?.[1] || options.view.trim();
+        const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
         if (!tweet) {
           process.stderr.write(`🔍 本地数据库未检索到推文 ${tweetId}，正在实时抓取...\n`);

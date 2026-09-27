@@ -1,6 +1,91 @@
 import type { Tweet, TrendTopic } from '../types.js';
 
 /**
+ * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images.
+ */
+export function formatArticleContent(articleResult: any): { text: string; mediaUrls: string[] } {
+  if (!articleResult) return { text: '', mediaUrls: [] };
+
+  const lines: string[] = [];
+  const mediaUrls: string[] = [];
+
+  if (articleResult.title) {
+    lines.push(`# ${articleResult.title}\n`);
+  }
+
+  if (articleResult.summary_text) {
+    lines.push(`> **核心摘要 / 提要**:\n> ${articleResult.summary_text.replace(/\n/g, '\n> ')}\n`);
+  }
+
+  // Cover image
+  if (articleResult.cover_media?.media_info?.original_img_url) {
+    const coverUrl = articleResult.cover_media.media_info.original_img_url;
+    if (!mediaUrls.includes(coverUrl)) mediaUrls.push(coverUrl);
+    lines.push(`![封面图](${coverUrl})\n`);
+  }
+
+  // Media map for atomic blocks
+  const mediaMap: Record<string, string> = {};
+  if (Array.isArray(articleResult.media_entities)) {
+    for (const m of articleResult.media_entities) {
+      const url = m.media_info?.original_img_url;
+      if (m.media_id && url) {
+        mediaMap[m.media_id] = url;
+        if (!mediaUrls.includes(url)) mediaUrls.push(url);
+      }
+    }
+  }
+
+  const entityMap: Record<string, string> = {};
+  if (Array.isArray(articleResult.content_state?.entityMap)) {
+    for (const item of articleResult.content_state.entityMap) {
+      const mediaId = item.value?.data?.mediaItems?.[0]?.mediaId;
+      if (mediaId && mediaMap[mediaId]) {
+        entityMap[item.key] = mediaMap[mediaId];
+      }
+    }
+  }
+
+  if (Array.isArray(articleResult.content_state?.blocks)) {
+    for (const b of articleResult.content_state.blocks) {
+      const t = b.type;
+      const text = b.text || '';
+      if (t === 'header-one') {
+        lines.push(`# ${text}\n`);
+      } else if (t === 'header-two') {
+        lines.push(`## ${text}\n`);
+      } else if (t === 'header-three') {
+        lines.push(`### ${text}\n`);
+      } else if (t === 'blockquote') {
+        lines.push(`> ${text}\n`);
+      } else if (t === 'code-block') {
+        lines.push(`\`\`\`\n${text}\n\`\`\`\n`);
+      } else if (t === 'unordered-list-item') {
+        lines.push(`- ${text}`);
+      } else if (t === 'ordered-list-item') {
+        lines.push(`1. ${text}`);
+      } else if (t === 'atomic') {
+        for (const er of b.entityRanges || []) {
+          const imgUrl = entityMap[String(er.key)];
+          if (imgUrl) {
+            lines.push(`![](${imgUrl})\n`);
+          }
+        }
+      } else {
+        if (text.trim()) {
+          lines.push(`${text}\n`);
+        }
+      }
+    }
+  }
+
+  return {
+    text: lines.join('\n').trim(),
+    mediaUrls,
+  };
+}
+
+/**
  * Extracts a clean Tweet object from an X GraphQL tweet_results node.
  */
 export function parseTweetResult(tweetResult: any): Tweet | null {
@@ -22,9 +107,26 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
   const authorName = userCore.name || userLegacy.name || '';
   const authorUsername = userCore.screen_name || userLegacy.screen_name || '';
 
-  // Check for long-form note tweet (X Articles / Long Tweets)
-  const noteTweet = tweetResult.note_tweet?.note_tweet_results?.result || {};
-  const fullText = noteTweet.text || legacy.full_text || '';
+  // Media & URLs
+  const mediaUrls: string[] = [];
+
+  // Check for X Articles or long-form note tweet
+  let fullText = '';
+  const articleResult = tweetResult.article?.article_results?.result;
+  if (articleResult) {
+    const art = formatArticleContent(articleResult);
+    if (art.text) {
+      fullText = art.text;
+      for (const u of art.mediaUrls) {
+        if (!mediaUrls.includes(u)) mediaUrls.push(u);
+      }
+    }
+  }
+
+  if (!fullText) {
+    const noteTweet = tweetResult.note_tweet?.note_tweet_results?.result || {};
+    fullText = noteTweet.text || legacy.full_text || '';
+  }
 
   // Retweet info
   const isRetweet = Boolean(legacy.retweeted_status_result);
@@ -55,9 +157,6 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     quotedAuthor = qUser.core?.screen_name || qUser.legacy?.screen_name || '';
     quotedText = qLegacy.full_text || '';
   }
-
-  // Media & URLs
-  const mediaUrls: string[] = [];
   const mediaItems = legacy.extended_entities?.media || legacy.entities?.media || [];
   for (const m of mediaItems) {
     if (m.media_url_https && !mediaUrls.includes(m.media_url_https)) {

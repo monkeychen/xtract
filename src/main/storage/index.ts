@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { Config } from '../config.js';
 import type { Tweet } from '../types.js';
 
@@ -27,14 +28,19 @@ export async function downloadImage(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
+    const fetchOptions: any = {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
         Referer: 'https://x.com/',
       },
       signal: controller.signal,
-    });
+    };
+    if (Config.HTTP_PROXY) {
+      fetchOptions.dispatcher = new ProxyAgent(Config.HTTP_PROXY);
+    }
+
+    const res = await undiciFetch(url, fetchOptions);
 
     if (res.ok) {
       const buffer = Buffer.from(await res.arrayBuffer());
@@ -140,6 +146,41 @@ export class Storage {
           inserted++;
         } catch (err: unknown) {
           if (err && typeof err === 'object' && 'code' in err && err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+            // Check if incoming tweet has richer content (e.g. full X Article or more media)
+            const existing = this.getTweetById(item.tweet_id!);
+            if (
+              existing &&
+              item.text &&
+              (item.text.length > (existing.text || '').length ||
+                (item.media_urls?.length || 0) > (existing.media_urls?.length || 0))
+            ) {
+              this.db
+                .prepare(
+                  `
+                UPDATE tweets SET
+                  text = ?,
+                  media_urls = ?,
+                  urls = ?,
+                  like_count = ?,
+                  retweet_count = ?,
+                  reply_count = ?,
+                  view_count = ?,
+                  fetched_at = ?
+                WHERE tweet_id = ?
+              `
+                )
+                .run(
+                  item.text,
+                  JSON.stringify(item.media_urls || []),
+                  JSON.stringify(item.urls || []),
+                  item.like_count ?? existing.like_count,
+                  item.retweet_count ?? existing.retweet_count,
+                  item.reply_count ?? existing.reply_count,
+                  item.view_count ?? existing.view_count,
+                  nowIso,
+                  item.tweet_id!
+                );
+            }
             skipped++;
           } else {
             throw err;
@@ -356,7 +397,8 @@ export class Storage {
       lines.push(
         `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\``
       );
-      lines.push(`\n${t.text}\n`);
+      let tweetBody = t.text;
+      const extraMediaLines: string[] = [];
 
       if (t.is_retweet) {
         lines.push(`> 🔁 **转推自 @${t.retweeted_author}**:\n> ${t.retweeted_text}\n`);
@@ -365,47 +407,67 @@ export class Storage {
       }
 
       if (t.media_urls && t.media_urls.length > 0) {
-        lines.push(`\n#### 媒体附件:`);
-        for (let mIdx = 0; mIdx < t.media_urls.length; mIdx++) {
-          const mediaUrl = t.media_urls[mIdx];
-          if (isVideoUrl(mediaUrl)) {
-            lines.push(`- 🎥 [视频/音频流](${mediaUrl})`);
-          } else if (shouldDownload) {
-            let ext = '.jpg';
-            let rawStem = `img_${mIdx + 1}`;
-            try {
-              const urlObj = new URL(mediaUrl);
-              const cleanPath = urlObj.pathname;
-              const origName = path.basename(cleanPath);
-              const detectedExt = path.extname(origName).toLowerCase();
-              if (detectedExt && ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(detectedExt)) {
-                ext = detectedExt;
-              } else {
-                const format = urlObj.searchParams.get('format');
-                ext = format ? `.${format.toLowerCase()}` : '.jpg';
-              }
-              const stem = path.basename(origName, path.extname(origName));
-              if (stem) rawStem = stem;
-            } catch {
-              // fallback to default
-            }
-            const cleanStem = rawStem.replace(/[^\w\-_\.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
-            const isPrimary = idx === 0;
-            const imgFilename = isPrimary
-              ? `${mIdx + 1}_${cleanStem}${ext}`
-              : `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
-            const localDest = path.join(tweetImagesDir, imgFilename);
-            const ok = await downloadImage(mediaUrl, localDest);
-            if (ok) {
-              dlCount++;
-              lines.push(`![图片 ${mIdx + 1}](images/${primaryId}/${imgFilename})`);
+        const mediaEntries = t.media_urls.map((mediaUrl, mIdx) => {
+          let ext = '.jpg';
+          let rawStem = `img_${mIdx + 1}`;
+          try {
+            const urlObj = new URL(mediaUrl);
+            const cleanPath = urlObj.pathname;
+            const origName = path.basename(cleanPath);
+            const detectedExt = path.extname(origName).toLowerCase();
+            if (detectedExt && ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(detectedExt)) {
+              ext = detectedExt;
             } else {
-              lines.push(`![图片 ${mIdx + 1}](${mediaUrl})`);
+              const format = urlObj.searchParams.get('format');
+              ext = format ? `.${format.toLowerCase()}` : '.jpg';
+            }
+            const stem = path.basename(origName, path.extname(origName));
+            if (stem) rawStem = stem;
+          } catch {
+            // fallback to default
+          }
+          const cleanStem = rawStem.replace(/[^\w\-_\.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
+          const isPrimary = idx === 0;
+          const imgFilename = isPrimary
+            ? `${mIdx + 1}_${cleanStem}${ext}`
+            : `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
+          const localDest = path.join(tweetImagesDir, imgFilename);
+          const localRel = `images/${primaryId}/${imgFilename}`;
+          return { mediaUrl, mIdx, localDest, localRel };
+        });
+
+        // Concurrently download non-video images
+        const downloadResults = await Promise.all(
+          mediaEntries.map(async (entry) => {
+            if (isVideoUrl(entry.mediaUrl) || !shouldDownload) return false;
+            return await downloadImage(entry.mediaUrl, entry.localDest);
+          })
+        );
+
+        for (let mIdx = 0; mIdx < mediaEntries.length; mIdx++) {
+          const entry = mediaEntries[mIdx];
+          const ok = downloadResults[mIdx];
+          if (isVideoUrl(entry.mediaUrl)) {
+            extraMediaLines.push(`- 🎥 [视频/音频流](${entry.mediaUrl})`);
+          } else if (shouldDownload && ok) {
+            dlCount++;
+            if (tweetBody.includes(entry.mediaUrl)) {
+              tweetBody = tweetBody.replaceAll(entry.mediaUrl, entry.localRel);
+            } else {
+              extraMediaLines.push(`![图片 ${mIdx + 1}](${entry.localRel})`);
             }
           } else {
-            lines.push(`![图片 ${mIdx + 1}](${mediaUrl})`);
+            if (!tweetBody.includes(entry.mediaUrl)) {
+              extraMediaLines.push(`![图片 ${mIdx + 1}](${entry.mediaUrl})`);
+            }
           }
         }
+      }
+
+      lines.push(`\n${tweetBody}\n`);
+      if (extraMediaLines.length > 0) {
+        lines.push(`\n#### 媒体附件:`);
+        lines.push(...extraMediaLines);
       }
       lines.push('\n---\n');
     }

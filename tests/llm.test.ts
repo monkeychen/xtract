@@ -19,7 +19,7 @@ describe('LLM Module (100% Python Parity)', () => {
     // Explicit Qwen Token Plan provider (canonical hyphen and underscore)
     const qwenTp = getLLMProvider('qwen-token-plan', 'api_key');
     expect(qwenTp).toBeInstanceOf(OpenAICompatProvider);
-    expect(qwenTp['baseUrl']).toContain('token-plan.cn-beijing.maas.aliyuncs.com');
+    expect((qwenTp as any)['baseUrl']).toContain('token-plan.cn-beijing.maas.aliyuncs.com');
     expect(qwenTp.providerName).toContain('Token Plan');
     expect(qwenTp.modelName).toBe('qwen3.8-flash');
 
@@ -43,14 +43,14 @@ describe('LLM Module (100% Python Parity)', () => {
     // Explicit Zhipu Code Plan provider (canonical hyphen)
     const zhipuCp = getLLMProvider('zhipu-code-plan', 'api_key');
     expect(zhipuCp).toBeInstanceOf(OpenAICompatProvider);
-    expect(zhipuCp['baseUrl']).toContain('open.bigmodel.cn/api/coding/paas/v4');
+    expect((zhipuCp as any)['baseUrl']).toContain('open.bigmodel.cn/api/coding/paas/v4');
     expect(zhipuCp.providerName).toContain('Code Plan');
     expect(zhipuCp.modelName).toBe('glm-5.3-flash');
 
     // Legacy/compatibility aliases
     const glmCp = getLLMProvider('glm_code_plan', 'api_key');
     expect(glmCp).toBeInstanceOf(OpenAICompatProvider);
-    expect(glmCp['baseUrl']).toContain('open.bigmodel.cn/api/coding/paas/v4');
+    expect((glmCp as any)['baseUrl']).toContain('open.bigmodel.cn/api/coding/paas/v4');
     expect(glmCp.providerName).toContain('Code Plan');
   });
 
