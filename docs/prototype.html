@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xtract — 暖色编辑杂志风 (Warm Editorial) 高保真原型</title>
+  <style>
+    /* ==========================================================================
+       Warm Editorial Design Tokens (docs/design-system.md)
+       ========================================================================== */
+    :root {
+      /* 纸底三层：空间层次 */
+      --paper:        #faf7f0;   /* 暖白纸底（页面背景） */
+      --paper-raised: #fffdf8;   /* 卡片/浮层略亮（surface） */
+      --paper-sunken: #f3ede1;   /* 凹陷区/输入底/表头/思维链 */
+
+      /* 墨色三层：信息层级 */
+      --ink:       #211c15;      /* 墨黑正文/标题 */
+      --ink-soft:  #6c6354;      /* 次要暖灰（说明文字） */
+      --ink-faint: #a59c89;      /* 占位/弱提示/计数 */
+
+      /* 朱砂：唯一主强调色 */
+      --cinnabar:      #b5462f;
+      --cinnabar-soft: #c9603f;  /* hover 态 */
+      --cinnabar-wash: #f6e7df;  /* 极浅底（选中/引用/失败徽章） */
+
+      /* 语义色：各配一个 wash 浅底 */
+      --jade:        #3f6b51;
+      --jade-wash:   #e6efe7;    /* 成功/已完成 */
+      --amber:       #9a6b1e;
+      --amber-wash:  #f3e9d4;    /* 警告/待处理 */
+      --celadon:     #3f8f6f;    /* 信息态 */
+
+      /* 线条与阴影 */
+      --line:        rgba(33, 28, 21, 0.10);
+      --line-strong: rgba(33, 28, 21, 0.18);
+      --shadow-soft: 0 1px 2px rgba(33, 28, 21, 0.04), 0 8px 24px rgba(33, 28, 21, 0.06);
+      --shadow-drawer: -6px 0 32px rgba(33, 28, 21, 0.12);
+
+      /* 字体族 */
+      --font-serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, "Times New Roman", serif;
+      --font-sans:  "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:  ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 滚动条统一重塑 (§8) */
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 999px;
+      border: 2px solid var(--paper);
+    }
+    ::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+
+    /* 排版基元 (§5) */
+    .serif-title {
+      font-family: var(--font-serif);
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--cinnabar);
+    }
+
+    /* 容器基元 (§7.1) */
+    .surface {
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow-soft);
+      transition: all 0.16s ease;
+    }
+    .surface:hover {
+      border-color: var(--line-strong);
+      box-shadow: 0 4px 16px rgba(33, 28, 21, 0.08);
+    }
+
+    /* 按钮体系 (§7.5) */
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--cinnabar);
+      color: #fff;
+      font-weight: 600;
+      font-size: 13.5px;
+      border-radius: 8px;
+      padding: 7px 18px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(181, 70, 47, 0.2);
+      transition: all 0.16s ease;
+    }
+    .cta-button:hover { background: var(--cinnabar-soft); transform: translateY(-1px); }
+    .cta-button:active { transform: translateY(1px); }
+
+    .secondary-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--paper-raised);
+      color: var(--ink);
+      font-weight: 500;
+      font-size: 13px;
+      border-radius: 8px;
+      padding: 6px 14px;
+      border: 1px solid var(--line-strong);
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+    .secondary-button:hover {
+      border-color: var(--cinnabar-soft);
+      color: var(--cinnabar);
+      background: var(--cinnabar-wash);
+    }
+
+    /* 状态徽章与选择 Chip (§7.3, §7.4) */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .badge-ok { background: var(--jade-wash); color: var(--jade); }
+    .badge-ok .badge-dot { background: var(--jade); }
+    .badge-amber { background: var(--amber-wash); color: var(--amber); }
+    .badge-amber .badge-dot { background: var(--amber); }
+    .badge-cinnabar { background: var(--cinnabar-wash); color: var(--cinnabar); }
+    .badge-cinnabar .badge-dot { background: var(--cinnabar); }
+    .badge-neutral { background: var(--paper-sunken); color: var(--ink-soft); }
+
+    .fmt-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.14s ease;
+      user-select: none;
+    }
+    .fmt-chip:hover { border-color: var(--cinnabar-soft); color: var(--ink); }
+    .fmt-chip.active {
+      background: var(--cinnabar-wash);
+      border-color: var(--cinnabar);
+      color: var(--cinnabar);
+      font-weight: 600;
+    }
+
+    /* 刊头 Masthead (68px, §6.1) */
+    .masthead {
+      height: 68px;
+      background: linear-gradient(180deg, var(--paper-raised) 0%, var(--paper) 100%);
+      border-bottom: 1px solid var(--line-strong);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 68px;
+      padding: 0 16px;
+      color: var(--ink-soft);
+      font-size: 14.5px;
+      font-weight: 500;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.15s ease;
+    }
+    .nav-item:hover { color: var(--ink); }
+    .nav-item.active { color: var(--ink); font-weight: 600; }
+    .nav-item.active::after {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: 12px;
+      right: 12px;
+      height: 2px;
+      background: var(--cinnabar);
+      border-radius: 2px 2px 0 0;
+    }
+
+    /* 视图容器切换 */
+    .view-container { flex: 1; overflow: hidden; display: none; }
+    .view-container.active { display: flex; flex-direction: column; }
+
+    /* AI 深度思考链容器（校样稿 Galley Proof 质感） */
+    .thinking-box {
+      background: var(--paper-sunken);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+    }
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      cursor: pointer;
+      background: rgba(33, 28, 21, 0.03);
+      border-bottom: 1px solid var(--line);
+    }
+    .thinking-pulse-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--cinnabar);
+      border-radius: 50%;
+      animation: pulseGlow 1.5s infinite ease-in-out;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+    .thinking-body {
+      padding: 12px 16px;
+      color: var(--ink-soft);
+      max-height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    /* 工作台 Master-Detail 双栏 (§6.3) */
+    .studio-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+    .studio-sidebar {
+      border-right: 1px solid var(--line);
+      background: var(--paper);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .studio-main {
+      background: var(--paper-raised);
+      overflow-y: auto;
+      padding: 36px 44px;
+    }
+
+    /* 推文项 compact */
+    .feed-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      transition: all 0.12s ease;
+      position: relative;
+    }
+    .feed-item:hover { background: rgba(255, 253, 248, 0.95); }
+    .feed-item.selected { background: var(--cinnabar-wash); }
+    .feed-item.selected::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3.5px;
+      background: var(--cinnabar);
+    }
+
+    /* 浮动批量条 (§7.7) */
+    .selbar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--cinnabar-wash);
+      border: 1px solid var(--cinnabar-soft);
+      box-shadow: 0 8px 30px rgba(181, 70, 47, 0.22);
+      border-radius: 999px;
+      padding: 8px 20px;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      z-index: 100;
+    }
+    .selbar.active { display: flex; }
+
+    /* 偏好设置抽屉 Drawer */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(33, 28, 21, 0.35);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      display: none;
+      justify-content: flex-end;
+    }
+    .drawer-backdrop.open { display: flex; }
+    .drawer-panel {
+      width: 520px;
+      max-width: 90vw;
+      height: 100%;
+      background: var(--paper-raised);
+      box-shadow: var(--shadow-drawer);
+      border-left: 1px solid var(--line-strong);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 表单控件 */
+    .text-input {
+      width: 100%;
+      background: var(--paper-sunken);
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 13.5px;
+      color: var(--ink);
+      outline: none;
+      transition: all 0.15s ease;
+    }
+    .text-input:focus {
+      background: var(--paper-raised);
+      border-color: var(--cinnabar);
+      box-shadow: 0 0 0 2px rgba(181, 70, 47, 0.15);
+    }
+    .select-input {
+      width: 100%;
+      background: var(--paper-sunken);
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 13.5px;
+      color: var(--ink);
+      outline: none;
+    }
+
+    /* 印章头像 */
+    .stamp-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--cinnabar), var(--cinnabar-soft));
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-serif);
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       68px 刊头报头 (Masthead Navigation Bar)
+       ========================================================================== -->
+  <header class="masthead">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="serif-title" style="font-size: 22px; letter-spacing: 0.04em;">XTRACT</span>
+          <span class="eyebrow" style="font-size: 10px;">INTELLIGENCE RADAR</span>
+        </div>
+        <span style="font-size: 11px; color: var(--ink-soft); margin-top: -2px;">
+          X 实时情报雷达 & AI 深度内参
+        </span>
+      </div>
+
+      <div style="width: 1px; height: 28px; background: var(--line); margin: 0 10px;"></div>
+
+      <!-- 横向主导航 (§6.1) -->
+      <nav style="display: flex; gap: 4px;">
+        <div class="nav-item active" onclick="switchTab('reports')">
+          <span>📰 智能研报</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('trends')">
+          <span>🔥 趋势雷达</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('studio')">
+          <span>📦 情报工作台</span>
+        </div>
+      </nav>
+    </div>
+
+    <!-- 右侧状态指示胶囊与设置触发器 -->
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <!-- X 登录会话胶囊 -->
+      <div class="badge badge-ok" style="cursor: pointer; border: 1px solid var(--line); padding: 4px 10px;" onclick="openSettings()" title="点击查看凭证状态">
+        <span class="badge-dot"></span>
+        <span>X 会话: @demo_investor (有效)</span>
+      </div>
+
+      <!-- 代理直连/穿透胶囊 -->
+      <div class="badge badge-neutral" style="border: 1px solid var(--line); padding: 4px 10px;" title="HTTP 代理穿透已配置">
+        <span>🛡️ 代理 127.0.0.1:7890</span>
+      </div>
+
+      <!-- 设置抽屉按钮 -->
+      <button class="secondary-button" onclick="openSettings()">
+        <span>⚙️ 偏好设置</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       视窗 1: 智能研报 (Intelligence Reports View)
+       ========================================================================== -->
+  <main id="view-reports" class="view-container active" style="overflow-y: auto; padding: 32px 48px 80px;">
+    <!-- 标题与操作栏 -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px;">
+      <div>
+        <div class="eyebrow" style="margin-bottom: 4px;">INTELLIGENCE DIGEST & SYNTHESIS</div>
+        <h1 class="serif-title" style="font-size: 28px;">智能研报与深度晨报</h1>
+        <p style="color: var(--ink-soft); font-size: 14px; margin-top: 4px;">
+          基于互动量信噪比过滤与国内外多大模型 High 级长思维链推演，提取最具价值的情报。
+        </p>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <!-- 时间跨度选择药丸 -->
+        <div style="display: flex; background: var(--paper-sunken); border-radius: 999px; padding: 2px;">
+          <div class="fmt-chip active" style="border: none; padding: 3px 10px;" onclick="setDigestHours(this, 24)">24 小时</div>
+          <div class="fmt-chip" style="border: none; padding: 3px 10px; background: transparent;" onclick="setDigestHours(this, 72)">3 天</div>
+          <div class="fmt-chip" style="border: none; padding: 3px 10px; background: transparent;" onclick="setDigestHours(this, 168)">7 天</div>
+        </div>
+
+        <button class="secondary-button" onclick="triggerMockStream('trends')">
+          <span>⚡ 生成全网趋势研报</span>
+        </button>
+        <button class="cta-button" onclick="triggerMockStream('daily')">
+          <span>🌅 立即生成今日早报</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 实时流式生成态进度条与思考链演示区 (默认隐藏，点击生成后显现) -->
+    <div id="generation-box" class="surface" style="display: none; padding: 20px 24px; margin-bottom: 28px; border-left: 4px solid var(--cinnabar);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="gen-status-text" style="font-weight: 600; font-size: 14px; color: var(--cinnabar);">
+          大模型流式思考中...
+        </span>
+        <span id="gen-progress-text" style="font-size: 12.5px; color: var(--ink-soft);">进度 45%</span>
+      </div>
+
+      <!-- 进度条 (§7.6) -->
+      <div style="height: 6px; background: var(--paper-sunken); border-radius: 999px; overflow: hidden; margin-bottom: 14px;">
+        <div id="gen-progress-bar" style="height: 100%; width: 45%; background: linear-gradient(90deg, var(--cinnabar), var(--cinnabar-soft)); transition: width 0.3s ease;"></div>
+      </div>
+
+      <!-- 校样稿思考链容器 (ThinkingBlock) -->
+      <div class="thinking-box">
+        <div class="thinking-header" onclick="toggleThinkingBody()">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="thinking-pulse-dot"></span>
+            <span style="font-weight: 600; color: var(--ink);">AI 深度思考推演链 (High Reasoning)</span>
+          </div>
+          <span style="font-size: 11.5px; color: var(--ink-faint);">耗时: 14s · 点击折叠/展开</span>
+        </div>
+        <div id="thinking-body" class="thinking-body">正在聚类推特全网长推...
+- 议题 1: Claude 3.7 混合推理对全行业开发模式的冲击 (权重 0.88)
+- 议题 2: 端侧多模态模型在 Mac Studio 上的性能测试
+- 剔除无实质信息的闲聊灌水 32 篇，保留核心讨论 142 篇
+- 正在按照「核心论点 - 关键分歧 - 精选推文」结构生成研报...</div>
+      </div>
+    </div>
+
+    <!-- 研报阅读主体：左侧历史归档 + 右侧 720px 精读版心 -->
+    <div style="display: grid; grid-template-columns: 320px 1fr; gap: 32px;">
+      <!-- 左列：研报历史卡片网格 -->
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <h3 class="serif-title" style="font-size: 16px;">研报归档列表</h3>
+          <span style="font-size: 12px; color: var(--ink-faint);">共 2 份</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- 研报卡片 1 -->
+          <div class="surface" style="padding: 16px; cursor: pointer; border-color: var(--cinnabar); background: var(--cinnabar-wash);" onclick="selectReport(1)">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span class="badge badge-cinnabar" style="font-size: 11px;">🔥 全网趋势研报</span>
+              <span style="font-size: 11.5px; color: var(--ink-faint);">过去 24 小时</span>
+            </div>
+            <h4 class="serif-title" style="font-size: 14.5px; line-height: 1.4; margin-bottom: 6px;">
+              技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌
+            </h4>
+            <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 10px;">
+              全网核心讨论围绕测试时计算（Test-time compute）与长思维链自检展开，多位一线核心开发者参与讨论。
+            </p>
+            <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint);">
+              <span>2026-09-27 10:00</span>
+              <span>覆盖 142 篇高赞推文</span>
+            </div>
+          </div>
+
+          <!-- 研报卡片 2 -->
+          <div class="surface" style="padding: 16px; cursor: pointer;" onclick="selectReport(2)">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span class="badge badge-ok" style="font-size: 11px;">🌅 关注流早报</span>
+              <span style="font-size: 11.5px; color: var(--ink-faint);">过去 24 小时</span>
+            </div>
+            <h4 class="serif-title" style="font-size: 14.5px; line-height: 1.4; margin-bottom: 6px;">
+              X 关注流每日早报：轻量化架构与高信噪比阅读工具
+            </h4>
+            <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 10px;">
+              关注博主集中讨论了嵌入式 SQLite 与纯 Node.js/Electron 单进程在个人生产力工具中的卓越体验。
+            </p>
+            <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint);">
+              <span>2026-09-26 09:30</span>
+              <span>覆盖 88 篇推文</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列：720px 版心精读视图 (§6.4) -->
+      <article class="surface" style="padding: 36px 48px; min-height: 580px;">
+        <div style="max-width: 720px; margin: 0 auto;">
+          <div style="border-bottom: 1px solid var(--line-strong); padding-bottom: 18px; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="eyebrow">XTRACT INTELLIGENCE PUBLICATION</span>
+              <button class="secondary-button" style="font-size: 12px; padding: 4px 10px;" onclick="alert('已复制研报 Markdown 全文至剪贴板')">
+                <span>📋 复制全文</span>
+              </button>
+            </div>
+            <h2 id="report-detail-title" class="serif-title" style="font-size: 26px; line-height: 1.3; margin-bottom: 12px;">
+              技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌
+            </h2>
+            <div style="display: flex; align-items: center; gap: 14px; font-size: 12.5px; color: var(--ink-soft);">
+              <span>📅 2026-09-27 10:00:15</span>
+              <span>•</span>
+              <span>覆盖精选推文: 142 篇</span>
+              <span>•</span>
+              <span class="badge badge-ok">gemini-3.8-flash (High Reasoning)</span>
+            </div>
+          </div>
+
+          <!-- 研报正文 -->
+          <div id="report-detail-content" style="font-size: 16px; line-height: 1.85; color: var(--ink);">
+            <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">
+              一、核心研判：混合推理从研究走向工程落地
+            </h3>
+            <p style="margin-bottom: 16px;">
+              过去 24 小时内，全网核心开发者对大模型长思维链（Long-horizon CoT）在复杂软件工程场景下的落地表现进行了密集推演。多数团队达成共识：动态测试时算力（Dynamic Test-time Compute）是未来 12 个月应用层的关键分水岭。
+            </p>
+            <blockquote style="border-left: 3px solid var(--cinnabar); padding-left: 16px; margin: 18px 0; color: var(--ink-soft); font-style: italic;">
+              "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. If your agent burns 60k tokens on a greeting, you're burning cash." — @karpathy
+            </blockquote>
+
+            <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">
+              二、端侧部署与本地去中心化存储
+            </h3>
+            <p>
+              面对不断攀升的云端 Token 成本，以 SQLite 嵌入式去重落库与 Page Bundle 本地离线归档为代表的极客工具在圈内广受好评。用户更加珍视自包含且不依赖外部封闭云的私有情报资产。
+            </p>
+          </div>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <!-- ==========================================================================
+       视窗 2: 趋势雷达 (Trends Radar View)
+       ========================================================================== -->
+  <main id="view-trends" class="view-container" style="overflow-y: auto; padding: 32px 48px 80px;">
+    <!-- 标题 -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
+      <div>
+        <div class="eyebrow" style="margin-bottom: 4px;">EXPLORE TRENDS DISCOVERY</div>
+        <h1 class="serif-title" style="font-size: 28px;">全网热点趋势雷达</h1>
+        <p style="color: var(--ink-soft); font-size: 14px; margin-top: 4px;">
+          零输入发现盲区热点，大模型辅助提炼检索短语，支持一键深入挖掘。
+        </p>
+      </div>
+
+      <button class="secondary-button" onclick="alert('已重新嗅探全网 X 趋势流')">
+        <span>🔄 刷新全网趋势</span>
+      </button>
+    </div>
+
+    <!-- 分类药丸 (§7.4) -->
+    <div style="display: flex; gap: 8px; margin-bottom: 26px;">
+      <div class="fmt-chip active" onclick="filterTrends(this, 'tech')">🔥 科技前沿 (Tech)</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'all')">全网综合 (All Trends)</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'business')">商业金融 (Business)</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'news')">全球要闻 (News)</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'entertainment')">文娱体育 (Entertainment)</div>
+    </div>
+
+    <!-- 趋势卡片网格 -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px;">
+      <!-- 卡片 1 -->
+      <div class="surface" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span class="serif-title" style="font-size: 22px; color: var(--cinnabar);">#01</span>
+            <span class="badge badge-cinnabar">185.4K 推文</span>
+          </div>
+          <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">Claude 3.7 Sonnet</h3>
+          <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
+            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
+            "Claude 3.7" OR "Hybrid Reasoning" lang:en
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
+          <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('Claude 3.7')">
+            <span>🔍 检索推文</span>
+          </button>
+          <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
+            <span>⚡ 挖掘研报</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 卡片 2 -->
+      <div class="surface" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span class="serif-title" style="font-size: 22px; color: var(--cinnabar);">#02</span>
+            <span class="badge badge-cinnabar">142.1K 推文</span>
+          </div>
+          <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">DeepSeek V4</h3>
+          <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
+            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
+            DeepSeek V4 open source lang:en
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
+          <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('DeepSeek V4')">
+            <span>🔍 检索推文</span>
+          </button>
+          <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
+            <span>⚡ 挖掘研报</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 卡片 3 -->
+      <div class="surface" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span class="serif-title" style="font-size: 22px; color: var(--cinnabar);">#03</span>
+            <span class="badge badge-cinnabar">98.6K 推文</span>
+          </div>
+          <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">OpenAI GPT-5</h3>
+          <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
+            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
+            GPT-5 release schedule OR Altman
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
+          <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('OpenAI GPT-5')">
+            <span>🔍 检索推文</span>
+          </button>
+          <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
+            <span>⚡ 挖掘研报</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==========================================================================
+       视窗 3: 情报工作台 (Feeds & Search Studio View)
+       ========================================================================== -->
+  <main id="view-studio" class="view-container">
+    <!-- 顶栏检索与信噪比门槛控制 -->
+    <div style="padding: 16px 28px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+      <!-- 搜索框 -->
+      <div style="display: flex; flex: 1; max-width: 520px; gap: 8px;">
+        <input id="studio-search-input" class="text-input" type="text" placeholder="搜索全网关键词、博主或语法 (如: 'AI min_faves:100')..." value="AI">
+        <button class="cta-button" style="padding: 8px 18px;" onclick="alert('执行检索')">
+          <span>搜索</span>
+        </button>
+      </div>
+
+      <!-- 信噪比药丸与时效过滤 -->
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span style="font-size: 13px; color: var(--ink-soft);">信噪比过滤:</span>
+        <div style="display: flex; gap: 6px;">
+          <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部推文</div>
+          <div class="fmt-chip" onclick="setSnrFilter(this, 50)">⭐ 50+ 赞 (高信噪比)</div>
+          <div class="fmt-chip" onclick="setSnrFilter(this, 200)">👑 200+ 赞 (爆款核心)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Master-Detail 双栏工作台 -->
+    <div class="studio-layout">
+      <!-- 左栏：380px 推文紧凑流 (Master) -->
+      <div class="studio-sidebar">
+        <div style="padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--paper-sunken);">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer;">
+            <input type="checkbox" id="check-all" onchange="toggleSelectAll(this)">
+            <span id="selected-count-label">全选推文</span>
+          </label>
+          <span style="font-size: 12px; color: var(--ink-faint);">命中 3 条</span>
+        </div>
+
+        <div style="flex: 1; overflow-y: auto;">
+          <!-- 推文行 1 -->
+          <div class="feed-item selected" onclick="selectTweet(1, this)">
+            <div style="display: flex; gap: 10px;">
+              <input type="checkbox" class="tweet-check" style="margin-top: 3px;" onclick="handleCheck(event)">
+              <div class="stamp-avatar">K</div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                  <span style="font-weight: 600; font-size: 13px; color: var(--ink);">Andrej Karpathy</span>
+                  <span style="font-size: 11px; color: var(--ink-faint);">@karpathy</span>
+                </div>
+                <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 6px;">
+                  The transition from pre-training heavy models to test-time reasoning compute is fundamentally changing developer ergonomics...
+                </p>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--ink-faint);">
+                  <span>❤️ 14.2K</span>
+                  <span>🔁 3.8K</span>
+                  <span>💬 940</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 推文行 2 -->
+          <div class="feed-item" onclick="selectTweet(2, this)">
+            <div style="display: flex; gap: 10px;">
+              <input type="checkbox" class="tweet-check" style="margin-top: 3px;" onclick="handleCheck(event)">
+              <div class="stamp-avatar">S</div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                  <span style="font-weight: 600; font-size: 13px; color: var(--ink);">swyx</span>
+                  <span style="font-size: 11px; color: var(--ink-faint);">@swyx</span>
+                </div>
+                <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 6px;">
+                  Building personal intelligence digests is the #1 way to defeat algorithmic brain rot. Local Markdown archives will outlive platforms...
+                </p>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--ink-faint);">
+                  <span>❤️ 3.4K</span>
+                  <span>🔁 820</span>
+                  <span>💬 150</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 推文行 3 -->
+          <div class="feed-item" onclick="selectTweet(3, this)">
+            <div style="display: flex; gap: 10px;">
+              <input type="checkbox" class="tweet-check" style="margin-top: 3px;" onclick="handleCheck(event)">
+              <div class="stamp-avatar">A</div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                  <span style="font-weight: 600; font-size: 13px; color: var(--ink);">Sam Altman</span>
+                  <span style="font-size: 11px; color: var(--ink-faint);">@sama</span>
+                </div>
+                <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 6px;">
+                  excited for what comes next. the compute curves look extraordinary, but what matters is how helpful the systems become...
+                </p>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--ink-faint);">
+                  <span>❤️ 9.8K</span>
+                  <span>🔁 1.5K</span>
+                  <span>💬 1.2K</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右栏：Page Bundle 自包含研读卡片 (Detail) -->
+      <div class="studio-main">
+        <div style="max-width: 720px; margin: 0 auto;">
+          <!-- 博主与操作栏 -->
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--line-strong); margin-bottom: 22px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="stamp-avatar" style="width: 44px; height: 44px; font-size: 18px;">K</div>
+              <div>
+                <h3 id="tweet-detail-name" class="serif-title" style="font-size: 17px;">Andrej Karpathy</h3>
+                <div id="tweet-detail-handle" style="font-size: 12.5px; color: var(--ink-faint);">@karpathy · 2026-09-27 08:15</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <button class="secondary-button" style="font-size: 12px;" onclick="window.open('https://x.com/karpathy')">
+                <span>在 X 打开 ↗</span>
+              </button>
+              <button class="secondary-button" style="font-size: 12px; color: var(--cinnabar);" onclick="openDeleteDialog()">
+                <span>级联删除 🗑️</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 推文全文排版 -->
+          <div id="tweet-detail-text" style="font-size: 16.5px; line-height: 1.8; color: var(--ink); margin-bottom: 24px;">
+            The transition from pre-training heavy models to test-time reasoning compute is fundamentally changing developer ergonomics. We are entering an era of software that self-corrects through recursive loops.
+          </div>
+
+          <!-- 本地配图预览容器 -->
+          <div id="tweet-detail-media" style="border-radius: 8px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 24px;">
+            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop" style="width: 100%; height: 260px; object-fit: cover; display: block;" alt="Tweet media">
+          </div>
+
+          <!-- 互动数据卡片 -->
+          <div class="surface" style="padding: 16px; background: var(--paper-sunken); display: flex; justify-content: space-around; text-align: center;">
+            <div>
+              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">点赞 (Likes)</div>
+              <div id="tweet-stat-likes" style="font-size: 18px; font-weight: 700; color: var(--cinnabar);">14,200</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">转发 (Retweets)</div>
+              <div id="tweet-stat-rts" style="font-size: 18px; font-weight: 700; color: var(--ink);">3,820</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">回复 (Replies)</div>
+              <div id="tweet-stat-replies" style="font-size: 18px; font-weight: 700; color: var(--ink-soft);">940</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部浮动批量条 (§7.7) -->
+    <div id="selbar" class="selbar">
+      <span id="selbar-count" style="font-size: 13px; font-weight: 600; color: var(--cinnabar);">已选 1 篇推文</span>
+      <button class="secondary-button" style="padding: 4px 12px; font-size: 12px;" onclick="alert('已将选中推文导出为结构化 Markdown')">
+        <span>批量导出 Markdown</span>
+      </button>
+      <button class="cta-button" style="padding: 4px 14px; font-size: 12px;" onclick="alert('执行级联清理')">
+        <span>级联彻底清理</span>
+      </button>
+      <button class="secondary-button" style="padding: 4px 10px; font-size: 12px; border: none; background: transparent;" onclick="clearSelection()">
+        <span>取消</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- ==========================================================================
+       偏好设置抽屉 (Settings Slide-over Drawer)
+       ========================================================================== -->
+  <div id="settings-drawer" class="drawer-backdrop" onclick="closeSettings(event)">
+    <div class="drawer-panel" onclick="event.stopPropagation()">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--paper);">
+        <div>
+          <h2 class="serif-title" style="font-size: 18px;">偏好设置 (Settings)</h2>
+          <p style="font-size: 12px; color: var(--ink-soft);">7 大主流大模型、X 官方会话与代理</p>
+        </div>
+        <button class="secondary-button" style="padding: 4px 8px;" onclick="closeSettings()">✕</button>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; padding: 24px;">
+        <!-- X 凭证 -->
+        <div style="margin-bottom: 24px;">
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">X 官方会话持久化 (Cookie Capture)</h3>
+          <div class="surface" style="padding: 14px; background: var(--paper);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 13px; color: var(--ink-soft);">会话捕获状态:</span>
+              <span class="badge badge-ok"><span class="badge-dot"></span>已捕获持久化 Cookie</span>
+            </div>
+            <div style="font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); margin-bottom: 10px;">
+              auth_token: 2a8f••••••••78b9
+            </div>
+            <button class="secondary-button" style="width: 100%; justify-content: center;" onclick="alert('调出原生无痕窗口完成登录并秒级捕获 Cookie')">
+              <span>重新打开登录窗口截获凭证</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 大模型与双轨认证 -->
+        <div style="margin-bottom: 24px;">
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">大模型调度引擎 (7 大主流大模型)</h3>
+          
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">大模型提供商</label>
+            <select class="select-input" onchange="handleModelChange(this.value)">
+              <option value="gemini">Google Gemini (默认 gemini-3.8-flash)</option>
+              <option value="openai">OpenAI GPT (默认 gpt-5.6-sol)</option>
+              <option value="deepseek">DeepSeek (默认 deepseek-flash)</option>
+              <option value="qwen-token-plan">阿里通义千问 (Token Plan 专属端点)</option>
+              <option value="zhipu-code-plan">智谱清言 (Coding Plan 专属端点)</option>
+              <option value="minimax">MiniMax (默认 MiniMax-M3)</option>
+              <option value="kimi">月之暗面 Kimi (默认 kimi-k3)</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">认证模式</label>
+            <div style="display: flex; gap: 8px;">
+              <div class="fmt-chip active" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">API-Key 模式</div>
+              <div class="fmt-chip" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">账号订阅免 Key 模式</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">模型名称覆盖</label>
+            <input id="input-model-name" class="text-input" type="text" value="gemini-3.8-flash">
+          </div>
+
+          <div>
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">API Key</label>
+            <input class="text-input" type="password" placeholder="sk-••••••••••••••••" value="AIzaSyDummyKeyForPrototype12345">
+          </div>
+        </div>
+
+        <!-- 代理穿透 -->
+        <div>
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">网络代理穿透</h3>
+          <input class="text-input" type="text" value="http://127.0.0.1:7890">
+        </div>
+      </div>
+
+      <div style="padding: 16px 24px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; background: var(--paper);">
+        <button class="secondary-button" onclick="closeSettings()">取消</button>
+        <button class="cta-button" onclick="alert('配置已持久化至本地'); closeSettings();">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       级联删除确认对话框
+       ========================================================================== -->
+  <div id="delete-dialog" class="drawer-backdrop" onclick="closeDeleteDialog(event)">
+    <div class="surface" style="width: 420px; padding: 24px; margin: auto; background: var(--paper-raised); border: 1px solid var(--line-strong);" onclick="event.stopPropagation()">
+      <h3 class="serif-title" style="font-size: 17px; color: var(--cinnabar); margin-bottom: 10px;">⚠️ 确认永久级联删除？</h3>
+      <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6; margin-bottom: 20px;">
+        此操作将同步从 SQLite 数据库移除该推文记录，并物理删除本地 <code>output/{author}/{tweet_id}/</code> 目录与所有关联配图，不可逆。
+      </p>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="secondary-button" onclick="closeDeleteDialog()">取消</button>
+        <button class="cta-button" onclick="alert('已级联删除该推文及对应本地 Page Bundle 文件'); closeDeleteDialog();">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       交互动效驱动脚本 (零构建、纯浏览器原生直接运行)
+       ========================================================================== -->
+  <script>
+    // 1. 顶部 Tab 切换
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-item').forEach((item, idx) => {
+        item.classList.remove('active');
+        if ((tabId === 'reports' && idx === 0) || (tabId === 'trends' && idx === 1) || (tabId === 'studio' && idx === 2)) {
+          item.classList.add('active');
+        }
+      });
+
+      document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById('view-' + tabId);
+      if (activeEl) activeEl.classList.add('active');
+    }
+
+    // 2. 模拟大模型长推理思考链动效
+    function triggerMockStream(type) {
+      const box = document.getElementById('generation-box');
+      const statusText = document.getElementById('gen-status-text');
+      const progressText = document.getElementById('gen-progress-text');
+      const progressBar = document.getElementById('gen-progress-bar');
+      const thinkingBody = document.getElementById('thinking-body');
+
+      box.style.display = 'block';
+      progressBar.style.width = '15%';
+      progressText.innerText = '进度 15%';
+      statusText.innerText = type === 'daily' ? '正在过滤本地 24h 高信噪比推文...' : '正在抓取全网热度趋势并提炼核心议题...';
+
+      setTimeout(() => {
+        progressBar.style.width = '55%';
+        progressText.innerText = '进度 55%';
+        statusText.innerText = '大模型 High 长思维链多角度研判中 (Thinking Process)...';
+      }, 700);
+
+      setTimeout(() => {
+        progressBar.style.width = '100%';
+        progressText.innerText = '已完成 100%';
+        statusText.innerText = '研报生成完毕！已落盘至 output/reports/';
+      }, 1500);
+    }
+
+    function toggleThinkingBody() {
+      const body = document.getElementById('thinking-body');
+      body.style.display = body.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function setDigestHours(el, hours) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => {
+        c.classList.remove('active');
+        c.style.background = 'transparent';
+      });
+      el.classList.add('active');
+      el.style.background = 'var(--paper-raised)';
+    }
+
+    // 3. 研报切换
+    function selectReport(id) {
+      const title = document.getElementById('report-detail-title');
+      const content = document.getElementById('report-detail-content');
+      if (id === 1) {
+        title.innerText = '技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌';
+        content.innerHTML = `
+          <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">一、核心研判：混合推理从研究走向工程落地</h3>
+          <p style="margin-bottom: 16px;">过去 24 小时内，全网核心开发者对大模型长思维链在复杂代码工程中的表现展开热议。动态测试时算力成为核心分水岭。</p>
+          <blockquote style="border-left: 3px solid var(--cinnabar); padding-left: 16px; margin: 18px 0; color: var(--ink-soft); font-style: italic;">
+            "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely." — @karpathy
+          </blockquote>
+        `;
+      } else {
+        title.innerText = 'X 关注流每日早报：轻量化架构与高信噪比阅读工具';
+        content.innerHTML = `
+          <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">一、极客架构：SQLite 本地增量与单进程 Electron</h3>
+          <p style="margin-bottom: 16px;">多位全栈架构师指出，消灭外挂进程与复杂外部数据库，使用自包含的 SQLite 与 Page Bundle 离线归档，能带来极其丝滑的响应速度。</p>
+        `;
+      }
+    }
+
+    // 4. 趋势筛选与跨视窗联动
+    function filterTrends(el, cat) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function jumpToStudioSearch(keyword) {
+      switchTab('studio');
+      const input = document.getElementById('studio-search-input');
+      if (input) input.value = keyword;
+    }
+
+    // 5. 工作台信噪比与推文交互
+    function setSnrFilter(el, likes) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function selectTweet(id, el) {
+      document.querySelectorAll('.feed-item').forEach(f => f.classList.remove('selected'));
+      el.classList.add('selected');
+
+      const name = document.getElementById('tweet-detail-name');
+      const handle = document.getElementById('tweet-detail-handle');
+      const text = document.getElementById('tweet-detail-text');
+      const likes = document.getElementById('tweet-stat-likes');
+      const rts = document.getElementById('tweet-stat-rts');
+      const replies = document.getElementById('tweet-stat-replies');
+
+      if (id === 1) {
+        name.innerText = 'Andrej Karpathy';
+        handle.innerText = '@karpathy · 2026-09-27 08:15';
+        text.innerText = 'The transition from pre-training heavy models to test-time reasoning compute is fundamentally changing developer ergonomics. We are entering an era of software that self-corrects through recursive loops.';
+        likes.innerText = '14,200';
+        rts.innerText = '3,820';
+        replies.innerText = '940';
+      } else if (id === 2) {
+        name.innerText = 'swyx';
+        handle.innerText = '@swyx · 2026-09-27 06:10';
+        text.innerText = 'Building personal intelligence digests is the #1 way to defeat algorithmic brain rot. High signal-to-noise ratio filters + local Markdown archives will outlive any closed platform.';
+        likes.innerText = '3,410';
+        rts.innerText = '820';
+        replies.innerText = '150';
+      } else {
+        name.innerText = 'Sam Altman';
+        handle.innerText = '@sama · 2026-09-27 07:42';
+        text.innerText = 'excited for what comes next. the compute curves look extraordinary, but what matters is how helpful the systems become for individual humans doing creative and scientific work.';
+        likes.innerText = '9,800';
+        rts.innerText = '1,540';
+        replies.innerText = '1,200';
+      }
+    }
+
+    // 6. 复选框与批量浮动条
+    function handleCheck(e) {
+      e.stopPropagation();
+      updateSelbar();
+    }
+
+    function toggleSelectAll(checkbox) {
+      document.querySelectorAll('.tweet-check').forEach(c => c.checked = checkbox.checked);
+      updateSelbar();
+    }
+
+    function updateSelbar() {
+      const checked = document.querySelectorAll('.tweet-check:checked');
+      const bar = document.getElementById('selbar');
+      const countEl = document.getElementById('selbar-count');
+      const label = document.getElementById('selected-count-label');
+
+      if (checked.length > 0) {
+        bar.classList.add('active');
+        countEl.innerText = `已选 ${checked.length} 篇推文`;
+        label.innerText = `已选 ${checked.length} 篇`;
+      } else {
+        bar.classList.remove('active');
+        label.innerText = `全选推文`;
+        document.getElementById('check-all').checked = false;
+      }
+    }
+
+    function clearSelection() {
+      document.querySelectorAll('.tweet-check').forEach(c => c.checked = false);
+      document.getElementById('check-all').checked = false;
+      updateSelbar();
+    }
+
+    // 7. 设置抽屉控制
+    function openSettings() {
+      document.getElementById('settings-drawer').classList.add('open');
+    }
+    function closeSettings(e) {
+      document.getElementById('settings-drawer').classList.remove('open');
+    }
+    function setAuthMode(el) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+    function handleModelChange(val) {
+      const modelInput = document.getElementById('input-model-name');
+      const defaults = {
+        'gemini': 'gemini-3.8-flash',
+        'openai': 'gpt-5.6-sol',
+        'deepseek': 'deepseek-flash',
+        'qwen-token-plan': 'qwen3.8-flash',
+        'zhipu-code-plan': 'glm-5.3-flash',
+        'minimax': 'MiniMax-M3',
+        'kimi': 'kimi-k3'
+      };
+      if (defaults[val]) modelInput.value = defaults[val];
+    }
+
+    // 8. 级联删除弹窗控制
+    function openDeleteDialog() {
+      document.getElementById('delete-dialog').classList.add('open');
+    }
+    function closeDeleteDialog() {
+      document.getElementById('delete-dialog').classList.remove('open');
+    }
+  </script>
+</body>
+</html>
