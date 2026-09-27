@@ -13,77 +13,77 @@
 ```mermaid
 classDiagram
     class XClient {
-        -Config config
+        -AppConfig config
         -Browser browser
         -BrowserContext context
-        +initialize(headless: bool)
-        +fetch_following_timeline(limit: int) List~Tweet~
-        +search_tweets(query: str, search_type: str, limit: int) List~Tweet~
-        +fetch_explore_trends(category: str, top_n: int) List~TrendTopic~
-        +fetch_tweet_detail(tweet_id_or_url: str) Tweet
-        +fetch_user_timeline(username: str, limit: int) List~Tweet~
-        +fetch_list_timeline(list_id: str, limit: int) List~Tweet~
-        +download_media(url: str, output_dir: str) str
-        +close()
+        +initialize(headless: boolean) Promise~void~
+        +fetchFollowingTimeline(limit: number) Promise~Tweet[]~
+        +searchTweets(query: string, searchType: string, limit: number) Promise~Tweet[]~
+        +fetchExploreTrends(category: string, topN: number) Promise~TrendTopic[]~
+        +fetchTweetDetail(tweetIdOrUrl: string) Promise~Tweet~
+        +fetchUserTimeline(username: string, limit: number) Promise~Tweet[]~
+        +fetchListTimeline(listId: string, limit: number) Promise~Tweet[]~
+        +close() Promise~void~
     }
 
-    class TweetStorage {
-        -str db_path
-        -sqlite3.Connection conn
-        +init_db()
-        +save_tweets(tweets: List~Tweet~) int
-        +get_tweets(since_hours: int, min_likes: int, min_rts: int) List~Tweet~
-        +search_tweets(keyword: str, limit: int) List~Tweet~
-        +get_tweet_by_id(tweet_id: str) Optional~Tweet~
+    class Storage {
+        -string dbPath
+        -Database db
+        +saveTweets(tweets: Tweet[]) number
+        +getTweets(sinceHours: number, minLikes: number, minRts: number) Tweet[]
+        +searchTweets(keyword: string, limit: number) Tweet[]
+        +getTweetById(tweetId: string) Tweet
+        +deleteTweets(options: DeleteOptions) DeleteResult
+        +exportSingleTweet(tweet: Tweet, options: ExportOptions) Promise~string~
+        +exportTweetsToMarkdown(tweets: Tweet[], outputPath: string) string
     }
 
     class AuthManager {
-        -Config config
-        +interactive_login(platform: str) bool
-        +check_auth_status(platform: str) bool
-        +extract_and_save_cookies(context: BrowserContext, target_path: str)
+        -AppConfig config
+        +interactiveLogin(platform: string) Promise~boolean~
+        +checkAuthStatus(platform: string) Promise~boolean~
+        +extractAndSaveCookies(context: BrowserContext, targetPath: string) Promise~void~
     }
 
     class BaseLLMProvider {
         <<abstract>>
-        +str provider_name
-        +str model_name
-        +generate_response(messages: List~Message~) str*
-        +generate_stream(messages: List~Message~) Generator~StreamChunk~*
+        +string providerName
+        +string modelName
+        +generateResponse(messages: Message[]) Promise~string~*
+        +generateStream(messages: Message[]) AsyncGenerator~StreamChunk~*
     }
 
     class OpenAICompatProvider {
-        -httpx.Client client
-        -str api_key
-        -str base_url
-        -bool is_domestic
-        +generate_response(messages: List~Message~) str
-        +generate_stream(messages: List~Message~) Generator~StreamChunk~
-        -_build_payload(messages: List~Message~, stream: bool) dict
+        -string apiKey
+        -string baseUrl
+        -boolean isDomestic
+        +generateResponse(messages: Message[]) Promise~string~
+        +generateStream(messages: Message[]) AsyncGenerator~StreamChunk~
+        -_buildPayload(messages: Message[], stream: boolean) object
     }
 
     class GeminiAccountProvider {
-        -str agy_bin_path
-        +generate_response(messages: List~Message~) str
-        +generate_stream(messages: List~Message~) Generator~StreamChunk~
+        -string agyBinPath
+        +generateResponse(messages: Message[]) Promise~string~
+        +generateStream(messages: Message[]) AsyncGenerator~StreamChunk~
     }
 
     class ChatGPTAccountProvider {
-        -str session_file
-        +generate_response(messages: List~Message~) str
-        +generate_stream(messages: List~Message~) Generator~StreamChunk~
+        -string sessionFile
+        +generateResponse(messages: Message[]) Promise~string~
+        +generateStream(messages: Message[]) AsyncGenerator~StreamChunk~
     }
 
     class LLMFactory {
         <<static>>
-        +create_provider(provider_type: str, auth_mode: str, model: str) BaseLLMProvider
+        +createProvider(providerType: string, authMode: string, model: string) BaseLLMProvider
     }
 
     class Summarizer {
         -BaseLLMProvider llm
-        +generate_daily_digest(tweets: List~Tweet~) str
-        +generate_trends_digest(trends: List~TrendTopic~, tweets_map: dict) str
-        +refine_search_queries(raw_titles: List~str~) List~str~
+        +generateDailyDigest(tweets: Tweet[]) Promise~string~
+        +generateTrendsDigest(trends: TrendTopic[], tweetsMap: Map) Promise~string~
+        +refineSearchQueries(rawTitles: string[]) Promise~string[]~
     }
 
     BaseLLMProvider <|-- OpenAICompatProvider
@@ -152,7 +152,7 @@ sequenceDiagram
 
     User->>PW: 完成账号密码/2FA登录
     PW-->>Auth: 探测到 auth_token 与 ct0 凭据已写入
-    Auth->>PW: context.storage_state(path="data/auth_state.json")
+    Auth->>PW: context.storageState({ path: "data/auth_state.json" })
     PW->>FS: 持久化保存完整 Cookie、LocalStorage 与 Session
     Auth->>PW: 关闭浏览器
     Auth-->>User: 终端高亮提示："✅ X 登录成功，凭据已安全保存！"
@@ -206,13 +206,13 @@ flowchart LR
     Topic2 --> Delay2["强制睡眠 2.0s\n(拟人节流)"]
     Delay2 --> Topic3["话题 3 搜索"]
 ```
-- **核心防线**：坚决摒弃 `asyncio.gather` 并发请求。X 风控系统会将同一 Cookie 在 1 秒内的并发 GraphQL 请求标记为自动化脚本并触发 Cloudflare 阻断或封号。单线程串行加 2 秒停顿将风控概率降至零。
+- **核心防线**：坚决摒弃 `Promise.all` 等无节制并发请求。X 风控系统会将同一 Cookie 在 1 秒内的并发 GraphQL 请求标记为自动化脚本并触发 Cloudflare 阻断或封号。单线程串行加 2 秒停顿将风控概率降至零。
 
 ---
 
 ### 2.5 机制 5：SSE 流式长思维链解析机制
 
-针对主流模型开启 `reasoning_effort: "high"` 后长达 2~3 分钟的深度思考，非流式 HTTP 会直接遭遇 `ReadTimeout`（120 秒断开）。详细数据流如下：
+针对主流模型开启 `reasoning_effort: "high"` 后长达 2~3 分钟的深度思考，非流式 HTTP 会直接遭遇网络连接超时（如 60s/120s 空闲挂起）。详细数据流如下：
 
 ```mermaid
 sequenceDiagram
@@ -221,7 +221,7 @@ sequenceDiagram
     participant Prov as OpenAICompatProvider
     participant API as 云厂商模型端点 (Qwen/DeepSeek/GLM)
 
-    Prov->>API: POST /chat/completions (stream=True, reasoning_effort="high")
+    Prov->>API: POST /chat/completions (stream=true, reasoning_effort="high")
     API-->>Prov: HTTP 200 (Transfer-Encoding: chunked, text/event-stream)
     
     loop 逐行读取 SSE Chunk

@@ -148,7 +148,7 @@ sequenceDiagram
 
 ### 3.2 业务场景 B：主动高级搜索与离线无损归档流
 - 用户通过 `--search "query"` 或 `--user "name"` 触发；
-- 系统拦截推文后，不仅抓取作者元数据、发布时间、点赞转发数，还通过 `client.download_media` 下载原始高清图或视频封面并转为本地绝对路径引用；
+- 系统拦截推文后，不仅抓取作者元数据、发布时间、点赞转发数，还通过下载原始高清图或视频封面至独立推文包 `images/` 目录并转为本地相对路径引用（Page Bundle 模式）；
 - Markdown 输出彻底与外网图床解耦，即便 X 官方删帖或原图失效，本地离线文库仍永久可用。
 
 ---
@@ -159,7 +159,7 @@ sequenceDiagram
 | :--- | :--- | :--- | :--- | :--- |
 | **数据采集** | **Playwright 真实网络流拦截** | X 官方 API v2 | 官方 API 免费层级仅能读极少推文，且企业级权限月费高达数千美元。 | 零 API 额外花费，完全享受人类正常网页阅读的同等访问权限。 |
 | **数据采集** | **Playwright 真实网络流拦截** | 第三方逆向库 (twikit 等) | 逆向库因 X 前端频繁混淆打包升级而动辄崩溃，出现签名计算错误。 | 永久抗改版，免除逆向库频繁猝死导致的运维停摆。 |
-| **本地持久化** | **嵌入式 SQLite 3** | PostgreSQL / MySQL | 系统为单机部署的情报分析工具，外置数据库服务增加安装与配置成本。 | 零依赖部署，开箱即用，单个 `tweets.db` 文件易于备份迁移。 |
+| **本地持久化** | **高性能 better-sqlite3 嵌入式驱动** | PostgreSQL / MySQL | 系统为桌面/终端双模单机部署工具，Node.js 最高性能 C 绑定同步驱动，毫秒级落库。 | 零配置部署，启动秒开，单文件 `tweets.db` 轻松备份迁移。 |
 | **知识存储** | **SQLite + Markdown 原生文件** | 向量数据库 (Chroma / Milvus) | 社交媒体推文按时间与事件线聚类是典型强时间序场景，无需重型向量检索。 | 极简、透明、支持任意 Markdown 笔记软件（Obsidian/Logseq/Notion）直读。 |
 | **模型协议** | **OpenAI 兼容协议 + SSE 流** | LangChain / LlamaIndex | 重型框架抽象臃肿、依赖庞大、对国内各家专属 BaseURL/推理参数支持迟缓。 | 架构极其轻量，毫秒级流式启动，完全自主可控。 |
 
@@ -185,7 +185,7 @@ flowchart LR
     Request --> IsLLM
     IsLLM -- "否 (推特抓取/OpenAI/Gemini)" --> ProxyRoute["挂载代理通道 (HTTP_PROXY)\n127.0.0.1:8118"]
     IsLLM -- "是" --> IsDomestic
-    IsDomestic -- "是" --> DirectRoute["强制禁用代理 (trust_env=False)\n直连国内云厂商节点"]
+    IsDomestic -- "是" --> DirectRoute["强制直连国内节点 (Bypass Proxy)\n直连国内云厂商节点"]
     IsDomestic -- "否" --> ProxyRoute
 ```
 - **核心收益**：根除了国内云厂商（如阿里云、智谱、Moonshot）因收到来自海外代理 IP 的请求而被 WAF 防火墙误判拦截或增加数百毫秒跨境网络延迟的问题。
