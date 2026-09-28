@@ -8,6 +8,120 @@ interface StudioViewProps {
 
 type DataSource = 'following' | 'search' | 'user' | 'lists';
 
+/**
+ * 提取推文的标题与摘要（紧凑列表扫读体验）
+ * 规则：
+ * 1. 显式 Markdown 标题 (# Title) 或【...】等格式直接作为标题
+ * 2. 多行时，第一行作为标题（若包含前缀符号自动修剪）；剩余内容作为次级摘要
+ * 3. 单行时长文本：按标点符号断句，首句为标题，剩余为摘要；若无断句，前 45 字符为标题，剩余为摘要
+ * 4. 极简短推文（如“收藏”、“只能说MiniMax-3是真的拉...”）：直接全句作为标题，不生成冗余摘要
+ * 5. 纯外链/图片：展示“分享链接 / 分享媒体”等语义化标题
+ */
+export function extractTweetTitleAndSnippet(rawText: string = ''): { title: string; snippet?: string } {
+  const text = (rawText || '').trim();
+  if (!text) {
+    return { title: '（无文本推文）' };
+  }
+
+  // 纯 URL
+  if (/^https?:\/\/\S+$/.test(text)) {
+    return { title: `🔗 ${text}` };
+  }
+
+  // 按换行分割
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  if (lines.length > 1) {
+    const line0 = lines[0];
+    const rest = lines.slice(1).join(' ').trim();
+
+    // 识别 Markdown 标题 (# 标题)
+    const mdMatch = line0.match(/^#+\s*(.+)$/);
+    if (mdMatch) {
+      return {
+        title: mdMatch[1].trim(),
+        snippet: rest.slice(0, 120),
+      };
+    }
+
+    // 识别【主题】或《主题》
+    const bracketMatch = line0.match(/^([【\[《][^】\]》]+[】\]》])\s*(.*)$/);
+    if (bracketMatch && bracketMatch[2].length > 0) {
+      return {
+        title: bracketMatch[1] + ' ' + bracketMatch[2],
+        snippet: rest.slice(0, 120),
+      };
+    }
+
+    // 第一行作为标题，后续行合并为摘要
+    return {
+      title: line0,
+      snippet: rest.slice(0, 120),
+    };
+  }
+
+  // 单行文本
+  const single = lines[0] || text;
+  // 若长度不超过 45 字符，整句就是标题，不需要摘要
+  if (single.length <= 45) {
+    return { title: single };
+  }
+
+  // 1. 尝试在自然句末标点 (。！？?!;；) 断句
+  const matchSentence = single.match(/^(.{6,45}[。！？\?!;；])\s*(.*)$/);
+  if (matchSentence) {
+    return {
+      title: matchSentence[1].trim(),
+      snippet: matchSentence[2].trim() ? matchSentence[2].trim().slice(0, 120) : undefined,
+    };
+  }
+
+  // 2. 尝试在中文/英文逗号断句 (首个分句作为标题)
+  const matchComma = single.match(/^(.{4,30}?[，,])\s*(.*)$/);
+  if (matchComma) {
+    const rawTitle = matchComma[1].trim().replace(/[，,]$/, '');
+    return {
+      title: rawTitle,
+      snippet: matchComma[2].trim() ? matchComma[2].trim().slice(0, 120) : undefined,
+    };
+  }
+
+  // 3. 无合适断句，前 40 字加省略号作为标题，后续作为摘要
+  return {
+    title: single.slice(0, 40) + '...',
+    snippet: single.slice(40).trim().slice(0, 120),
+  };
+}
+
+/**
+ * 格式化相对时间 (刚刚, 5分钟前, 2小时前, 昨天, 03-12)
+ */
+export function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) {
+    return dateStr.slice(0, 10);
+  }
+  const now = Date.now();
+  const diffSec = Math.floor((now - d.getTime()) / 1000);
+  if (diffSec < 60) return '刚刚';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}小时前`;
+  if (diffSec < 86400 * 2) return '昨天';
+  if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)}天前`;
+  return `${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/**
+ * 紧凑格式化数字
+ */
+export function formatCount(num?: number): string {
+  if (!num) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return String(num);
+}
+
 export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' }) => {
   const [dataSource, setDataSource] = useState<DataSource>('following');
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
@@ -907,6 +1021,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
               const isChecked = checkedIds.has(tweet.tweet_id);
               const avatarLetter = (tweet.author_name || tweet.author_username || 'X')[0].toUpperCase();
+              const { title, snippet } = extractTweetTitleAndSnippet(tweet.text);
+              const relTime = formatRelativeTime(tweet.created_at);
 
               return (
                 <div
@@ -914,34 +1030,52 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   className={`feed-item ${isSelected ? 'selected' : ''}`}
                   onClick={() => handleSelectTweet(tweet)}
                 >
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  {/* 第 1 行：复选框、印章头像、作者昵称/Handle 与右侧相对时间 */}
+                  <div className="feed-item-header">
                     <input
                       type="checkbox"
                       className="tweet-check"
-                      style={{ marginTop: '3px' }}
                       checked={isChecked}
                       onClick={(e) => toggleCheck(tweet.tweet_id, e)}
                       onChange={() => {}}
                     />
                     <div className="stamp-avatar">{avatarLetter}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px' }}>
-                        <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
-                          {tweet.author_name || tweet.author_username}
-                        </span>
-                        <span style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>
-                          @{tweet.author_username}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: '12.5px', color: 'var(--ink-soft)', lineHeight: '1.45', marginBottom: '6px' }}>
-                        {tweet.text}
-                      </p>
-                      <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--ink-faint)' }}>
-                        <span>❤️ {tweet.like_count > 1000 ? `${(tweet.like_count / 1000).toFixed(1)}K` : tweet.like_count}</span>
-                        <span>🔁 {tweet.retweet_count > 1000 ? `${(tweet.retweet_count / 1000).toFixed(1)}K` : tweet.retweet_count}</span>
-                        <span>💬 {tweet.reply_count || 120}</span>
-                      </div>
+                    <div className="feed-author-meta">
+                      <span className="feed-author-name">
+                        {tweet.author_name || tweet.author_username}
+                      </span>
+                      <span className="feed-author-handle">
+                        @{tweet.author_username}
+                      </span>
                     </div>
+                    {relTime && <span className="feed-item-time">{relTime}</span>}
+                  </div>
+
+                  {/* 第 2 行：推文标题（单行截断，图文徽标） */}
+                  <div className="feed-item-title-row">
+                    {tweet.media_urls && tweet.media_urls.length > 0 && (
+                      <span className="feed-tag">📷 图文</span>
+                    )}
+                    {tweet.is_retweet && (
+                      <span className="feed-tag">🔁 转推</span>
+                    )}
+                    <span className="feed-item-title" title={tweet.text}>
+                      {title}
+                    </span>
+                  </div>
+
+                  {/* 第 3 行：次级摘要（若有） */}
+                  {snippet && (
+                    <div className="feed-item-snippet" title={snippet}>
+                      {snippet}
+                    </div>
+                  )}
+
+                  {/* 第 4 行：紧凑互动指标 */}
+                  <div className="feed-item-footer">
+                    <span>❤️ {formatCount(tweet.like_count)}</span>
+                    <span>🔁 {formatCount(tweet.retweet_count)}</span>
+                    {tweet.reply_count ? <span>💬 {formatCount(tweet.reply_count)}</span> : null}
                   </div>
                 </div>
               );

@@ -337,13 +337,14 @@ body {
   padding: 36px 44px;
 }
 
-/* 推文项 compact */
+/* 推文项 compact (高密度 Mail/RSS 列表体验) */
 .feed-item {
-  padding: 14px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: all 0.12s ease;
   position: relative;
+  user-select: none;
 }
 
 .feed-item:hover { background: rgba(255, 253, 248, 0.95); }
@@ -354,6 +355,103 @@ body {
   left: 0; top: 0; bottom: 0;
   width: 3.5px;
   background: var(--cinnabar);
+}
+
+.feed-item-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.feed-item .stamp-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.feed-author-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-author-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.feed-author-handle {
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.feed-item-time {
+  font-size: 11px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.feed-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.feed-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-item-snippet {
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.feed-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.feed-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--paper-sunken);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
 }
 
 /* 浮动批量条 (§7.7) */

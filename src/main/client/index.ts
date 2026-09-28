@@ -464,7 +464,10 @@ export class XClient {
         const url = res.url();
         if (
           url.includes('/graphql/') &&
-          (url.includes('UserOriginalsTimeline') || url.includes('UserTweets')) &&
+          (url.includes('UserOriginalsTimeline') ||
+            url.includes('UserTweets') ||
+            url.includes('UserTweetsAndReplies') ||
+            url.includes('UserArticles')) &&
           res.status() === 200
         ) {
           try {
@@ -479,14 +482,26 @@ export class XClient {
         }
       });
 
+      // Warm up session on home to pass Turnstile/Cloudflare checks
+      process.stderr.write(`🌐 正在建立安全会话上下文...\n`);
+      await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
+      try {
+        await page.waitForSelector('div[role="tablist"], [role="tab"]', { timeout: 8000 });
+      } catch {
+        // ignore
+      }
+
       const userUrl = `https://x.com/${cleanUser}`;
       process.stderr.write(`🌐 正在打开博主主页 ${userUrl} 并监听推文流...\n`);
       await page.goto(userUrl, { waitUntil: 'commit', timeout: timeoutMs });
 
-      // Wait for initial batch
-      for (let i = 0; i < Math.max(30, timeout); i++) {
+      // Wait for initial batch with gentle scroll assist
+      for (let i = 0; i < Math.max(20, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedInstructions.length > 0) break;
+        if (i === 3 || i === 7) {
+          await page.evaluate(() => window.scrollBy(0, 1500));
+        }
       }
 
       // Paginate if more than 20
