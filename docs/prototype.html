@@ -375,6 +375,66 @@
       outline: none;
     }
 
+    /* 分段下拉动作按钮 Split Action Button */
+    .split-btn-group {
+      display: inline-flex;
+      align-items: stretch;
+      border-radius: 8px;
+      overflow: visible;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .split-btn-main {
+      border-top-right-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+      padding: 7px 13px !important;
+      font-size: 13px !important;
+    }
+    .split-btn-arrow {
+      border-top-left-radius: 0 !important;
+      border-bottom-left-radius: 0 !important;
+      padding: 7px 8px !important;
+      border-left: 1px solid rgba(255, 255, 255, 0.28) !important;
+      cursor: pointer;
+      font-size: 11px !important;
+    }
+    .split-btn-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: var(--paper-raised);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(33, 28, 21, 0.16);
+      min-width: 230px;
+      z-index: 500;
+      display: none;
+      flex-direction: column;
+      padding: 6px;
+    }
+    .split-btn-menu.open { display: flex; }
+    .split-btn-item {
+      padding: 8px 12px;
+      font-size: 12.5px;
+      color: var(--ink);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.12s ease;
+      white-space: nowrap;
+    }
+    .split-btn-item:hover {
+      background: var(--paper-sunken);
+      color: var(--cinnabar);
+    }
+    .split-btn-item.active {
+      font-weight: 600;
+      color: var(--cinnabar);
+      background: var(--cinnabar-wash);
+    }
+
     /* 印章头像 */
     .stamp-avatar {
       width: 32px;
@@ -754,36 +814,127 @@
        视窗 3: 情报工作台 (Feeds & Search Studio View)
        ========================================================================== -->
   <main id="view-studio" class="view-container">
-    <!-- 顶栏：多源选择、关键词检索与信噪比门槛控制 -->
-    <div style="padding: 14px 28px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 12px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
-        <!-- 多源数据管道切换药丸 -->
-        <div style="display: flex; gap: 6px;">
-          <div class="fmt-chip" onclick="setDataSource(this, 'following')">关注流</div>
-          <div class="fmt-chip active" onclick="setDataSource(this, 'search')">全网搜索</div>
-          <div class="fmt-chip" onclick="setDataSource(this, 'user')">博主</div>
-          <div class="fmt-chip" onclick="setDataSource(this, 'lists')">列表</div>
+    <!-- 顶栏：单行一体化智能工具条 (54px) -->
+    <div style="padding: 10px 24px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px;">
+      <!-- 左侧：数据源分段切换 -->
+      <div id="studio-source-chips" style="display: flex; gap: 5px; flex-shrink: 0;">
+        <div id="chip-source-following" class="fmt-chip active" onclick="setDataSource(this, 'following')">关注流</div>
+        <div id="chip-source-search" class="fmt-chip" onclick="setDataSource(this, 'search')">全网搜索</div>
+        <div id="chip-source-user" class="fmt-chip" onclick="setDataSource(this, 'user')">博主追踪</div>
+        <div id="chip-source-lists" class="fmt-chip" onclick="setDataSource(this, 'lists')">X 列表</div>
+      </div>
+
+      <!-- 中间：自适应动态操作区 (按数据源切换) -->
+      <div id="studio-context-zone" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+        <!-- 容器 1: 关注流操作区 -->
+        <div id="zone-following" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          <span style="font-size: 12px; color: var(--ink-faint); white-space: nowrap;">上次同步: 15分钟前</span>
+          <div class="split-btn-group">
+            <button class="cta-button split-btn-main" onclick="triggerCrawlAction('following')">
+              <span id="label-crawl-following">🔄 抓取最新 (20条)</span>
+            </button>
+            <button class="cta-button split-btn-arrow" onclick="toggleLimitMenu(event, 'menu-following')">
+              <span>▾</span>
+            </button>
+            <div id="menu-following" class="split-btn-menu">
+              <div class="split-btn-item active" onclick="setCrawlLimit(20, '🔄 抓取最新 (20条)', this)">
+                <span>20 条 · 日常极速 (~2秒)</span><span class="limit-check">✓</span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(50, '🔄 抓取最新 (50条)', this)">
+                <span>50 条 · 近期汇总 (~6秒)</span><span class="limit-check"></span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(100, '🔄 抓取最新 (100条)', this)">
+                <span>100 条 · 深度调研 (~15秒)</span><span class="limit-check"></span>
+              </div>
+            </div>
+          </div>
+          <input id="stream-filter-input" class="text-input" style="flex: 1; max-width: 240px; font-size: 12.5px; padding: 6px 10px;" type="text" placeholder="🔍 过滤当前推文..." oninput="filterLocalStream(this.value)">
         </div>
 
-        <!-- 互动量门槛药丸 -->
-        <div style="display: flex; gap: 6px;">
-          <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部</div>
-          <div class="fmt-chip" onclick="setSnrFilter(this, 50)">50+ 赞</div>
-          <div class="fmt-chip" onclick="setSnrFilter(this, 200)">200+ 赞</div>
+        <!-- 容器 2: 全网搜索操作区 (默认隐藏) -->
+        <div id="zone-search" style="display: none; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          <input id="search-query-input" class="text-input" style="flex: 1; min-width: 160px; font-size: 13px;" type="text" placeholder="输入关键词或语法 (如 AI min_faves:100)..." value="AI">
+          <div class="split-btn-group">
+            <button class="cta-button split-btn-main" onclick="triggerCrawlAction('search')">
+              <span id="label-crawl-search">搜索抓取 (20条)</span>
+            </button>
+            <button class="cta-button split-btn-arrow" onclick="toggleLimitMenu(event, 'menu-search')">
+              <span>▾</span>
+            </button>
+            <div id="menu-search" class="split-btn-menu">
+              <div class="split-btn-item active" onclick="setCrawlLimit(20, '搜索抓取 (20条)', this)">
+                <span>20 条 · 快速搜索 (~2秒)</span><span class="limit-check">✓</span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(50, '搜索抓取 (50条)', this)">
+                <span>50 条 · 汇总搜索 (~6秒)</span><span class="limit-check"></span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(100, '搜索抓取 (100条)', this)">
+                <span>100 条 · 深度调研 (~15秒)</span><span class="limit-check"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 容器 3: 博主追踪操作区 (默认隐藏) -->
+        <div id="zone-user" style="display: none; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          <input id="user-handle-input" class="text-input" style="flex: 1; min-width: 160px; font-size: 13px;" type="text" placeholder="@博主用户名 (如 karpathy, sama)..." value="karpathy">
+          <div class="split-btn-group">
+            <button class="cta-button split-btn-main" onclick="triggerCrawlAction('user')">
+              <span id="label-crawl-user">抓取推文 (20条)</span>
+            </button>
+            <button class="cta-button split-btn-arrow" onclick="toggleLimitMenu(event, 'menu-user')">
+              <span>▾</span>
+            </button>
+            <div id="menu-user" class="split-btn-menu">
+              <div class="split-btn-item active" onclick="setCrawlLimit(20, '抓取推文 (20条)', this)">
+                <span>20 条 · 最新推文 (~2秒)</span><span class="limit-check">✓</span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(50, '抓取推文 (50条)', this)">
+                <span>50 条 · 近期主页 (~6秒)</span><span class="limit-check"></span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(100, '抓取推文 (100条)', this)">
+                <span>100 条 · 历史全量 (~15秒)</span><span class="limit-check"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 容器 4: X 列表操作区 (默认隐藏) -->
+        <div id="zone-lists" style="display: none; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          <select id="list-select" class="select-input" style="flex: 1; max-width: 260px; font-size: 12.5px; padding: 6px 10px;" onchange="handleListSelect(this.value)">
+            <option value="ai">📑 AI 核心圈 (42人)</option>
+            <option value="indie">📑 独立开发者 (128人)</option>
+            <option value="custom">+ 输入其他公开 List 链接...</option>
+          </select>
+          <input id="custom-list-input" class="text-input" style="display: none; flex: 1; min-width: 140px; font-size: 12.5px; padding: 6px 10px;" type="text" placeholder="输入 List ID 或链接...">
+          <span style="font-size: 12px; color: var(--ink-faint); white-space: nowrap;">已存 45 篇</span>
+          <div class="split-btn-group">
+            <button class="cta-button split-btn-main" onclick="triggerCrawlAction('lists')">
+              <span id="label-crawl-lists">🔄 抓取最新 (20条)</span>
+            </button>
+            <button class="cta-button split-btn-arrow" onclick="toggleLimitMenu(event, 'menu-lists')">
+              <span>▾</span>
+            </button>
+            <div id="menu-lists" class="split-btn-menu">
+              <div class="split-btn-item active" onclick="setCrawlLimit(20, '🔄 抓取最新 (20条)', this)">
+                <span>20 条 · 日常极速 (~2秒)</span><span class="limit-check">✓</span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(50, '🔄 抓取最新 (50条)', this)">
+                <span>50 条 · 近期汇总 (~6秒)</span><span class="limit-check"></span>
+              </div>
+              <div class="split-btn-item" onclick="setCrawlLimit(100, '🔄 抓取最新 (100条)', this)">
+                <span>100 条 · 深度调研 (~15秒)</span><span class="limit-check"></span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 搜索框与高级语法栏 -->
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <div style="display: flex; flex: 1; gap: 8px; min-width: 0;">
-          <input id="studio-search-input" class="text-input" style="flex: 1; min-width: 0;" type="text" placeholder="搜索关键词、博主或语法 (如: AI min_faves:100)..." value="AI">
-          <button class="cta-button" style="padding: 8px 18px;" onclick="alert('执行检索: ' + document.getElementById('studio-search-input').value)">
-            <span>搜索</span>
-          </button>
-        </div>
-        <button class="secondary-button" style="padding: 8px 14px; font-size: 12.5px;" onclick="alert('已同步最新推文')">
-          <span>🔄 刷新</span>
-        </button>
+      <!-- 右侧：信噪比互动门槛药丸 -->
+      <div style="display: flex; gap: 5px; flex-shrink: 0; align-items: center; border-left: 1px solid var(--line); padding-left: 12px;">
+        <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部</div>
+        <div class="fmt-chip" onclick="setSnrFilter(this, 50)">50+ 赞</div>
+        <div class="fmt-chip" onclick="setSnrFilter(this, 200)">200+ 赞</div>
       </div>
     </div>
 
@@ -796,10 +947,10 @@
             <input type="checkbox" id="check-all" onchange="toggleSelectAll(this)">
             <span id="selected-count-label">全选</span>
           </label>
-          <span style="font-size: 12px; color: var(--ink-faint);">3 条推文</span>
+          <span id="feed-header-total" style="font-size: 12px; color: var(--ink-faint);">3 条推文</span>
         </div>
 
-        <div style="flex: 1; overflow-y: auto;">
+        <div id="feed-list-container" style="flex: 1; overflow-y: auto;">
           <!-- 推文行 1 -->
           <div class="feed-item selected" onclick="selectTweet(1, this)">
             <div style="display: flex; gap: 10px;">
@@ -864,6 +1015,16 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- 触底加载更多状态卡片 -->
+          <div id="feed-more-box" style="padding: 14px; text-align: center; border-top: 1px dashed var(--line); background: var(--paper-sunken); margin: 12px 10px 16px 10px; border-radius: var(--radius-sm);">
+            <div style="font-size: 11.5px; color: var(--ink-faint); margin-bottom: 8px;" id="feed-count-summary">
+              已显示 3 条 · 本地数据库共 88 条
+            </div>
+            <button class="secondary-button" style="width: 100%; font-size: 12px; padding: 6px 0; justify-content: center;" onclick="loadMoreTweets()">
+              <span>⬇️ 加载更早的 50 条历史推文</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1144,14 +1305,205 @@
 
     function jumpToStudioSearch(keyword) {
       switchTab('studio');
-      const input = document.getElementById('studio-search-input');
+      const searchChip = document.getElementById('chip-source-search');
+      if (searchChip) setDataSource(searchChip, 'search');
+      const input = document.getElementById('search-query-input');
       if (input) input.value = keyword;
     }
 
-    // 5. 工作台信噪比与推文交互
-    function setSnrFilter(el, likes) {
+    // 4.1 抓取额度切换与下拉菜单交互
+    let currentCrawlLimit = 20;
+
+    function toggleLimitMenu(event, menuId) {
+      event.stopPropagation();
+      const menu = document.getElementById(menuId);
+      const isOpen = menu && menu.classList.contains('open');
+      closeAllLimitMenus();
+      if (menu && !isOpen) {
+        menu.classList.add('open');
+      }
+    }
+
+    function closeAllLimitMenus() {
+      document.querySelectorAll('.split-btn-menu').forEach(m => m.classList.remove('open'));
+    }
+
+    document.addEventListener('click', () => {
+      closeAllLimitMenus();
+    });
+
+    function setCrawlLimit(limit, labelText, el) {
+      currentCrawlLimit = limit;
+      const followingLabel = document.getElementById('label-crawl-following');
+      const searchLabel = document.getElementById('label-crawl-search');
+      const userLabel = document.getElementById('label-crawl-user');
+      const listsLabel = document.getElementById('label-crawl-lists');
+      
+      if (followingLabel) followingLabel.innerText = `🔄 抓取最新 (${limit}条)`;
+      if (searchLabel) searchLabel.innerText = `搜索抓取 (${limit}条)`;
+      if (userLabel) userLabel.innerText = `抓取推文 (${limit}条)`;
+      if (listsLabel) listsLabel.innerText = `🔄 抓取最新 (${limit}条)`;
+
+      document.querySelectorAll('.split-btn-menu').forEach(menu => {
+        menu.querySelectorAll('.split-btn-item').forEach(item => {
+          const isMatch = item.textContent.includes(`${limit} 条`);
+          item.classList.toggle('active', isMatch);
+          const checkEl = item.querySelector('.limit-check');
+          if (checkEl) checkEl.textContent = isMatch ? '✓' : '';
+        });
+      });
+
+      closeAllLimitMenus();
+    }
+
+    // 4.2 多源数据管道切换与执行
+    function setDataSource(el, source) {
+      document.querySelectorAll('#studio-source-chips .fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+
+      const zones = ['following', 'search', 'user', 'lists'];
+      zones.forEach(z => {
+        const zoneEl = document.getElementById(`zone-${z}`);
+        if (zoneEl) zoneEl.style.display = (z === source) ? 'flex' : 'none';
+      });
+    }
+
+    function triggerCrawlAction(source) {
+      let promptMsg = '';
+      if (source === 'following') {
+        promptMsg = `正在从 X 官方流实时抓取关注流最新 ${currentCrawlLimit} 条推文...`;
+      } else if (source === 'search') {
+        const kw = document.getElementById('search-query-input')?.value || 'AI';
+        promptMsg = `正在全网实时搜索关键词「${kw}」最新 ${currentCrawlLimit} 条推文并入库...`;
+      } else if (source === 'user') {
+        const handle = document.getElementById('user-handle-input')?.value || 'karpathy';
+        promptMsg = `正在抓取博主 @${handle} 的最新 ${currentCrawlLimit} 条推文包...`;
+      } else if (source === 'lists') {
+        const sel = document.getElementById('list-select')?.value;
+        const name = sel === 'custom' ? (document.getElementById('custom-list-input')?.value || '自定义列表') : (sel === 'ai' ? 'AI 核心圈' : '独立开发者');
+        promptMsg = `正在抓取 X 列表「${name}」最新 ${currentCrawlLimit} 条推文...`;
+      }
+      alert(promptMsg + '\n(模拟拦截完成，已自动执行 better-sqlite3 本地增量去重落库)');
+    }
+
+    function handleListSelect(val) {
+      const customInput = document.getElementById('custom-list-input');
+      if (customInput) {
+        customInput.style.display = (val === 'custom') ? 'block' : 'none';
+        if (val === 'custom') customInput.focus();
+      }
+    }
+
+    // 5. 工作台信噪比过滤、推文交互与瀑布流加载
+    function setSnrFilter(el, minLikes) {
       el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
+
+      const items = document.querySelectorAll('#feed-list-container .feed-item');
+      let matchCount = 0;
+      items.forEach(item => {
+        let visible = true;
+        if (minLikes > 0) {
+          const statsEl = item.querySelector('div:last-child span:first-child');
+          const likesText = statsEl ? statsEl.textContent : '';
+          let count = 0;
+          if (likesText.includes('K')) {
+            count = parseFloat(likesText.replace(/[^0-9.]/g, '')) * 1000;
+          } else {
+            count = parseFloat(likesText.replace(/[^0-9.]/g, '')) || 0;
+          }
+          visible = count >= minLikes;
+        }
+        item.style.display = visible ? 'block' : 'none';
+        if (visible) matchCount++;
+      });
+      const headerTotal = document.getElementById('feed-header-total');
+      if (headerTotal) {
+        headerTotal.innerText = (minLikes > 0) ? `${matchCount} / ${items.length} 条` : `${items.length} 条推文`;
+      }
+    }
+
+    function filterLocalStream(query) {
+      const q = (query || '').toLowerCase().trim();
+      const items = document.querySelectorAll('#feed-list-container .feed-item');
+      let matchCount = 0;
+      items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        const visible = !q || text.includes(q);
+        item.style.display = visible ? 'block' : 'none';
+        if (visible) matchCount++;
+      });
+      const headerTotal = document.getElementById('feed-header-total');
+      if (headerTotal) {
+        headerTotal.innerText = q ? `${matchCount} / ${items.length} 条` : `${items.length} 条推文`;
+      }
+    }
+
+    let extraTweetsLoaded = false;
+    function loadMoreTweets() {
+      if (extraTweetsLoaded) {
+        alert('已加载本地数据库全部历史推文');
+        return;
+      }
+      extraTweetsLoaded = true;
+      const moreBox = document.getElementById('feed-more-box');
+      const container = document.getElementById('feed-list-container');
+      
+      const tweet4 = document.createElement('div');
+      tweet4.className = 'feed-item';
+      tweet4.setAttribute('onclick', 'selectTweet(4, this)');
+      tweet4.innerHTML = `
+        <div style="display: flex; gap: 10px;">
+          <input type="checkbox" class="tweet-check" style="margin-top: 3px;" onclick="handleCheck(event)">
+          <div class="stamp-avatar">L</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+              <span style="font-weight: 600; font-size: 13px; color: var(--ink);">Yann LeCun</span>
+              <span style="font-size: 11px; color: var(--ink-faint);">@ylecun</span>
+            </div>
+            <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 6px;">
+              Auto-regressive LLMs cannot reach human-level intelligence without world models and persistent hierarchical planning...
+            </p>
+            <div style="display: flex; gap: 14px; font-size: 11px; color: var(--ink-faint);">
+              <span>❤️ 8.1K</span>
+              <span>🔁 2.2K</span>
+              <span>💬 1.5K</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const tweet5 = document.createElement('div');
+      tweet5.className = 'feed-item';
+      tweet5.setAttribute('onclick', 'selectTweet(5, this)');
+      tweet5.innerHTML = `
+        <div style="display: flex; gap: 10px;">
+          <input type="checkbox" class="tweet-check" style="margin-top: 3px;" onclick="handleCheck(event)">
+          <div class="stamp-avatar">G</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+              <span style="font-weight: 600; font-size: 13px; color: var(--ink);">Greg Brockman</span>
+              <span style="font-size: 11px; color: var(--ink-faint);">@gdb</span>
+            </div>
+            <p style="font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 6px;">
+              Scaling inference compute changes the shape of the loss landscape in ways we are just beginning to measure reliably...
+            </p>
+            <div style="display: flex; gap: 14px; font-size: 11px; color: var(--ink-faint);">
+              <span>❤️ 5.6K</span>
+              <span>🔁 940</span>
+              <span>💬 310</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.insertBefore(tweet4, moreBox);
+      container.insertBefore(tweet5, moreBox);
+
+      const summary = document.getElementById('feed-count-summary');
+      if (summary) summary.innerText = '已显示 5 条 · 本地数据库共 88 条';
+      const headerTotal = document.getElementById('feed-header-total');
+      if (headerTotal) headerTotal.innerText = '5 条推文';
     }
 
     function selectTweet(id, el) {
@@ -1179,13 +1531,27 @@
         likes.innerText = '3,410';
         rts.innerText = '820';
         replies.innerText = '150';
-      } else {
+      } else if (id === 3) {
         name.innerText = 'Sam Altman';
         handle.innerText = '@sama · 2026-09-27 07:42';
         text.innerText = 'excited for what comes next. the compute curves look extraordinary, but what matters is how helpful the systems become for individual humans doing creative and scientific work.';
         likes.innerText = '9,800';
         rts.innerText = '1,540';
         replies.innerText = '1,200';
+      } else if (id === 4) {
+        name.innerText = 'Yann LeCun';
+        handle.innerText = '@ylecun · 2026-09-26 21:04';
+        text.innerText = 'Auto-regressive LLMs cannot reach human-level intelligence without world models and persistent hierarchical planning. We need architectures that reason over abstract state spaces.';
+        likes.innerText = '8,100';
+        rts.innerText = '2,200';
+        replies.innerText = '1,500';
+      } else if (id === 5) {
+        name.innerText = 'Greg Brockman';
+        handle.innerText = '@gdb · 2026-09-26 19:30';
+        text.innerText = 'Scaling inference compute changes the shape of the loss landscape in ways we are just beginning to measure reliably. Excited for developer tools adapting to this.';
+        likes.innerText = '5,600';
+        rts.innerText = '940';
+        replies.innerText = '310';
       }
     }
 
@@ -1276,25 +1642,6 @@
       alert('已在系统文件管理器中定位本地推文包:\noutput/karpathy/18947291823901/\n  ├── index.md\n  └── images/\n      └── header.jpg');
     }
 
-    // 11. 多源数据管道切换
-    function setDataSource(el, source) {
-      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
-      el.classList.add('active');
-      const input = document.getElementById('studio-search-input');
-      if (source === 'following') {
-        input.placeholder = '筛选关注流推文 (留空加载最新)...';
-        input.value = '';
-      } else if (source === 'search') {
-        input.placeholder = "搜索关键词、博主或语法 (如: AI min_faves:100)...";
-        input.value = 'AI';
-      } else if (source === 'user') {
-        input.placeholder = '输入博主用户名 (如: karpathy, sama)...';
-        input.value = 'karpathy';
-      } else if (source === 'lists') {
-        input.placeholder = '输入列表 ID 或链接...';
-        input.value = '1827364512938';
-      }
-    }
 
     // 12. 推理开关与强度分级
     function toggleReasoningEffort(checked) {
