@@ -379,6 +379,45 @@
       font-size: 14px;
       flex-shrink: 0;
     }
+
+    /* 开关 Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--line-strong);
+      transition: .2s;
+      border-radius: 22px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: var(--cinnabar);
+    }
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
   </style>
 </head>
 <body>
@@ -566,6 +605,18 @@
             </div>
           </div>
 
+          <!-- 💡 选题与培训便签栏 (Actionable Insights) -->
+          <div class="surface" style="padding: 16px 20px; background: var(--paper-sunken); border-left: 3px solid var(--cinnabar); margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight: 600; font-size: 13.5px; color: var(--cinnabar);">💡 写作选题与培训洞察 (Actionable Insights)</span>
+              <button class="secondary-button" style="font-size: 11.5px; padding: 2px 8px;" onclick="alert('已复制 3 条选题大纲至剪贴板！')">📋 复制大纲</button>
+            </div>
+            <ul style="font-size: 13px; color: var(--ink-soft); line-height: 1.6; padding-left: 18px;">
+              <li><strong>选题 1 (技术公众号)</strong>: 《混合推理模型爆发：为什么测试时计算（Test-time Compute）是今年的主战场？》</li>
+              <li><strong>选题 2 (企业培训案例)</strong>: 企业级私有 Agent 开发中，如何通过嵌入式 SQLite 与 Page Bundle 消除云数据库依赖？</li>
+            </ul>
+          </div>
+
           <!-- 研报正文 -->
           <div id="report-detail-content" style="font-size: 16px; line-height: 1.85; color: var(--ink);">
             <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">
@@ -574,9 +625,16 @@
             <p style="margin-bottom: 16px;">
               过去 24 小时内，全网核心开发者对大模型长思维链（Long-horizon CoT）在复杂软件工程场景下的落地表现进行了密集推演。多数团队达成共识：动态测试时算力（Dynamic Test-time Compute）是未来 12 个月应用层的关键分水岭。
             </p>
-            <blockquote style="border-left: 3px solid var(--cinnabar); padding-left: 16px; margin: 18px 0; color: var(--ink-soft); font-style: italic;">
-              "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. If your agent burns 60k tokens on a greeting, you're burning cash." — @karpathy
-            </blockquote>
+            <div style="border-left: 3px solid var(--cinnabar); background: var(--paper-sunken); padding: 12px 16px; margin: 18px 0; border-radius: 0 6px 6px 0;">
+              <div style="color: var(--ink-soft); font-style: italic; font-size: 14.5px; margin-bottom: 6px;">
+                "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. If your agent burns 60k tokens on a greeting, you're burning cash." — @karpathy
+              </div>
+              <div style="display: flex; justify-content: flex-end;">
+                <button class="secondary-button" style="font-size: 11.5px; padding: 3px 8px; color: var(--cinnabar);" onclick="jumpToStudioTweet(1)">
+                  <span>🔗 在情报工作台中定位原推与高清配图 ↗</span>
+                </button>
+              </div>
+            </div>
 
             <h3 class="serif-title" style="font-size: 20px; margin: 24px 0 12px; color: var(--ink);">
               二、端侧部署与本地去中心化存储
@@ -695,24 +753,42 @@
        视窗 3: 情报工作台 (Feeds & Search Studio View)
        ========================================================================== -->
   <main id="view-studio" class="view-container">
-    <!-- 顶栏检索与信噪比门槛控制 -->
-    <div style="padding: 16px 28px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: space-between; gap: 20px;">
-      <!-- 搜索框 -->
-      <div style="display: flex; flex: 1; max-width: 520px; gap: 8px;">
-        <input id="studio-search-input" class="text-input" type="text" placeholder="搜索全网关键词、博主或语法 (如: 'AI min_faves:100')..." value="AI">
-        <button class="cta-button" style="padding: 8px 18px;" onclick="alert('执行检索')">
-          <span>搜索</span>
-        </button>
+    <!-- 顶栏：多源选择、关键词检索与信噪比门槛控制 -->
+    <div style="padding: 14px 28px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+        <!-- 多源管道切换药丸 (§7.1, §7.3) -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--ink-soft);">数据源:</span>
+          <div style="display: flex; gap: 6px;">
+            <div class="fmt-chip" onclick="setDataSource(this, 'following')">📡 关注流 (Following)</div>
+            <div class="fmt-chip active" onclick="setDataSource(this, 'search')">🔍 关键词搜索 (Search)</div>
+            <div class="fmt-chip" onclick="setDataSource(this, 'user')">👤 博主专栏 (User)</div>
+            <div class="fmt-chip" onclick="setDataSource(this, 'lists')">📑 X Lists 列表</div>
+          </div>
+        </div>
+
+        <!-- 信噪比药丸 (§7.3) -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 13px; color: var(--ink-soft);">信噪比门槛:</span>
+          <div style="display: flex; gap: 6px;">
+            <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部</div>
+            <div class="fmt-chip" onclick="setSnrFilter(this, 50)">⭐ 50+ 赞</div>
+            <div class="fmt-chip" onclick="setSnrFilter(this, 200)">👑 200+ 赞 (爆款)</div>
+          </div>
+        </div>
       </div>
 
-      <!-- 信噪比药丸与时效过滤 -->
-      <div style="display: flex; align-items: center; gap: 14px;">
-        <span style="font-size: 13px; color: var(--ink-soft);">信噪比过滤:</span>
-        <div style="display: flex; gap: 6px;">
-          <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部推文</div>
-          <div class="fmt-chip" onclick="setSnrFilter(this, 50)">⭐ 50+ 赞 (高信噪比)</div>
-          <div class="fmt-chip" onclick="setSnrFilter(this, 200)">👑 200+ 赞 (爆款核心)</div>
+      <!-- 搜索框与高级语法栏 -->
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <div style="display: flex; flex: 1; gap: 8px;">
+          <input id="studio-search-input" class="text-input" type="text" placeholder="搜索全网关键词、博主或语法 (如: 'AI min_faves:100 lang:en')..." value="AI">
+          <button class="cta-button" style="padding: 8px 18px;" onclick="alert('执行检索: ' + document.getElementById('studio-search-input').value)">
+            <span>搜索抓取</span>
+          </button>
         </div>
+        <button class="secondary-button" style="padding: 8px 14px; font-size: 12.5px;" onclick="alert('已启动 Playwright 嗅探并增量去重落库')">
+          <span>🔄 嗅探增量同步</span>
+        </button>
       </div>
     </div>
 
@@ -811,6 +887,9 @@
             </div>
 
             <div style="display: flex; gap: 8px;">
+              <button class="secondary-button" style="font-size: 12px;" onclick="revealInFinder()">
+                <span>📂 打开本地目录</span>
+              </button>
               <button class="secondary-button" style="font-size: 12px;" onclick="window.open('https://x.com/karpathy')">
                 <span>在 X 打开 ↗</span>
               </button>
@@ -925,9 +1004,35 @@
             <input id="input-model-name" class="text-input" type="text" value="gemini-3.8-flash">
           </div>
 
-          <div>
+          <div style="margin-bottom: 16px;">
             <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">API Key</label>
             <input class="text-input" type="password" placeholder="sk-••••••••••••••••" value="AIzaSyDummyKeyForPrototype12345">
+          </div>
+
+          <!-- 深度思考 / 长推理开关与分级配置 (§7.5, §7.6) -->
+          <div class="surface" style="padding: 14px; background: var(--paper-sunken); border: 1px solid var(--line); margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--ink);">开启深度思考 / 推理模式 (Reasoning)</div>
+                <div style="font-size: 11.5px; color: var(--ink-soft); margin-top: 2px;">启用长思维链推理，研报具备极高洞察力</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="reasoning-toggle" checked onchange="toggleReasoningEffort(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div id="reasoning-effort-container" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-strong);">
+              <label style="font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 6px;">推理强度级别 (Effort Level)</label>
+              <div style="display: flex; gap: 6px;">
+                <div class="fmt-chip" onclick="setEffort(this, 'low')">Low (轻量)</div>
+                <div class="fmt-chip" onclick="setEffort(this, 'medium')">Medium (标准)</div>
+                <div class="fmt-chip active" onclick="setEffort(this, 'high')">High (长推理)</div>
+              </div>
+              <div id="reasoning-param-hint" style="font-family: var(--font-mono); font-size: 11px; color: var(--cinnabar); margin-top: 8px;">
+                Gemini: thinking_level=HIGH (--effort high)
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1151,6 +1256,9 @@
         'kimi': 'kimi-k3'
       };
       if (defaults[val]) modelInput.value = defaults[val];
+      const activeEffort = document.querySelector('#reasoning-effort-container .fmt-chip.active');
+      const level = activeEffort ? (activeEffort.innerText.includes('Low') ? 'low' : (activeEffort.innerText.includes('Medium') ? 'medium' : 'high')) : 'high';
+      updateReasoningHint(level);
     }
 
     // 8. 级联删除弹窗控制
@@ -1159,6 +1267,73 @@
     }
     function closeDeleteDialog() {
       document.getElementById('delete-dialog').classList.remove('open');
+    }
+
+    // 9. 研报引用跳转工作台定位
+    function jumpToStudioTweet(id) {
+      switchTab('studio');
+      const tweetEl = document.querySelector(`.feed-item:nth-child(${id})`);
+      if (tweetEl) {
+        selectTweet(id, tweetEl);
+        tweetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const originalBg = tweetEl.style.background;
+        tweetEl.style.background = 'var(--amber-wash)';
+        setTimeout(() => {
+          tweetEl.style.background = originalBg;
+        }, 1200);
+      }
+    }
+
+    // 10. 系统访达 / 文件管理器中定位自包含推文包
+    function revealInFinder() {
+      alert('已在系统访达 (Finder) / 文件管理器中定位自包含推文包:\noutput/karpathy/18947291823901/\n  ├── index.md\n  └── images/\n      └── header.jpg');
+    }
+
+    // 11. 多源数据管道切换
+    function setDataSource(el, source) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      const input = document.getElementById('studio-search-input');
+      if (source === 'following') {
+        input.placeholder = '在关注流中筛选关键词或标签 (留空抓取全部最新)...';
+        input.value = '';
+      } else if (source === 'search') {
+        input.placeholder = "搜索全网关键词、博主或语法 (如: 'AI min_faves:100 lang:en')...";
+        input.value = 'AI';
+      } else if (source === 'user') {
+        input.placeholder = '输入博主用户名 (如: karpathy, sama)...';
+        input.value = 'karpathy';
+      } else if (source === 'lists') {
+        input.placeholder = '输入 X List ID 或链接...';
+        input.value = '1827364512938';
+      }
+    }
+
+    // 12. 推理开关与强度分级
+    function toggleReasoningEffort(checked) {
+      const container = document.getElementById('reasoning-effort-container');
+      if (container) {
+        container.style.display = checked ? 'block' : 'none';
+      }
+    }
+
+    function setEffort(el, level) {
+      el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      updateReasoningHint(level);
+    }
+
+    function updateReasoningHint(level) {
+      const provider = document.querySelector('select.select-input')?.value || 'gemini';
+      const hint = document.getElementById('reasoning-param-hint');
+      if (!hint) return;
+      if (provider === 'gemini') {
+        hint.innerText = `Gemini: thinking_level=${level.toUpperCase()} (--effort ${level})`;
+      } else if (provider === 'openai' || provider === 'qwen-token-plan' || provider === 'kimi') {
+        hint.innerText = `${provider}: reasoning_effort="${level}"`;
+      } else {
+        hint.innerText = `${provider}: thinking={type: "enabled"}, level="${level}"`;
+      }
     }
   </script>
 </body>
