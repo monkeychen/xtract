@@ -92,16 +92,7 @@ export class Storage {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const isElectron = Boolean((process as any).versions?.electron);
-    const nativeBinding = isElectron
-      ? path.resolve(Config.PROJECT_ROOT, 'native/electron/better_sqlite3.node')
-      : path.resolve(Config.PROJECT_ROOT, 'native/node/better_sqlite3.node');
-
-    const dbOptions: any = {};
-    if (fs.existsSync(nativeBinding)) {
-      dbOptions.nativeBinding = nativeBinding;
-    }
-    this.db = new Database(this.dbPath, dbOptions);
+    this.db = new Database(this.dbPath);
     this.initDb();
   }
 
