@@ -9,7 +9,55 @@ export interface GenerateOptions {
   systemPrompt?: string;
   images?: string[];
   stream?: boolean;
+  reasoningEnabled?: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high';
   onChunk?: (chunk: StreamChunk) => void;
+}
+
+export function applyReasoningParameters(
+  payload: Record<string, any>,
+  providerKey: string,
+  enabled: boolean,
+  effort: 'low' | 'medium' | 'high'
+): void {
+  if (!enabled) {
+    if (providerKey.includes('zhipu')) {
+      payload.thinking = { type: 'disabled' };
+    } else if (providerKey.includes('qwen')) {
+      payload.enable_thinking = false;
+    } else if (providerKey.includes('deepseek')) {
+      payload.thinking = { type: 'disabled' };
+    } else if (providerKey.includes('minimax')) {
+      payload.thinking = { type: 'disabled' };
+    } else if (providerKey.includes('gemini')) {
+      payload.thinking_config = { thinking_level: 'NONE' };
+    }
+    delete payload.reasoning_effort;
+    return;
+  }
+
+  // Reasoning enabled: dynamically map vendor-specific parameters and effort levels
+  if (providerKey.includes('zhipu')) {
+    payload.thinking = { type: 'enabled' };
+    payload.reasoning_effort = effort;
+  } else if (providerKey.includes('qwen')) {
+    payload.enable_thinking = true;
+    payload.reasoning_effort = effort;
+  } else if (providerKey.includes('deepseek')) {
+    payload.thinking = { type: 'enabled' };
+    payload.reasoning_effort = effort;
+  } else if (providerKey.includes('minimax')) {
+    payload.thinking = { type: 'enabled' };
+    payload.reasoning_split = true;
+    payload.reasoning_effort = effort;
+  } else if (providerKey.includes('kimi')) {
+    payload.reasoning_effort = effort;
+  } else if (providerKey.includes('gemini')) {
+    payload.reasoning_effort = effort;
+    payload.thinking_config = { thinking_level: effort.toUpperCase() };
+  } else {
+    payload.reasoning_effort = effort;
+  }
 }
 
 export interface BaseLLMProvider {
@@ -219,27 +267,14 @@ export class OpenAICompatProvider implements BaseLLMProvider {
       messages,
     };
 
-    // High effort reasoning injection across all 7 providers
-    if (this.providerKey.includes('zhipu')) {
-      payload.thinking = { type: 'enabled' };
-      payload.reasoning_effort = 'high';
-    } else if (this.providerKey.includes('qwen')) {
-      payload.enable_thinking = true;
-      payload.reasoning_effort = 'high';
-    } else if (this.providerKey.includes('deepseek')) {
-      payload.thinking = { type: 'enabled' };
-      payload.reasoning_effort = 'high';
-    } else if (this.providerKey.includes('minimax')) {
-      payload.thinking = { type: 'enabled' };
-      payload.reasoning_split = true;
-    } else if (this.providerKey.includes('kimi')) {
-      payload.reasoning_effort = 'high';
-    } else if (this.providerKey.includes('gemini')) {
-      payload.reasoning_effort = 'high';
-      payload.thinking_config = { thinking_level: 'HIGH' };
-    } else {
-      payload.reasoning_effort = 'high';
-    }
+    // Dynamic reasoning parameter injection based on configuration & options
+    const reasoningEnabled =
+      options?.reasoningEnabled !== undefined
+        ? options.reasoningEnabled
+        : Config.LLM_REASONING_ENABLED;
+    const reasoningEffort = options?.reasoningEffort || Config.LLM_REASONING_EFFORT;
+
+    applyReasoningParameters(payload, this.providerKey, reasoningEnabled, reasoningEffort);
 
     const stream = options?.stream !== false;
     const endpoint = `${this.baseUrl}/chat/completions`;
@@ -362,24 +397,28 @@ export class GeminiAccountProvider implements BaseLLMProvider {
       ? `${options.systemPrompt}\n\n---\n\n${prompt}`
       : prompt;
 
-    // 1. Try invoking local agy CLI (Google account channel with high reasoning effort)
+    const reasoningEnabled =
+      options?.reasoningEnabled !== undefined
+        ? options.reasoningEnabled
+        : Config.LLM_REASONING_ENABLED;
+    const reasoningEffort = options?.reasoningEffort || Config.LLM_REASONING_EFFORT;
+
+    // 1. Try invoking local agy CLI (Google account channel)
     try {
       const output = await new Promise<string>((resolve, reject) => {
-        const child = spawn(
-          'agy',
-          [
-            '-p',
-            fullPrompt,
-            '--model',
-            this.modelName,
-            '--effort',
-            'high',
-            '--output-format',
-            'text',
-            '--dangerously-skip-permissions',
-          ],
-          { stdio: ['pipe', 'pipe', 'pipe'] }
-        );
+        const args = [
+          '-p',
+          fullPrompt,
+          '--model',
+          this.modelName,
+          '--output-format',
+          'text',
+          '--dangerously-skip-permissions',
+        ];
+        if (reasoningEnabled) {
+          args.splice(4, 0, '--effort', reasoningEffort);
+        }
+        const child = spawn('agy', args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
         let stdout = '';
         let stderr = '';

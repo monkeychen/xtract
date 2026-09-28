@@ -5,7 +5,11 @@ import { MOCK_REPORTS } from '../types.js';
 import type { ReportItem, StreamEvent } from '../types.js';
 import { api } from '../services/api.js';
 
-export const ReportsView: React.FC = () => {
+interface ReportsViewProps {
+  onJumpToTweet?: (tweetIdOrHandle: string) => void;
+}
+
+export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
   const [reports, setReports] = useState<ReportItem[]>(MOCK_REPORTS);
   const [selectedReport, setSelectedReport] = useState<ReportItem>(MOCK_REPORTS[0]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -15,6 +19,7 @@ export const ReportsView: React.FC = () => {
   const [currentStageText, setCurrentStageText] = useState('');
   const [progress, setProgress] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [copiedIdeas, setCopiedIdeas] = useState(false);
 
   const handleGenerate = async (type: 'daily' | 'trends') => {
     setIsGenerating(true);
@@ -84,6 +89,15 @@ export const ReportsView: React.FC = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleCopyIdeas = () => {
+    const ideasText = `【AI 写作选题与培训大纲便签 - 提取自：${selectedReport?.title || '今日研报'}】\n\n` +
+      `📌 技术写作选题：《长推理进入工程落地阶段：为什么说纯预训练竞赛正在让位于推理期算力调度？》\n` +
+      `📌 企业培训案例：以 Cursor + Claude 3.7 为例，拆解自修复 Agent 递归循环与动态测试时算力控制。`;
+    navigator.clipboard.writeText(ideasText);
+    setCopiedIdeas(true);
+    setTimeout(() => setCopiedIdeas(false), 2000);
   };
 
   return (
@@ -301,6 +315,38 @@ export const ReportsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* 💡 选题与培训便签卡片 (Actionable Insights) (§6.4) */}
+              <div
+                style={{
+                  background: 'var(--paper)',
+                  border: '1px solid var(--amber-line, rgba(217, 119, 6, 0.25))',
+                  borderLeft: '4px solid var(--amber, #d97706)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '18px 20px',
+                  marginBottom: '28px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '16px' }}>💡</span>
+                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ink)' }}>
+                      AI 写作选题与培训大纲便签 (提取自本篇研报)
+                    </span>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                    onClick={handleCopyIdeas}
+                  >
+                    <span>{copiedIdeas ? '✓ 已复制大纲' : '复制大纲'}</span>
+                  </button>
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6' }}>
+                  <div>📌 <strong>技术写作选题</strong>：《长推理进入工程落地阶段：为什么说纯预训练竞赛正在让位于推理期算力调度？》</div>
+                  <div style={{ marginTop: '6px' }}>📌 <strong>企业培训案例</strong>：以 Cursor + Claude 3.7 为例，拆解自修复 Agent 递归循环与动态测试时算力控制。</div>
+                </div>
+              </div>
+
               {/* Formatted Markdown Content */}
               <div
                 style={{
@@ -312,6 +358,61 @@ export const ReportsView: React.FC = () => {
                 }}
               >
                 {selectedReport.markdownContent}
+              </div>
+
+              {/* 引文与观点溯源卡片 (§6.4) */}
+              <div style={{ marginTop: '28px', borderTop: '1px solid var(--line-strong)', paddingTop: '20px' }}>
+                <div className="eyebrow" style={{ marginBottom: '12px' }}>
+                  KEY VOICES & EVIDENCE TRACEABILITY · 引文与观点溯源
+                </div>
+                <div
+                  className="surface surface-hover"
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: 'var(--paper)',
+                    marginBottom: '12px',
+                  }}
+                  onClick={() => onJumpToTweet?.('karpathy')}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
+                      Andrej Karpathy (@karpathy)
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--cinnabar)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      定位原推 ↗
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.5', margin: '0 0 6px 0' }}>
+                    "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. We are entering an era of software that self-corrects through recursive loops."
+                  </p>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>14.2K 点赞 · 3.8K 转发</div>
+                </div>
+
+                <div
+                  className="surface surface-hover"
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: 'var(--paper)',
+                  }}
+                  onClick={() => onJumpToTweet?.('swyx')}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
+                      swyx (@swyx)
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--cinnabar)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      定位原推 ↗
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.5', margin: '0 0 6px 0' }}>
+                    "Building personal intelligence digests is the #1 way to defeat algorithmic brain rot. High signal-to-noise ratio filters + local Markdown archives will outlive any closed platform."
+                  </p>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>3.4K 点赞 · 820 转发</div>
+                </div>
               </div>
             </article>
           ) : (

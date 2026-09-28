@@ -19,6 +19,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [provider, setProvider] = useState('gemini');
   const [authMode, setAuthMode] = useState('api_key');
   const [model, setModel] = useState('gemini-3.8-flash');
+  const [reasoningEnabled, setReasoningEnabled] = useState(true);
+  const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
   const [apiKey, setApiKey] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -32,6 +34,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         setProvider(cfg.llmProvider || 'gemini');
         setAuthMode(cfg.llmAuthMode || 'api_key');
         setModel(cfg.llmModel || 'gemini-3.8-flash');
+        setReasoningEnabled(cfg.reasoningEnabled !== false);
+        setReasoningEffort(cfg.reasoningEffort || 'high');
       });
       setSaveSuccess(false);
     }
@@ -75,6 +79,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       LLM_PROVIDER: provider,
       LLM_AUTH_MODE: authMode,
       LLM_MODEL: model,
+      LLM_REASONING_ENABLED: String(reasoningEnabled),
+      LLM_REASONING_EFFORT: reasoningEffort,
     };
     if (apiKey.trim()) {
       // Map API key to corresponding env key
@@ -249,6 +255,77 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
               />
+            </div>
+
+            <div className="settings-field">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label className="settings-label" style={{ marginBottom: 0 }}>
+                  <span>深度思考推演 (Reasoning)</span>
+                  <span className="settings-hint">开启大模型长思维链 (Thinking)</span>
+                </label>
+                <label style={{ position: 'relative', display: 'inline-block', width: '38px', height: '20px' }}>
+                  <input
+                    type="checkbox"
+                    checked={reasoningEnabled}
+                    onChange={(e) => setReasoningEnabled(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      cursor: 'pointer',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: reasoningEnabled ? 'var(--cinnabar)' : 'var(--paper-sunken)',
+                      transition: '.2s',
+                      borderRadius: '20px',
+                      border: '1px solid var(--line-strong)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        content: '""',
+                        height: '14px',
+                        width: '14px',
+                        left: reasoningEnabled ? '19px' : '3px',
+                        bottom: '2px',
+                        backgroundColor: '#fff',
+                        transition: '.2s',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  </span>
+                </label>
+              </div>
+
+              {reasoningEnabled && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  <div
+                    className={`fmt-chip ${reasoningEffort === 'low' ? 'active' : ''}`}
+                    onClick={() => setReasoningEffort('low')}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    轻量 (Low)
+                  </div>
+                  <div
+                    className={`fmt-chip ${reasoningEffort === 'medium' ? 'active' : ''}`}
+                    onClick={() => setReasoningEffort('medium')}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    标准 (Medium)
+                  </div>
+                  <div
+                    className={`fmt-chip ${reasoningEffort === 'high' ? 'active' : ''}`}
+                    onClick={() => setReasoningEffort('high')}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    深度 (High)
+                  </div>
+                </div>
+              )}
             </div>
 
             {authMode === 'api_key' && (

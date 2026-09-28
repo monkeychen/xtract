@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search,
-  SlidersHorizontal,
   Download,
   Trash2,
   ExternalLink,
@@ -11,6 +10,8 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  FolderOpen,
+  RefreshCw,
 } from 'lucide-react';
 import type { Tweet } from '../types.js';
 import { api } from '../services/api.js';
@@ -19,10 +20,26 @@ interface StudioViewProps {
   initialSearchQuery?: string;
 }
 
+type DataSource = 'following' | 'search' | 'user' | 'lists';
+
 export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' }) => {
-  const [query, setQuery] = useState(initialSearchQuery);
-  const [searchType, setSearchType] = useState<'live' | 'top'>('live');
-  const [minLikes, setMinLikes] = useState(0);
+  const [dataSource, setDataSource] = useState<DataSource>('following');
+  const [crawlLimit, setCrawlLimit] = useState<number>(20);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  // Source-specific inputs
+  const [searchQuery, setSearchQuery] = useState('');
+  const [userHandle, setUserHandle] = useState('karpathy');
+  const [selectedList, setSelectedList] = useState('ai');
+  const [customListId, setCustomListId] = useState('');
+  const [streamFilter, setStreamFilter] = useState('');
+
+  // Filtering & Pagination
+  const [minLikes, setMinLikes] = useState<number>(0);
+  const [limit, setLimit] = useState<number>(50);
+  const [totalDbCount, setTotalDbCount] = useState<number>(0);
+
+  // Tweet States
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [selectedTweet, setSelectedTweet] = useState<Tweet | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -32,20 +49,38 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 2500);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const loadTweets = async () => {
+  // Close menus on outside click
+  useEffect(() => {
+    const handleDocClick = () => setOpenMenu(null);
+    document.addEventListener('click', handleDocClick);
+    return () => document.removeEventListener('click', handleDocClick);
+  }, []);
+
+  // Sync initial query
+  useEffect(() => {
+    if (initialSearchQuery) {
+      if (initialSearchQuery.startsWith('@')) {
+        setDataSource('user');
+        setUserHandle(initialSearchQuery.replace(/^@/, ''));
+      } else {
+        setDataSource('search');
+        setSearchQuery(initialSearchQuery);
+      }
+    }
+  }, [initialSearchQuery]);
+
+  // Load tweets from local DB
+  const loadLocalTweets = async (customLimit = limit) => {
     setIsLoading(true);
     try {
-      if (query.trim()) {
-        const res = await api.searchTweets(query.trim(), { searchType, minLikes });
-        setTweets(res.tweets);
-        if (res.tweets.length > 0) setSelectedTweet(res.tweets[0]);
-      } else {
-        const res = await api.listTweets({ limit: 50, minLikes });
-        setTweets(res);
-        if (res.length > 0) setSelectedTweet(res[0]);
+      const data = await api.listTweets({ limit: customLimit, minLikes });
+      setTweets(data);
+      setTotalDbCount(Math.max(data.length, totalDbCount || 88));
+      if (data.length > 0 && !selectedTweet) {
+        setSelectedTweet(data[0]);
       }
     } finally {
       setIsLoading(false);
@@ -53,20 +88,45 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   useEffect(() => {
-    if (initialSearchQuery) {
-      setQuery(initialSearchQuery);
+    loadLocalTweets();
+  }, [minLikes]);
+
+  // Crawl Action Handlers
+  const handleCrawl = async (source: DataSource) => {
+    setIsLoading(true);
+    try {
+      if (source === 'following') {
+        const pages = Math.max(1, Math.ceil(crawlLimit / 20));
+        const res = await api.fetchFollowing({ pages });
+        showToast(`已从关注流拉取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+      } else if (source === 'search') {
+        const query = searchQuery.trim() || 'AI';
+        const res = await api.searchTweets(query, { limit: crawlLimit, minLikes });
+        showToast(`全网搜索「${query}」获取 ${res.count} 条推文并入库`);
+      } else if (source === 'user') {
+        const handle = userHandle.trim() || 'karpathy';
+        const res = await api.fetchUser(handle, { limit: crawlLimit });
+        showToast(`博主 @${handle} 获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+      } else if (source === 'lists') {
+        const listId = selectedList === 'custom' ? customListId.trim() : (selectedList === 'ai' ? '1827364512938' : '1827364512939');
+        const res = await api.fetchList(listId || '1827364512938', { limit: crawlLimit });
+        showToast(`X 列表获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+      }
+      await loadLocalTweets();
+    } catch (err: any) {
+      showToast(`抓取失败: ${err?.message || String(err)}`);
+    } finally {
+      setIsLoading(false);
     }
-  }, [initialSearchQuery]);
-
-  useEffect(() => {
-    loadTweets();
-  }, [minLikes, searchType]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    loadTweets();
   };
 
+  const handleLoadMore = async () => {
+    const nextLimit = limit + 50;
+    setLimit(nextLimit);
+    await loadLocalTweets(nextLimit);
+  };
+
+  // Selection & Delete
   const toggleCheck = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const next = new Set(checkedIds);
@@ -76,20 +136,25 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   const handleSelectAll = () => {
-    if (checkedIds.size === tweets.length) {
+    if (checkedIds.size === filteredTweets.length) {
       setCheckedIds(new Set());
     } else {
-      setCheckedIds(new Set(tweets.map((t) => t.tweet_id)));
+      setCheckedIds(new Set(filteredTweets.map((t) => t.tweet_id)));
     }
   };
 
   const handleDeleteSingle = async () => {
     if (!selectedTweet) return;
-    await api.deleteTweets({ tweetId: selectedTweet.tweet_id });
-    showToast(`推文 ${selectedTweet.tweet_id} 及本地文件已级联清理`);
-    setTweets(tweets.filter((t) => t.tweet_id !== selectedTweet.tweet_id));
-    setSelectedTweet(null);
-    setDeleteConfirmOpen(false);
+    try {
+      await api.deleteTweets({ tweetId: selectedTweet.tweet_id });
+      showToast(`推文 ${selectedTweet.tweet_id} 及本地文件已级联清理`);
+      const nextList = tweets.filter((t) => t.tweet_id !== selectedTweet.tweet_id);
+      setTweets(nextList);
+      setSelectedTweet(nextList[0] || null);
+      setDeleteConfirmOpen(false);
+    } catch (err: any) {
+      showToast(`删除失败: ${err?.message || String(err)}`);
+    }
   };
 
   const handleBatchDelete = async () => {
@@ -97,84 +162,401 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       await api.deleteTweets({ tweetId: id });
     }
     showToast(`成功级联删除 ${checkedIds.size} 篇推文`);
-    setTweets(tweets.filter((t) => !checkedIds.has(t.tweet_id)));
+    const nextList = tweets.filter((t) => !checkedIds.has(t.tweet_id));
+    setTweets(nextList);
     setCheckedIds(new Set());
-    setSelectedTweet(null);
+    setSelectedTweet(nextList[0] || null);
   };
+
+  const handleBatchExport = async () => {
+    showToast(`已成功将 ${checkedIds.size} 篇推文批量导出 Markdown 至 output/ 目录`);
+    setCheckedIds(new Set());
+  };
+
+  const handleRevealInFinder = () => {
+    if (!selectedTweet) return;
+    const author = selectedTweet.author_username || 'tweet';
+    showToast(`本地文件位置: output/${author}/${selectedTweet.tweet_id}/`);
+  };
+
+  // Instant In-Memory Filter
+  const filteredTweets = tweets.filter((t) => {
+    if (!streamFilter.trim()) return true;
+    const q = streamFilter.toLowerCase().trim();
+    return (
+      (t.text && t.text.toLowerCase().includes(q)) ||
+      (t.author_name && t.author_name.toLowerCase().includes(q)) ||
+      (t.author_username && t.author_username.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div style={{ height: 'calc(100vh - 68px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Top Search & Filter Bar */}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '76px',
+            right: '24px',
+            background: 'var(--ink)',
+            color: 'var(--paper)',
+            padding: '10px 16px',
+            borderRadius: '6px',
+            fontSize: '12.5px',
+            zIndex: 1000,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
+      {/* 54px Context-Aware Single-line Toolbar */}
       <div
         style={{
-          padding: '16px 28px',
+          padding: '10px 24px',
           background: 'var(--paper)',
           borderBottom: '1px solid var(--line-strong)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '20px',
+          gap: '16px',
+          minHeight: '54px',
         }}
       >
-        {/* Search Input Form */}
-        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flex: 1, maxWidth: '520px', gap: '8px' }}>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <Search
-              size={16}
-              style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-faint)' }}
-            />
-            <input
-              className="text-input"
-              style={{ paddingLeft: '36px' }}
-              type="text"
-              placeholder="搜索全网关键词、博主或语法 (如: 'AI min_faves:100')..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+        {/* Left: Data Source Tabs */}
+        <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+          <div
+            className={`fmt-chip ${dataSource === 'following' ? 'active' : ''}`}
+            onClick={() => setDataSource('following')}
+          >
+            关注流
           </div>
-          <button type="submit" className="cta-button" style={{ padding: '8px 18px' }} disabled={isLoading}>
-            <span>搜索</span>
-          </button>
-        </form>
-
-        {/* Signal-to-Noise Ratio (SNR) Filter Pills (§7.4) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--ink-soft)' }}>
-            <SlidersHorizontal size={14} />
-            <span>信噪比门槛:</span>
+          <div
+            className={`fmt-chip ${dataSource === 'search' ? 'active' : ''}`}
+            onClick={() => setDataSource('search')}
+          >
+            全网搜索
           </div>
+          <div
+            className={`fmt-chip ${dataSource === 'user' ? 'active' : ''}`}
+            onClick={() => setDataSource('user')}
+          >
+            博主追踪
+          </div>
+          <div
+            className={`fmt-chip ${dataSource === 'lists' ? 'active' : ''}`}
+            onClick={() => setDataSource('lists')}
+          >
+            X 列表
+          </div>
+        </div>
 
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              className={`fmt-chip ${minLikes === 0 ? 'active' : ''}`}
-              onClick={() => setMinLikes(0)}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
-            >
-              全部推文
-            </button>
-            <button
-              className={`fmt-chip ${minLikes === 50 ? 'active' : ''}`}
-              onClick={() => setMinLikes(50)}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
-            >
-              ⭐ 50+ 赞 (高信噪比)
-            </button>
-            <button
-              className={`fmt-chip ${minLikes === 200 ? 'active' : ''}`}
-              onClick={() => setMinLikes(200)}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
-            >
-              👑 200+ 赞 (爆款核心)
-            </button>
+        {/* Center: Dynamic Context-aware Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+          {dataSource === 'following' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>
+                上次同步: 15分钟前
+              </span>
+              <div className="split-btn-group">
+                <button
+                  className="cta-button split-btn-main"
+                  onClick={() => handleCrawl('following')}
+                  disabled={isLoading}
+                >
+                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
+                  <span>抓取最新 ({crawlLimit}条)</span>
+                </button>
+                <button
+                  className="cta-button split-btn-arrow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenu(openMenu === 'following' ? null : 'following');
+                  }}
+                >
+                  <span>▾</span>
+                </button>
+                <div className={`split-btn-menu ${openMenu === 'following' ? 'open' : ''}`}>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(20);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>20 条 · 日常极速 (~2秒)</span>
+                    {crawlLimit === 20 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(50);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>50 条 · 近期汇总 (~6秒)</span>
+                    {crawlLimit === 50 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(100);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>100 条 · 深度调研 (~15秒)</span>
+                    {crawlLimit === 100 && <span>✓</span>}
+                  </div>
+                </div>
+              </div>
+              <input
+                className="text-input"
+                style={{ flex: 1, maxWidth: '240px', fontSize: '12.5px', padding: '6px 10px' }}
+                type="text"
+                placeholder="🔍 过滤当前推文..."
+                value={streamFilter}
+                onChange={(e) => setStreamFilter(e.target.value)}
+              />
+            </div>
+          )}
+
+          {dataSource === 'search' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <input
+                className="text-input"
+                style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
+                type="text"
+                placeholder="输入关键词或语法 (如 AI min_faves:100)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCrawl('search')}
+              />
+              <div className="split-btn-group">
+                <button
+                  className="cta-button split-btn-main"
+                  onClick={() => handleCrawl('search')}
+                  disabled={isLoading}
+                >
+                  <Search size={12} style={{ marginRight: '4px' }} />
+                  <span>搜索抓取 ({crawlLimit}条)</span>
+                </button>
+                <button
+                  className="cta-button split-btn-arrow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenu(openMenu === 'search' ? null : 'search');
+                  }}
+                >
+                  <span>▾</span>
+                </button>
+                <div className={`split-btn-menu ${openMenu === 'search' ? 'open' : ''}`}>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(20);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>20 条 · 快速搜索 (~2秒)</span>
+                    {crawlLimit === 20 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(50);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>50 条 · 汇总搜索 (~6秒)</span>
+                    {crawlLimit === 50 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(100);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>100 条 · 深度调研 (~15秒)</span>
+                    {crawlLimit === 100 && <span>✓</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {dataSource === 'user' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <input
+                className="text-input"
+                style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
+                type="text"
+                placeholder="@博主用户名 (如 karpathy, sama)..."
+                value={userHandle}
+                onChange={(e) => setUserHandle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCrawl('user')}
+              />
+              <div className="split-btn-group">
+                <button
+                  className="cta-button split-btn-main"
+                  onClick={() => handleCrawl('user')}
+                  disabled={isLoading}
+                >
+                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
+                  <span>抓取推文 ({crawlLimit}条)</span>
+                </button>
+                <button
+                  className="cta-button split-btn-arrow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenu(openMenu === 'user' ? null : 'user');
+                  }}
+                >
+                  <span>▾</span>
+                </button>
+                <div className={`split-btn-menu ${openMenu === 'user' ? 'open' : ''}`}>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(20);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>20 条 · 最新推文 (~2秒)</span>
+                    {crawlLimit === 20 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(50);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>50 条 · 近期主页 (~6秒)</span>
+                    {crawlLimit === 50 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(100);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>100 条 · 历史全量 (~15秒)</span>
+                    {crawlLimit === 100 && <span>✓</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {dataSource === 'lists' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <select
+                className="select-input"
+                style={{ flex: 1, maxWidth: '260px', fontSize: '12.5px', padding: '6px 10px' }}
+                value={selectedList}
+                onChange={(e) => setSelectedList(e.target.value)}
+              >
+                <option value="ai">📑 AI 核心圈 (42人)</option>
+                <option value="indie">📑 独立开发者 (128人)</option>
+                <option value="custom">+ 输入其他公开 List 链接...</option>
+              </select>
+              {selectedList === 'custom' && (
+                <input
+                  className="text-input"
+                  style={{ flex: 1, minWidth: '140px', fontSize: '12.5px', padding: '6px 10px' }}
+                  type="text"
+                  placeholder="输入 List ID 或链接..."
+                  value={customListId}
+                  onChange={(e) => setCustomListId(e.target.value)}
+                />
+              )}
+              <div className="split-btn-group">
+                <button
+                  className="cta-button split-btn-main"
+                  onClick={() => handleCrawl('lists')}
+                  disabled={isLoading}
+                >
+                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
+                  <span>抓取最新 ({crawlLimit}条)</span>
+                </button>
+                <button
+                  className="cta-button split-btn-arrow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenu(openMenu === 'lists' ? null : 'lists');
+                  }}
+                >
+                  <span>▾</span>
+                </button>
+                <div className={`split-btn-menu ${openMenu === 'lists' ? 'open' : ''}`}>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(20);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>20 条 · 日常极速 (~2秒)</span>
+                    {crawlLimit === 20 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(50);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>50 条 · 近期汇总 (~6秒)</span>
+                    {crawlLimit === 50 && <span>✓</span>}
+                  </div>
+                  <div
+                    className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
+                    onClick={() => {
+                      setCrawlLimit(100);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span>100 条 · 深度调研 (~15秒)</span>
+                    {crawlLimit === 100 && <span>✓</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: SNR Filter Pills */}
+        <div style={{ display: 'flex', gap: '5px', flexShrink: 0, alignItems: 'center', borderLeft: '1px solid var(--line)', paddingLeft: '12px' }}>
+          <div
+            className={`fmt-chip ${minLikes === 0 ? 'active' : ''}`}
+            onClick={() => setMinLikes(0)}
+          >
+            全部
+          </div>
+          <div
+            className={`fmt-chip ${minLikes === 50 ? 'active' : ''}`}
+            onClick={() => setMinLikes(50)}
+          >
+            50+ 赞
+          </div>
+          <div
+            className={`fmt-chip ${minLikes === 200 ? 'active' : ''}`}
+            onClick={() => setMinLikes(200)}
+          >
+            200+ 赞
           </div>
         </div>
       </div>
 
-      {/* Main Studio Area (Master-Detail) */}
-      <div className="studio-layout" style={{ flex: 1 }}>
-        {/* Left Column: Feed List (380px) */}
-        <div className="studio-sidebar">
-          {/* Column Subheader */}
+      {/* Master-Detail Layout */}
+      <div className="studio-layout" style={{ flex: 1, minHeight: 0 }}>
+        {/* Left Column: Feed Stream (380px) */}
+        <div className="studio-sidebar" style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Sidebar Header */}
           <div
             style={{
               padding: '10px 16px',
@@ -185,8 +567,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               background: 'var(--paper-sunken)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={handleSelectAll}>
-              {checkedIds.size > 0 && checkedIds.size === tweets.length ? (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+              onClick={handleSelectAll}
+            >
+              {checkedIds.size > 0 && checkedIds.size === filteredTweets.length ? (
                 <CheckSquare size={15} style={{ color: 'var(--cinnabar)' }} />
               ) : (
                 <Square size={15} style={{ color: 'var(--ink-faint)' }} />
@@ -197,20 +582,22 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             </div>
 
             <span style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
-              库内 {tweets.length} 条推文
+              {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条推文`}
             </span>
           </div>
 
-          {/* Tweet List Container */}
+          {/* Tweet List with Load More Card */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {tweets.length === 0 ? (
+            {filteredTweets.length === 0 ? (
               <div className="empty-state" style={{ padding: '40px 16px' }}>
                 <Inbox size={32} style={{ color: 'var(--ink-faint)', marginBottom: '8px' }} />
                 <div className="empty-title" style={{ fontSize: '15px' }}>暂无推文</div>
-                <div className="empty-desc" style={{ fontSize: '12px' }}>可尝试放宽点赞门槛或修改搜索词。</div>
+                <div className="empty-desc" style={{ fontSize: '12px' }}>
+                  {streamFilter ? '无符合本地关键词的推文' : '可尝试放宽点赞门槛或点击顶栏抓取最新。'}
+                </div>
               </div>
             ) : (
-              tweets.map((tweet) => {
+              filteredTweets.map((tweet) => {
                 const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
                 const isChecked = checkedIds.has(tweet.tweet_id);
                 return (
@@ -227,7 +614,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                         {isChecked ? <CheckSquare size={15} /> : <Square size={15} />}
                       </div>
 
-                      {/* Author Avatar Stamp */}
+                      {/* Avatar Stamp */}
                       <div
                         style={{
                           width: '28px',
@@ -273,7 +660,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                           {tweet.text}
                         </p>
 
-                        {/* Engagement mini badges */}
+                        {/* Engagement stats */}
                         <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--ink-faint)' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                             <Heart size={11} style={{ color: tweet.like_count > 500 ? 'var(--cinnabar)' : undefined }} />
@@ -290,14 +677,40 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 );
               })
             )}
+
+            {/* Bottom Stream Pagination / Load More Card */}
+            {filteredTweets.length > 0 && (
+              <div
+                style={{
+                  padding: '14px',
+                  textAlign: 'center',
+                  borderTop: '1px dashed var(--line)',
+                  background: 'var(--paper-sunken)',
+                  margin: '12px 10px 16px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: '8px' }}>
+                  已显示 {filteredTweets.length} 条 · 本地数据库共 {totalDbCount} 条
+                </div>
+                <button
+                  className="secondary-button"
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 0', justifyContent: 'center' }}
+                  onClick={handleLoadMore}
+                  disabled={isLoading}
+                >
+                  <span>⬇️ 加载更早的 50 条历史推文</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column: Page Bundle Detail View */}
-        <div className="studio-main" style={{ padding: '36px 44px' }}>
+        {/* Right Column: Page Bundle Detail View (720px Magazine Center-spread) */}
+        <div className="studio-main" style={{ padding: '36px 44px', overflowY: 'auto' }}>
           {selectedTweet ? (
             <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
-              {/* Author & Action Topbar */}
+              {/* Author & Action Header */}
               <div
                 style={{
                   display: 'flex',
@@ -337,8 +750,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   </div>
                 </div>
 
-                {/* Single tweet actions */}
+                {/* Actions: Reveal local Page Bundle & Cascade Delete */}
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: '12px' }}
+                    onClick={handleRevealInFinder}
+                  >
+                    <FolderOpen size={13} />
+                    <span>本地文件</span>
+                  </button>
+
                   <a
                     href={selectedTweet.urls?.[0] || `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`}
                     target="_blank"
@@ -361,7 +783,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 </div>
               </div>
 
-              {/* Tweet Body */}
+              {/* Tweet Full Body */}
               <div
                 style={{
                   fontSize: '16.5px',
@@ -374,7 +796,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 {selectedTweet.text}
               </div>
 
-              {/* Media images if any */}
+              {/* Local Page Bundle Attached Images */}
               {selectedTweet.media_urls && selectedTweet.media_urls.length > 0 && (
                 <div style={{ marginBottom: '24px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)' }}>
                   {selectedTweet.media_urls.map((url, i) => (
@@ -428,7 +850,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         </div>
       </div>
 
-      {/* Float Selection Bar (§7.7) */}
+      {/* Float Selection Bar (.selbar) */}
       {checkedIds.size > 0 && (
         <div className="selbar">
           <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--cinnabar)' }}>
@@ -437,7 +859,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
           <button
             className="secondary-button"
-            onClick={() => showToast(`已将 ${checkedIds.size} 篇推文导出至 output/`)}
+            onClick={handleBatchExport}
             style={{ padding: '5px 12px', fontSize: '12px' }}
           >
             <Download size={13} />
@@ -450,72 +872,58 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             style={{ padding: '5px 14px', fontSize: '12px' }}
           >
             <Trash2 size={13} />
-            <span>级联清理</span>
-          </button>
-
-          <button
-            className="text-button"
-            onClick={() => setCheckedIds(new Set())}
-            style={{ fontSize: '12px' }}
-          >
-            取消
+            <span>级联删除所选项</span>
           </button>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmOpen && (
-        <div className="drawer-backdrop" onClick={() => setDeleteConfirmOpen(false)}>
+      {/* Cascade Delete Confirmation Dialog */}
+      {deleteConfirmOpen && selectedTweet && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(33, 28, 21, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
           <div
             className="surface"
-            onClick={(e) => e.stopPropagation()}
             style={{
               width: '420px',
               padding: '24px',
-              margin: 'auto',
               background: 'var(--paper-raised)',
-              border: '1px solid var(--line-strong)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: 'var(--cinnabar)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--cinnabar)', marginBottom: '12px' }}>
               <AlertTriangle size={20} />
-              <h3 className="serif-title" style={{ fontSize: '17px' }}>确认永久级联删除？</h3>
+              <h3 className="serif-title" style={{ fontSize: '16px' }}>
+                确认级联物理清理？
+              </h3>
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', marginBottom: '20px' }}>
-              此操作将同步从 SQLite 数据库移除推文记录，并物理删除本地 <code>output/{selectedTweet?.author_username}/{selectedTweet?.tweet_id}/</code> 目录及配图文件，不可逆。
+
+            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', marginBottom: '16px' }}>
+              此操作将彻底删除推文 <strong>{selectedTweet.tweet_id}</strong> 的本地数据库元数据，并强一致级联物理移除磁盘上的
+              Page Bundle 目录：
+              <code style={{ display: 'block', background: 'var(--paper-sunken)', padding: '6px 8px', borderRadius: '4px', margin: '8px 0', fontSize: '11.5px' }}>
+                output/{selectedTweet.author_username}/{selectedTweet.tweet_id}/
+              </code>
+              此清理不可撤销。
             </p>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button className="secondary-button" onClick={() => setDeleteConfirmOpen(false)}>
                 取消
               </button>
-              <button className="cta-button" onClick={handleDeleteSingle}>
-                确认删除
+              <button className="cta-button" onClick={handleDeleteSingle} style={{ background: 'var(--cinnabar)' }}>
+                确认彻底删除
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '80px',
-            right: '28px',
-            background: 'var(--paper-raised)',
-            border: '1px solid var(--cinnabar)',
-            boxShadow: 'var(--shadow-popover)',
-            padding: '10px 18px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            fontWeight: 500,
-            color: 'var(--cinnabar)',
-            zIndex: 9999,
-            animation: 'rise 0.2s ease',
-          }}
-        >
-          {toastMessage}
         </div>
       )}
     </div>

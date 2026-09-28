@@ -32,6 +32,11 @@ export const App: React.FC = () => {
     setActiveTab('studio');
   };
 
+  const handleJumpToTweet = (tweetIdOrHandle: string) => {
+    setStudioQuery(tweetIdOrHandle);
+    setActiveTab('studio');
+  };
+
   const handleGenerateDigestForTrend = (_topic: TrendTopic) => {
     setActiveTab('reports');
   };
@@ -49,7 +54,7 @@ export const App: React.FC = () => {
 
       {/* Main View Container */}
       <main style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'reports' && <ReportsView />}
+        {activeTab === 'reports' && <ReportsView onJumpToTweet={handleJumpToTweet} />}
         {activeTab === 'trends' && (
           <TrendsView
             onSearchInStudio={handleSearchInStudio}

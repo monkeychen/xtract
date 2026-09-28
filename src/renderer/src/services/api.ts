@@ -35,6 +35,8 @@ class ApiService {
       llmProvider: 'gemini',
       llmAuthMode: 'api_key',
       llmModel: 'gemini-3.8-flash',
+      reasoningEnabled: true,
+      reasoningEffort: 'high',
       hasXCredentials: true,
       xAuthTokenMasked: '2a8f••••••••78b9',
       xCt0Masked: 'c901••••••••55aa',
@@ -49,8 +51,40 @@ class ApiService {
     const current = await this.getConfig();
     return {
       success: true,
-      config: { ...current, ...updates },
+      config: {
+        ...current,
+        reasoningEnabled: updates.LLM_REASONING_ENABLED !== undefined ? updates.LLM_REASONING_ENABLED !== 'false' : current.reasoningEnabled,
+        reasoningEffort: (updates.LLM_REASONING_EFFORT as any) || current.reasoningEffort,
+        llmProvider: updates.LLM_PROVIDER || current.llmProvider,
+        llmAuthMode: updates.LLM_AUTH_MODE || current.llmAuthMode,
+        llmModel: updates.LLM_MODEL || current.llmModel,
+        httpProxy: updates.HTTP_PROXY || current.httpProxy,
+      },
     };
+  }
+
+  async fetchFollowing(options: { pages?: number } = {}) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.fetchFollowing(options);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return { fetched: 20, inserted: 5, skipped: 15 };
+  }
+
+  async fetchUser(username: string, options: { limit?: number } = {}) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.fetchUser(username, options);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return { fetched: options.limit || 20, inserted: 3, skipped: 17 };
+  }
+
+  async fetchList(listId: string, options: { limit?: number } = {}) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.fetchList(listId, options);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return { fetched: options.limit || 20, inserted: 4, skipped: 16 };
   }
 
   async getTrends(category: string = 'tech', top: number = 10): Promise<TrendTopic[]> {

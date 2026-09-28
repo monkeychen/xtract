@@ -34,6 +34,19 @@ export class Config {
   static readonly LLM_AUTH_MODE = (process.env.LLM_AUTH_MODE || 'account').toLowerCase().trim();
   static readonly LLM_MODEL = (process.env.LLM_MODEL || '').trim();
 
+  // Reasoning Settings
+  static get LLM_REASONING_ENABLED(): boolean {
+    return (process.env.LLM_REASONING_ENABLED || 'true').toLowerCase().trim() !== 'false';
+  }
+
+  static get LLM_REASONING_EFFORT(): 'low' | 'medium' | 'high' {
+    const effort = (process.env.LLM_REASONING_EFFORT || 'high').toLowerCase().trim();
+    if (effort === 'low' || effort === 'medium' || effort === 'high') {
+      return effort;
+    }
+    return 'high';
+  }
+
   // API Keys Pool
   static readonly GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
   static readonly GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();

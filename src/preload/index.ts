@@ -16,6 +16,8 @@ export interface AppConfigView {
   llmProvider: string;
   llmAuthMode: string;
   llmModel: string;
+  reasoningEnabled: boolean;
+  reasoningEffort: 'low' | 'medium' | 'high';
   hasXCredentials: boolean;
   xAuthTokenMasked: string;
   xCt0Masked: string;

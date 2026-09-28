@@ -125,6 +125,26 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(config).toBeDefined();
     expect(typeof config.llmProvider).toBe('string');
     expect(typeof config.hasXCredentials).toBe('boolean');
+    expect(typeof config.reasoningEnabled).toBe('boolean');
+    expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
+  });
+
+  it('Preload updateConfig should update reasoning settings and return updated config', async () => {
+    registerIpcHandlers();
+
+    const res = await xtractApiImplementation.updateConfig({
+      LLM_REASONING_ENABLED: 'false',
+      LLM_REASONING_EFFORT: 'low',
+    });
+    expect(res.success).toBe(true);
+    expect(res.config.reasoningEnabled).toBe(false);
+    expect(res.config.reasoningEffort).toBe('low');
+
+    // Restore default
+    await xtractApiImplementation.updateConfig({
+      LLM_REASONING_ENABLED: 'true',
+      LLM_REASONING_EFFORT: 'high',
+    });
   });
 
   it('Preload onStreamEvent should register and unregister IPC listener', () => {

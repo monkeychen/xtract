@@ -171,20 +171,20 @@ export const TrendsView: React.FC<TrendsViewProps> = ({
               >
                 <button
                   className="secondary-button"
-                  style={{ flex: 1, padding: '6px 10px', fontSize: '12.5px' }}
-                  onClick={() => onSearchInStudio(trend.name)}
+                  style={{ flex: 1, padding: '6px 10px', fontSize: '12.5px', justifyContent: 'center' }}
+                  onClick={() => onSearchInStudio(trend.query || trend.name)}
                 >
                   <Search size={13} />
-                  <span>检索推文</span>
+                  <span>查看推文</span>
                 </button>
 
                 <button
                   className="cta-button"
-                  style={{ flex: 1, padding: '6px 10px', fontSize: '12.5px' }}
+                  style={{ flex: 1, padding: '6px 10px', fontSize: '12.5px', justifyContent: 'center' }}
                   onClick={() => onGenerateDigestForTrend(trend)}
                 >
                   <Sparkles size={13} />
-                  <span>挖掘研报</span>
+                  <span>生成研报</span>
                 </button>
               </div>
             </div>

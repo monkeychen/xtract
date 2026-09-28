@@ -113,6 +113,26 @@ describe('LLM Module', () => {
     expect(userContent[0].type).toBe('text');
     expect(userContent[1].type).toBe('image_url');
     expect(userContent[1].image_url.url).toBe('https://example.com/cat.png');
+
+    // 5. Reasoning disabled (reasoningEnabled: false)
+    await zhipu.generate('Fast prompt', { reasoningEnabled: false });
+    expect(capturedBody.thinking).toEqual({ type: 'disabled' });
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+
+    await qwen.generate('Fast prompt', { reasoningEnabled: false });
+    expect(capturedBody.enable_thinking).toBe(false);
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+
+    await openai.generate('Fast prompt', { reasoningEnabled: false });
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+
+    // 6. Reasoning with medium effort
+    await qwen.generate('Medium prompt', { reasoningEnabled: true, reasoningEffort: 'medium' });
+    expect(capturedBody.enable_thinking).toBe(true);
+    expect(capturedBody.reasoning_effort).toBe('medium');
+
+    await openai.generate('Low prompt', { reasoningEnabled: true, reasoningEffort: 'low' });
+    expect(capturedBody.reasoning_effort).toBe('low');
   });
 
   it('test_refine_search_queries (1:1 mirror)', async () => {
