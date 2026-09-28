@@ -14,19 +14,37 @@ export const TrendsView: React.FC<TrendsViewProps> = ({
   const [category, setCategory] = useState<'tech' | 'all' | 'business' | 'news' | 'entertainment'>('tech');
   const [trends, setTrends] = useState<TrendTopic[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isFromCache, setIsFromCache] = useState(true);
 
-  const fetchTrends = async (cat: string) => {
+  const formatTime = (iso?: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const now = new Date();
+    const diffMin = Math.floor((now.getTime() - d.getTime()) / 60000);
+    if (diffMin < 1) return '刚刚';
+    if (diffMin < 60) return `${diffMin} 分钟前`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours} 小时前`;
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const loadTrends = async (cat: string, refresh = false) => {
     setIsLoading(true);
     try {
-      const data = await api.getTrends(cat, 12);
+      const data = await api.getTrends(cat, { top: 12, refresh });
       setTrends(data);
+      setLastUpdated(data.updatedAt || null);
+      setIsFromCache(Boolean(data.fromCache));
     } finally {
       setIsLoading(false);
     }
   };
 
+  // On category switch, load cached data immediately without hitting the network
   useEffect(() => {
-    fetchTrends(category);
+    loadTrends(category, false);
   }, [category]);
 
   const categories = [
@@ -39,21 +57,72 @@ export const TrendsView: React.FC<TrendsViewProps> = ({
 
   return (
     <main id="view-trends" className="view-container" style={{ overflowY: 'auto', padding: '32px 48px 80px' }}>
-      {/* 标题 */}
+      {/* 标题与缓存状态 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px' }}>
         <div>
-          <h1 className="serif-title" style={{ fontSize: '28px' }}>
-            全网趋势
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1 className="serif-title" style={{ fontSize: '28px' }}>
+              全网趋势
+            </h1>
+            {lastUpdated && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: isFromCache ? 'var(--paper-sunken)' : 'rgba(34, 197, 94, 0.1)',
+                  color: isFromCache ? 'var(--ink-soft)' : '#16a34a',
+                  border: '1px solid var(--line)',
+                }}
+              >
+                {isFromCache ? `📦 本地缓存 (${formatTime(lastUpdated)})` : '⚡ 实时数据'}
+              </span>
+            )}
+          </div>
           <p style={{ color: 'var(--ink-soft)', fontSize: '14px', marginTop: '4px' }}>
-            当前 X 热门议题与讨论聚合
+            {trends.length > 0
+              ? '已优先载入本地缓存趋势，可随时点击右侧按需刷新全网实时流'
+              : '当前分类暂无本地缓存数据'}
           </p>
         </div>
 
-        <button className="secondary-button" onClick={() => fetchTrends(category)} disabled={isLoading}>
-          <span>{isLoading ? '🔄 正在刷新...' : '🔄 刷新'}</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            className="secondary-button"
+            onClick={() => loadTrends(category, true)}
+            disabled={isLoading}
+            title="通过真实浏览器向 X 发起实时拦截抓取"
+          >
+            <span>{isLoading ? '🔄 正在从 X 抓取...' : '🔄 刷新实时数据'}</span>
+          </button>
+        </div>
       </div>
+
+      {/* 实时抓取提示横幅 */}
+      {isLoading && (
+        <div
+          style={{
+            padding: '12px 18px',
+            marginBottom: '20px',
+            background: 'var(--paper-sunken)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-sm)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '13px',
+            color: 'var(--ink)',
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>⏳</span>
+          <div>
+            <strong>正在安全连接 X (Explore Trends) 网络流...</strong>
+            <span style={{ color: 'var(--ink-soft)', marginLeft: '8px' }}>
+              真实浏览器正在监听官方流，避免触发封控限制，大约需要 3-5 秒
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 分类药丸 (§7.4) */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '26px' }}>
@@ -67,6 +136,32 @@ export const TrendsView: React.FC<TrendsViewProps> = ({
           </div>
         ))}
       </div>
+
+      {/* 无缓存空状态 */}
+      {trends.length === 0 && !isLoading && (
+        <div
+          className="surface"
+          style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            color: 'var(--ink-soft)',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px dashed var(--line-strong)',
+            marginBottom: '32px',
+          }}
+        >
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>📡</div>
+          <h3 className="serif-title" style={{ fontSize: '18px', color: 'var(--ink)', marginBottom: '8px' }}>
+            本地暂无【{categories.find((c) => c.id === category)?.label}】分类趋势缓存
+          </h3>
+          <p style={{ fontSize: '13px', marginBottom: '20px', maxWidth: '440px', margin: '0 auto 20px', lineHeight: '1.6' }}>
+            系统遵循「本地优先」原则，默认不后台自动发起抓取。点击下方按钮即可连接 X 官方接口拉取最新实时热点榜单。
+          </p>
+          <button className="cta-button" onClick={() => loadTrends(category, true)} style={{ margin: '0 auto' }}>
+            <span>⚡ 立即从 X 抓取最新趋势</span>
+          </button>
+        </div>
+      )}
 
       {/* 趋势卡片网格 */}
       <div

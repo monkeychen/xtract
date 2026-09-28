@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, shell } from 'electron';
 import { IPC_CHANNELS } from '../../preload/channels.js';
 import type { StreamEvent, AppConfigView } from '../../preload/index.js';
 import { Config } from '../config.js';
@@ -124,12 +124,33 @@ export function registerIpcHandlers(
   // 3. Trends & Digest
   ipcMain.handle(
     IPC_CHANNELS.TRENDS_FETCH,
-    async (_event, args?: { category?: string; top?: number }) => {
+    async (_event, args?: { category?: string; top?: number; refresh?: boolean }) => {
+      const category = args?.category || 'tech';
+      const top = args?.top || 10;
+
+      // 1. Check local cache first if not explicitly asked to refresh
+      if (!args?.refresh) {
+        const cached = storage.getCachedTrends(category);
+        if (cached && cached.trends.length > 0) {
+          const list: any = cached.trends.slice(0, top);
+          list.updatedAt = cached.updatedAt;
+          list.fromCache = true;
+          return list;
+        }
+      }
+
+      // 2. Fetch fresh trends from X
       const client = new XClient();
-      return await client.fetchExploreTrends({
-        category: args?.category || 'tech',
-        top: args?.top || 10,
+      const fresh = await client.fetchExploreTrends({
+        category,
+        top,
       });
+
+      storage.saveCachedTrends(category, fresh);
+      const list: any = fresh.slice(0, top);
+      list.updatedAt = new Date().toISOString();
+      list.fromCache = false;
+      return list;
     }
   );
 
@@ -289,10 +310,23 @@ export function registerIpcHandlers(
     IPC_CHANNELS.TWEETS_LIST,
     async (
       _event,
-      options?: { limit?: number; minLikes?: number; minRetweets?: number; user?: string }
+      options?: {
+        limit?: number;
+        minLikes?: number;
+        minRetweets?: number;
+        user?: string;
+        query?: string;
+      }
     ): Promise<Tweet[]> => {
       if (options?.user) {
         return storage.getTweetsByUser(options.user, {
+          limit: options.limit || 20,
+          minLikes: options.minLikes || 0,
+          minRetweets: options.minRetweets || 0,
+        });
+      }
+      if (options?.query) {
+        return storage.searchLocalTweets(options.query, {
           limit: options.limit || 20,
           minLikes: options.minLikes || 0,
           minRetweets: options.minRetweets || 0,
@@ -401,5 +435,56 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     win?.close();
+  });
+
+  // 7. Shell & Native OS Integration
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, async (_event, url: string) => {
+    try {
+      if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+        await shell.openExternal(url);
+        return { success: true };
+      }
+      return { success: false, error: '链接格式无效，仅支持 http/https 协议' };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_SHOW_ITEM_IN_FOLDER, async (_event, itemPath: string) => {
+    try {
+      let target = itemPath;
+      if (!path.isAbsolute(target)) {
+        target = path.resolve(Config.PROJECT_ROOT, target);
+      }
+      if (fs.existsSync(target)) {
+        shell.showItemInFolder(target);
+        return { success: true, path: target };
+      }
+      // If direct item doesn't exist, check parent dir
+      const parentDir = path.dirname(target);
+      if (fs.existsSync(parentDir)) {
+        await shell.openPath(parentDir);
+        return { success: true, path: parentDir };
+      }
+      return { success: false, error: `路径不存在: ${target}` };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_PATH, async (_event, dirPath: string) => {
+    try {
+      let target = dirPath;
+      if (!path.isAbsolute(target)) {
+        target = path.resolve(Config.PROJECT_ROOT, target);
+      }
+      if (fs.existsSync(target)) {
+        await shell.openPath(target);
+        return { success: true, path: target };
+      }
+      return { success: false, error: `目录不存在: ${target}` };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
   });
 }

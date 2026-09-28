@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
-import type { Tweet, DeleteFilter, DeleteResult } from '../types.js';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
   const lower = url.toLowerCase();
@@ -121,6 +121,11 @@ export class Storage {
       );
       CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
       CREATE INDEX IF NOT EXISTS idx_fetched_at ON tweets(fetched_at);
+      CREATE TABLE IF NOT EXISTS trends_cache (
+        category TEXT PRIMARY KEY,
+        trends_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -294,6 +299,55 @@ export class Storage {
 
     const rows = stmt.all(cleanName, minLikes, minRetweets, limit) as Record<string, unknown>[];
     return rows.map(this.mapRowToTweet);
+  }
+
+  public searchLocalTweets(
+    query: string,
+    options: { limit?: number; minLikes?: number; minRetweets?: number } = {}
+  ): Tweet[] {
+    const limit = options.limit ?? 50;
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+    const q = `%${query.trim().toLowerCase()}%`;
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM tweets
+      WHERE (LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)
+        AND like_count >= ? AND retweet_count >= ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+
+    const rows = stmt.all(q, q, q, minLikes, minRetweets, limit) as Record<string, unknown>[];
+    return rows.map(this.mapRowToTweet);
+  }
+
+  public getCachedTrends(category: string): { trends: TrendTopic[]; updatedAt: string } | null {
+    const row = this.db
+      .prepare('SELECT trends_json, updated_at FROM trends_cache WHERE category = ?')
+      .get(category.toLowerCase()) as { trends_json: string; updated_at: string } | undefined;
+    if (!row) return null;
+    try {
+      const trends = JSON.parse(row.trends_json) as TrendTopic[];
+      return { trends, updatedAt: row.updated_at };
+    } catch {
+      return null;
+    }
+  }
+
+  public saveCachedTrends(category: string, trends: TrendTopic[]): void {
+    const nowIso = new Date().toISOString();
+    this.db
+      .prepare(
+        `
+      INSERT INTO trends_cache (category, trends_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(category) DO UPDATE SET
+        trends_json = excluded.trends_json,
+        updated_at = excluded.updated_at
+    `
+      )
+      .run(category.toLowerCase(), JSON.stringify(trends), nowIso);
   }
 
   public getThreadTweets(tweetId: string): Tweet[] {

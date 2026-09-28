@@ -30,10 +30,24 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   // Tweet States
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [selectedTweet, setSelectedTweet] = useState<Tweet | null>(null);
+  const [exportPath, setExportPath] = useState<string | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Live Crawl Progress State
+  const [crawlProgress, setCrawlProgress] = useState<{
+    active: boolean;
+    source: DataSource;
+    title: string;
+    stage: string;
+    detail: string;
+    percent: number;
+    completed?: boolean;
+    error?: string;
+  } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -87,24 +101,46 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   useEffect(() => {
     if (initialSearchQuery) {
       if (initialSearchQuery.startsWith('@')) {
+        const handle = initialSearchQuery.replace(/^@/, '');
         setDataSource('user');
-        setUserHandle(initialSearchQuery.replace(/^@/, ''));
+        setUserHandle(handle);
+        loadLocalTweets(limit, 'user', undefined, handle);
       } else {
         setDataSource('search');
         setSearchQuery(initialSearchQuery);
+        loadLocalTweets(limit, 'search', initialSearchQuery);
       }
     }
   }, [initialSearchQuery]);
 
-  // Load tweets from local DB
-  const loadLocalTweets = async (customLimit = limit) => {
+  // Load tweets from local DB filtered by active data source
+  const loadLocalTweets = async (
+    customLimit = limit,
+    source = dataSource,
+    queryParam?: string,
+    userParam?: string
+  ) => {
     setIsLoading(true);
     try {
-      const data = await api.listTweets({ limit: customLimit, minLikes });
+      let data: Tweet[] = [];
+      if (source === 'user') {
+        const handle = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '');
+        data = await api.listTweets({ limit: customLimit, minLikes, user: handle });
+      } else if (source === 'search') {
+        const q = (queryParam !== undefined ? queryParam : searchQuery).trim();
+        data = await api.listTweets({ limit: customLimit, minLikes, query: q });
+      } else {
+        data = await api.listTweets({ limit: customLimit, minLikes });
+      }
       setTweets(data);
       setTotalDbCount(Math.max(data.length, totalDbCount || 88));
-      if (data.length > 0 && !selectedTweet) {
-        setSelectedTweet(data[0]);
+      if (data.length > 0) {
+        if (!selectedTweet || !data.some((t) => t.tweet_id === selectedTweet.tweet_id)) {
+          handleSelectTweet(data[0]);
+        }
+      } else {
+        setSelectedTweet(null);
+        setExportPath(null);
       }
     } finally {
       setIsLoading(false);
@@ -112,25 +148,93 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   useEffect(() => {
-    loadLocalTweets();
-  }, [minLikes]);
+    loadLocalTweets(limit, dataSource);
+  }, [dataSource, minLikes]);
 
-  // Crawl Action Handlers
+  // Select tweet and asynchronously fetch enriched details / Page Bundle
+  const handleSelectTweet = async (tweet: Tweet) => {
+    setSelectedTweet(tweet);
+    const defaultExportPath = `output/${tweet.author_username || 'tweet'}/${tweet.tweet_id}/index.md`;
+    setExportPath(defaultExportPath);
+    setIsDetailLoading(true);
+
+    try {
+      const res = await api.viewTweet(tweet.tweet_id);
+      if (res?.tweet) {
+        setSelectedTweet(res.tweet);
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === res.tweet.tweet_id ? res.tweet : t))
+        );
+      }
+      if (res?.exportPath) {
+        setExportPath(res.exportPath);
+      }
+    } catch {
+      // offline/mock fallback
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  // Crawl Action Handlers with Real-time Progress Tracking (§2.3)
   const handleCrawl = async (source: DataSource) => {
     setIsLoading(true);
+
+    let title = '正在从 X 官方流实时抓取关注流';
+    if (source === 'search') {
+      const q = searchQuery.trim() || 'AI';
+      title = `正在全网实时搜索关键词「${q}」`;
+    } else if (source === 'user') {
+      const u = userHandle.trim() || 'karpathy';
+      title = `正在抓取博主 @${u} 的推文包`;
+    } else if (source === 'lists') {
+      title = '正在从 X 列表实时抓取推文';
+    }
+
+    setCrawlProgress({
+      active: true,
+      source,
+      title,
+      stage: '正在启动真实浏览器嗅探网络流...',
+      detail: '安全节流规避风控 · 拦截官方 GraphQL 数据包',
+      percent: 25,
+    });
+
+    const progressTimer = setTimeout(() => {
+      setCrawlProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: '正在解析推文数据包与媒体流...',
+              detail: '提取高信噪比互动指标 (赞/转/评) 与正文长链接...',
+              percent: 65,
+            }
+          : null
+      );
+    }, 600);
+
     try {
+      let fetchedCount = 0;
+      let insertedCount = 0;
+      let skippedCount = 0;
+
       if (source === 'following') {
         const pages = Math.max(1, Math.ceil(crawlLimit / 20));
         const res = await api.fetchFollowing({ pages });
-        showToast(`正在从 X 官方流实时抓取关注流最新 ${crawlLimit} 条推文...\n已获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+        fetchedCount = res.fetched;
+        insertedCount = res.inserted;
+        skippedCount = res.skipped;
       } else if (source === 'search') {
         const query = searchQuery.trim() || 'AI';
         const res = await api.searchTweets(query, { limit: crawlLimit, minLikes });
-        showToast(`正在全网实时搜索关键词「${query}」最新 ${crawlLimit} 条推文并入库...\n获取 ${res.count} 条推文`);
+        fetchedCount = res.count;
+        insertedCount = res.count;
       } else if (source === 'user') {
         const handle = userHandle.trim() || 'karpathy';
         const res = await api.fetchUser(handle, { limit: crawlLimit });
-        showToast(`正在抓取博主 @${handle} 的最新 ${crawlLimit} 条推文包...\n新增入库 ${res.inserted} 条`);
+        fetchedCount = res.fetched;
+        insertedCount = res.inserted;
+        skippedCount = res.skipped;
       } else if (source === 'lists') {
         let listId = selectedList;
         if (selectedList === 'custom') {
@@ -139,12 +243,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         if (!listId) {
           showToast('请选择或输入有效的 X 列表 ID 或链接');
           setIsLoading(false);
+          setCrawlProgress(null);
+          clearTimeout(progressTimer);
           return;
         }
         const match = listId.match(/(\d{5,})/);
         const cleanId = match ? match[1] : listId;
 
         const res = await api.fetchList(cleanId, { limit: crawlLimit });
+        fetchedCount = res.fetched;
+        insertedCount = res.inserted;
+        skippedCount = res.skipped;
 
         // Auto-save custom list to local list store
         if (!userLists.some((l) => l.id === cleanId)) {
@@ -156,12 +265,44 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           await loadUserLists();
           setSelectedList(cleanId);
         }
-
-        showToast(`正在抓取 X 列表最新 ${crawlLimit} 条推文...\n新增入库 ${res.inserted} 条`);
       }
-      await loadLocalTweets();
+
+      clearTimeout(progressTimer);
+      setCrawlProgress({
+        active: true,
+        source,
+        title,
+        stage: '增量抓取与落库去重完成！',
+        detail: `获取 ${fetchedCount} 条推文，新增入库 ${insertedCount} 条，跳过历史去重 ${skippedCount} 条`,
+        percent: 100,
+        completed: true,
+      });
+
+      showToast(
+        `抓取完成：新增入库 ${insertedCount} 条推文 (跳过去重 ${skippedCount} 条)`
+      );
+
+      // Reload local tweets for current data source
+      await loadLocalTweets(limit, source);
+
+      setTimeout(() => {
+        setCrawlProgress(null);
+      }, 3500);
     } catch (err: any) {
+      clearTimeout(progressTimer);
+      setCrawlProgress({
+        active: true,
+        source,
+        title,
+        stage: '抓取失败',
+        detail: err?.message || String(err),
+        percent: 100,
+        error: err?.message || String(err),
+      });
       showToast(`抓取失败: ${err?.message || String(err)}`);
+      setTimeout(() => {
+        setCrawlProgress(null);
+      }, 5000);
     } finally {
       setIsLoading(false);
     }
@@ -198,7 +339,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       showToast(`已删除推文 ${selectedTweet.tweet_id}`);
       const nextList = tweets.filter((t) => t.tweet_id !== selectedTweet.tweet_id);
       setTweets(nextList);
-      setSelectedTweet(nextList[0] || null);
+      if (nextList.length > 0) {
+        handleSelectTweet(nextList[0]);
+      } else {
+        setSelectedTweet(null);
+        setExportPath(null);
+      }
       setDeleteConfirmOpen(false);
     } catch (err: any) {
       showToast(`删除失败: ${err?.message || String(err)}`);
@@ -213,7 +359,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     const nextList = tweets.filter((t) => !checkedIds.has(t.tweet_id));
     setTweets(nextList);
     setCheckedIds(new Set());
-    setSelectedTweet(nextList[0] || null);
+    if (nextList.length > 0) {
+      handleSelectTweet(nextList[0]);
+    } else {
+      setSelectedTweet(null);
+      setExportPath(null);
+    }
   };
 
   const handleBatchExport = async () => {
@@ -221,10 +372,27 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     setCheckedIds(new Set());
   };
 
-  const handleRevealInFinder = () => {
+  const handleRevealInFinder = async () => {
     if (!selectedTweet) return;
     const author = selectedTweet.author_username || 'tweet';
-    showToast(`已在系统文件管理器中定位本地推文包:\noutput/${author}/${selectedTweet.tweet_id}/\n  ├── index.md\n  └── images/`);
+    const targetPath =
+      exportPath || `output/${author}/${selectedTweet.tweet_id}/index.md`;
+    try {
+      await api.showItemInFolder(targetPath);
+    } catch {
+      // ignore
+    }
+    showToast(
+      `已在系统文件管理器中定位本地推文包:\noutput/${author}/${selectedTweet.tweet_id}/\n  ├── index.md\n  └── images/`
+    );
+  };
+
+  const handleOpenInX = async () => {
+    if (!selectedTweet) return;
+    const url =
+      selectedTweet.urls?.[0] ||
+      `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`;
+    await api.openExternal(url);
   };
 
   // Instant In-Memory Filter
@@ -322,7 +490,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onClick={() => handleCrawl('following')}
                   disabled={isLoading}
                 >
-                  <span id="label-crawl-following">🔄 抓取最新 ({crawlLimit}条)</span>
+                  <span id="label-crawl-following">
+                    {isLoading && crawlProgress?.source === 'following'
+                      ? '⏳ 正在抓取...'
+                      : `🔄 抓取最新 (${crawlLimit}条)`}
+                  </span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -380,24 +552,40 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
           {/* 容器 2: 全网搜索操作区 */}
           {dataSource === 'search' && (
-            <div id="zone-search" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-search" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
               <input
                 id="search-query-input"
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="输入关键词或语法 (如 AI min_faves:100)..."
+                placeholder="输入关键词 (回车搜本地，或点击右侧实时抓取)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCrawl('search')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    loadLocalTweets(limit, 'search', e.currentTarget.value);
+                  }
+                }}
               />
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => loadLocalTweets(limit, 'search', searchQuery)}
+                title="在本地 SQLite 数据库中检索该关键词"
+              >
+                <span>🔍 搜本地</span>
+              </button>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
                   onClick={() => handleCrawl('search')}
                   disabled={isLoading}
                 >
-                  <span id="label-crawl-search">搜索抓取 ({crawlLimit}条)</span>
+                  <span id="label-crawl-search">
+                    {isLoading && crawlProgress?.source === 'search'
+                      ? '⏳ 搜索中...'
+                      : `搜索抓取 (${crawlLimit}条)`}
+                  </span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -446,24 +634,40 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
           {/* 容器 3: 博主追踪操作区 */}
           {dataSource === 'user' && (
-            <div id="zone-user" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-user" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
               <input
                 id="user-handle-input"
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="@博主用户名 (如 karpathy, sama)..."
+                placeholder="@博主用户名 (回车本地筛选，或点击右侧抓取)..."
                 value={userHandle}
                 onChange={(e) => setUserHandle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCrawl('user')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    loadLocalTweets(limit, 'user', undefined, e.currentTarget.value);
+                  }
+                }}
               />
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => loadLocalTweets(limit, 'user', undefined, userHandle)}
+                title="在本地 SQLite 数据库中检索该博主的推文"
+              >
+                <span>🔍 查本地</span>
+              </button>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
                   onClick={() => handleCrawl('user')}
                   disabled={isLoading}
                 >
-                  <span id="label-crawl-user">抓取推文 ({crawlLimit}条)</span>
+                  <span id="label-crawl-user">
+                    {isLoading && crawlProgress?.source === 'user'
+                      ? '⏳ 抓取中...'
+                      : `抓取推文 (${crawlLimit}条)`}
+                  </span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -554,7 +758,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onClick={() => handleCrawl('lists')}
                   disabled={isLoading}
                 >
-                  <span id="label-crawl-lists">🔄 抓取最新 ({crawlLimit}条)</span>
+                  <span id="label-crawl-lists">
+                    {isLoading && crawlProgress?.source === 'lists'
+                      ? '⏳ 抓取中...'
+                      : `🔄 抓取最新 (${crawlLimit}条)`}
+                  </span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -646,6 +854,54 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             </span>
           </div>
 
+          {/* 实时抓取进度卡片 (§2.3) */}
+          {crawlProgress && crawlProgress.active && (
+            <div
+              id="crawl-progress-card"
+              style={{
+                margin: '10px 14px',
+                padding: '12px 14px',
+                background: crawlProgress.completed ? 'var(--paper-raised)' : 'var(--paper-sunken)',
+                border: crawlProgress.completed ? '1px solid var(--jade)' : '1px solid var(--cinnabar)',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: crawlProgress.completed ? 'var(--jade)' : 'var(--cinnabar)',
+                      boxShadow: crawlProgress.completed ? '0 0 0 2px var(--jade-wash)' : '0 0 0 2px var(--cinnabar-wash)',
+                    }}
+                  />
+                  <span>{crawlProgress.title}</span>
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: crawlProgress.completed ? 'var(--jade)' : 'var(--cinnabar)' }}>
+                  {crawlProgress.percent}%
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{crawlProgress.stage}</span>
+                <span style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>{crawlProgress.detail}</span>
+              </div>
+              <div style={{ width: '100%', height: '4px', background: 'var(--line)', borderRadius: '2px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${crawlProgress.percent}%`,
+                    height: '100%',
+                    background: crawlProgress.completed ? 'var(--jade)' : 'var(--cinnabar)',
+                    transition: 'width 0.4s ease-out',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           <div id="feed-list-container" style={{ flex: 1, overflowY: 'auto' }}>
             {filteredTweets.map((tweet) => {
               const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
@@ -656,7 +912,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 <div
                   key={tweet.tweet_id}
                   className={`feed-item ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setSelectedTweet(tweet)}
+                  onClick={() => handleSelectTweet(tweet)}
                 >
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <input
@@ -691,6 +947,32 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               );
             })}
 
+            {/* 空数据引导提示 (§2.1) */}
+            {filteredTweets.length === 0 && !isLoading && (
+              <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--ink-soft)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '10px' }}>📭</div>
+                <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                  {dataSource === 'user' && `本地数据库暂无 @${userHandle.trim()} 的推文`}
+                  {dataSource === 'search' && `本地数据库暂无与「${searchQuery.trim()}」相关的推文`}
+                  {dataSource === 'following' && '本地暂无关注流推文'}
+                  {dataSource === 'lists' && '本地暂无该列表推文'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
+                  {dataSource === 'user' && '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库'}
+                  {dataSource === 'search' && '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库'}
+                  {dataSource === 'following' && '点击右上角「抓取最新」，一键拉取关注流最新推文'}
+                  {dataSource === 'lists' && '点击右上角「抓取最新」，从指定列表拉取最新推文'}
+                </div>
+                <button
+                  className="cta-button"
+                  style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
+                  onClick={() => handleCrawl(dataSource)}
+                >
+                  <span>立即从 X 抓取 ⚡</span>
+                </button>
+              </div>
+            )}
+
             {/* 触底加载更多状态卡片 */}
             <div id="feed-more-box" style={{ padding: '14px', textAlign: 'center', borderTop: '1px dashed var(--line)', background: 'var(--paper-sunken)', margin: '12px 10px 16px 10px', borderRadius: 'var(--radius-sm)' }}>
               <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: '8px' }} id="feed-count-summary">
@@ -708,20 +990,36 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           </div>
         </div>
 
-        {/* 右栏：自包含研读卡片 (Detail) */}
+        {/* 右栏：自包含研读卡片 (Detail §2.2 & §2.4) */}
         <div className="studio-main">
           {selectedTweet ? (
             <div style={{ maxWidth: '720px', margin: '0 auto' }}>
               {/* 博主与操作栏 */}
-              <div style={{ display: 'flex', justifySelf: 'space-between', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', borderBottom: '1px solid var(--line-strong)', marginBottom: '22px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingBottom: '16px',
+                  borderBottom: '1px solid var(--line-strong)',
+                  marginBottom: '16px',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div className="stamp-avatar" style={{ width: '44px', height: '44px', fontSize: '18px' }}>
                     {(selectedTweet.author_name || selectedTweet.author_username || 'X')[0].toUpperCase()}
                   </div>
                   <div>
-                    <h3 id="tweet-detail-name" className="serif-title" style={{ fontSize: '17px' }}>
-                      {selectedTweet.author_name || selectedTweet.author_username}
-                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 id="tweet-detail-name" className="serif-title" style={{ fontSize: '17px' }}>
+                        {selectedTweet.author_name || selectedTweet.author_username}
+                      </h3>
+                      {isDetailLoading && (
+                        <span style={{ fontSize: '11px', color: 'var(--cinnabar)', background: 'var(--cinnabar-wash)', padding: '1px 6px', borderRadius: '4px' }}>
+                          ⚡ 同步详情中...
+                        </span>
+                      )}
+                    </div>
                     <div id="tweet-detail-handle" style={{ fontSize: '12.5px', color: 'var(--ink-faint)' }}>
                       @{selectedTweet.author_username} · {selectedTweet.created_at}
                     </div>
@@ -729,13 +1027,19 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button className="secondary-button" style={{ fontSize: '12px' }} onClick={handleRevealInFinder}>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: '12px' }}
+                    onClick={handleRevealInFinder}
+                    title="在系统访达/资源管理器中高亮定位该推文的 Markdown 归档包 (index.md & 配图)"
+                  >
                     <span>本地文件</span>
                   </button>
                   <button
                     className="secondary-button"
                     style={{ fontSize: '12px' }}
-                    onClick={() => window.open(selectedTweet.urls?.[0] || `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`)}
+                    onClick={handleOpenInX}
+                    title="在系统默认浏览器中打开 X 原帖"
                   >
                     <span>在 X 打开 ↗</span>
                   </button>
@@ -749,10 +1053,123 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 </div>
               </div>
 
-              {/* 推文全文排版 */}
-              <div id="tweet-detail-text" style={{ fontSize: '16.5px', lineHeight: '1.8', color: 'var(--ink)', marginBottom: '24px' }}>
+              {/* 归档文件与路径看板 (§2.4) */}
+              <div
+                style={{
+                  padding: '8px 12px',
+                  background: 'var(--paper-sunken)',
+                  border: '1px solid var(--line)',
+                  borderRadius: '6px',
+                  marginBottom: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '520px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--ink)' }}>📁 归档包: </span>
+                  <code style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>
+                    {exportPath || `output/${selectedTweet.author_username}/${selectedTweet.tweet_id}/index.md`}
+                  </code>
+                </div>
+                <button
+                  className="secondary-button"
+                  style={{ fontSize: '11px', padding: '2px 8px', whiteSpace: 'nowrap' }}
+                  onClick={handleRevealInFinder}
+                  title="在访达/资源管理器中显式定位"
+                >
+                  <span>访达定位 ↗</span>
+                </button>
+              </div>
+
+              {/* 推文全文排版 (§2.2 保持换行与段落格式) */}
+              <div
+                id="tweet-detail-text"
+                style={{
+                  fontSize: '16px',
+                  lineHeight: '1.8',
+                  color: 'var(--ink)',
+                  marginBottom: '20px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
                 {selectedTweet.text}
               </div>
+
+              {/* 转推卡片 (Retweet Card) */}
+              {selectedTweet.is_retweet && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    background: 'var(--paper-sunken)',
+                    borderLeft: '3px solid var(--cinnabar)',
+                    borderRadius: '4px',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--ink-soft)', marginBottom: '4px' }}>
+                    🔁 转推自 @{selectedTweet.retweeted_author || '原作者'}
+                  </div>
+                  <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
+                    {selectedTweet.retweeted_text || selectedTweet.text}
+                  </div>
+                </div>
+              )}
+
+              {/* 引用推文卡片 (Quote Tweet Card) */}
+              {selectedTweet.is_quote && (selectedTweet.quoted_text || selectedTweet.quoted_author) && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    background: 'var(--paper-sunken)',
+                    borderLeft: '3px solid #0284c7',
+                    borderRadius: '4px',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0284c7', marginBottom: '4px' }}>
+                    💬 引用推文 @{selectedTweet.quoted_author || '原作者'}
+                  </div>
+                  <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
+                    {selectedTweet.quoted_text}
+                  </div>
+                </div>
+              )}
+
+              {/* 附带外部链接列表 */}
+              {selectedTweet.urls && selectedTweet.urls.length > 0 && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    background: 'var(--paper-sunken)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '6px',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-faint)', marginBottom: '6px' }}>
+                    🔗 附带链接 ({selectedTweet.urls.length})
+                  </div>
+                  {selectedTweet.urls.map((u, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', fontSize: '12.5px' }}>
+                      <span style={{ color: 'var(--ink-faint)' }}>•</span>
+                      <a
+                        href={u}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          api.openExternal(u);
+                        }}
+                        style={{ color: 'var(--cinnabar)', textDecoration: 'underline', wordBreak: 'break-all', cursor: 'pointer' }}
+                        title="在系统默认浏览器中打开"
+                      >
+                        {u} ↗
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* 本地配图预览容器 */}
               {selectedTweet.media_urls && selectedTweet.media_urls.length > 0 && (
@@ -761,8 +1178,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     <img
                       key={i}
                       src={img}
-                      style={{ width: '100%', height: '260px', objectFit: 'cover', display: 'block' }}
-                      alt="Tweet media"
+                      style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', background: '#0a0a0a', display: 'block', marginBottom: i < selectedTweet.media_urls!.length - 1 ? '4px' : 0 }}
+                      alt={`Tweet media ${i + 1}`}
                     />
                   ))}
                 </div>
@@ -785,7 +1202,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>回复</div>
                   <div id="tweet-stat-replies" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-soft)' }}>
-                    {selectedTweet.reply_count || 940}
+                    {selectedTweet.reply_count || 0}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>浏览量</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-soft)' }}>
+                    {selectedTweet.view_count ? selectedTweet.view_count.toLocaleString() : '-'}
                   </div>
                 </div>
               </div>

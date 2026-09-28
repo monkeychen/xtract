@@ -112,28 +112,96 @@ class ApiService {
     return this.getUserLists();
   }
 
-  async getTrends(category: string = 'tech', top: number = 10): Promise<TrendTopic[]> {
+  async getTrends(
+    category: string = 'tech',
+    options: { top?: number; refresh?: boolean } | number = 10
+  ): Promise<TrendTopic[] & { updatedAt?: string; fromCache?: boolean }> {
+    const top = typeof options === 'number' ? options : options?.top || 10;
+    const refresh = typeof options === 'object' ? Boolean(options.refresh) : false;
+
     if (this.hasNativeApi()) {
-      return window.xtractAPI.getTrends(category, top);
+      return (await window.xtractAPI.getTrends(category, top, refresh)) as any;
     }
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    if (category === 'all') return MOCK_TRENDS;
-    return MOCK_TRENDS.filter((t) => t.category === category || category === 'tech');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const list: any =
+      category === 'all'
+        ? [...MOCK_TRENDS]
+        : MOCK_TRENDS.filter((t) => t.category === category || category === 'tech');
+    list.updatedAt = new Date().toISOString();
+    list.fromCache = !refresh;
+    return list;
   }
 
-  async listTweets(options: { limit?: number; minLikes?: number; minRetweets?: number; user?: string } = {}): Promise<Tweet[]> {
+  async listTweets(
+    options: {
+      limit?: number;
+      minLikes?: number;
+      minRetweets?: number;
+      user?: string;
+      query?: string;
+    } = {}
+  ): Promise<Tweet[]> {
     if (this.hasNativeApi()) {
       return window.xtractAPI.listTweets(options);
     }
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     let result = [...MOCK_TWEETS];
     if (options.minLikes) {
       result = result.filter((t) => t.like_count >= (options.minLikes || 0));
     }
     if (options.user) {
-      result = result.filter((t) => t.author_username.toLowerCase() === options.user?.toLowerCase());
+      result = result.filter(
+        (t) => t.author_username.toLowerCase() === options.user?.toLowerCase()
+      );
+    }
+    if (options.query) {
+      const q = options.query.toLowerCase().trim();
+      result = result.filter(
+        (t) =>
+          t.text.toLowerCase().includes(q) ||
+          t.author_username.toLowerCase().includes(q) ||
+          t.author_name.toLowerCase().includes(q)
+      );
     }
     return result;
+  }
+
+  async viewTweet(
+    tweetIdOrUrl: string,
+    options?: { exportMd?: boolean; outputPath?: string }
+  ): Promise<{ tweet: Tweet; exportPath?: string }> {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.viewTweet(tweetIdOrUrl, options);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const cleanId = tweetIdOrUrl.match(/\d{5,}/)?.[0] || tweetIdOrUrl;
+    const tweet = MOCK_TWEETS.find((t) => t.tweet_id === cleanId) || MOCK_TWEETS[0];
+    return {
+      tweet,
+      exportPath: `output/${tweet.author_username}/${tweet.tweet_id}/index.md`,
+    };
+  }
+
+  async openExternal(url: string) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.openExternal(url);
+    }
+    window.open(url, '_blank');
+    return { success: true };
+  }
+
+  async showItemInFolder(itemPath: string) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.showItemInFolder(itemPath);
+    }
+    return { success: true, path: itemPath };
+  }
+
+  async openPath(dirPath: string) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.openPath(dirPath);
+    }
+    return { success: true, path: dirPath };
   }
 
   async searchTweets(query: string, options: { searchType?: 'live' | 'top'; limit?: number; minLikes?: number } = {}) {

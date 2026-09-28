@@ -35,6 +35,11 @@ export const IPC_CHANNELS = {
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
 
+  // Shell & Native OS Integration
+  SHELL_OPEN_EXTERNAL: 'shell:open-external',
+  SHELL_SHOW_ITEM_IN_FOLDER: 'shell:show-item-in-folder',
+  SHELL_OPEN_PATH: 'shell:open-path',
+
   // Real-time Event Streaming (Main -> Renderer)
   STREAM_EVENT: 'stream:event',
 } as const;

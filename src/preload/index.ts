@@ -33,7 +33,7 @@ export interface XtractAPI {
   updateConfig: (updates: Record<string, string>) => Promise<{ success: boolean; config: AppConfigView }>;
 
   // Trends & Digest
-  getTrends: (category?: string, top?: number) => Promise<TrendTopic[]>;
+  getTrends: (category?: string, top?: number, refresh?: boolean) => Promise<TrendTopic[]>;
   generateTrendsDigest: (options?: {
     category?: string;
     top?: number;
@@ -72,6 +72,7 @@ export interface XtractAPI {
     minLikes?: number;
     minRetweets?: number;
     user?: string;
+    query?: string;
   }) => Promise<Tweet[]>;
   viewTweet: (
     tweetIdOrUrl: string,
@@ -93,6 +94,11 @@ export interface XtractAPI {
   maximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;
 
+  // Shell & Native OS Integration
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+  showItemInFolder: (itemPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+  openPath: (dirPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+
   // Real-time Event Streaming
   onStreamEvent: (callback: (event: StreamEvent) => void) => () => void;
 }
@@ -104,8 +110,8 @@ export const xtractApiImplementation: XtractAPI = {
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_GET),
   updateConfig: (updates) => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_UPDATE, updates),
 
-  getTrends: (category, top) =>
-    ipcRenderer.invoke(IPC_CHANNELS.TRENDS_FETCH, { category, top }),
+  getTrends: (category, top, refresh) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TRENDS_FETCH, { category, top, refresh }),
   generateTrendsDigest: (options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TRENDS_DIGEST, options),
   generateDailyDigest: (options) =>
@@ -133,6 +139,11 @@ export const xtractApiImplementation: XtractAPI = {
   minimizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
   maximizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
   closeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
+
+  openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, url),
+  showItemInFolder: (itemPath) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHELL_SHOW_ITEM_IN_FOLDER, itemPath),
+  openPath: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, dirPath),
 
   onStreamEvent: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, data: StreamEvent) => {
