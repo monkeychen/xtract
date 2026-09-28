@@ -7,7 +7,7 @@ import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
 import { Pipeline } from '../pipeline/index.js';
-import type { Tweet, DeleteFilter, DeleteResult } from '../types.js';
+import type { Tweet, DeleteFilter, DeleteResult, XListInfo } from '../types.js';
 
 let isRegistered = false;
 
@@ -38,7 +38,9 @@ export function registerIpcHandlers(
       const auth = await client.verifyAuth();
       return {
         isValid: true,
-        info: `${auth.name} (@${auth.screen_name})`,
+        info: `@${auth.screen_name}`,
+        screenName: auth.screen_name,
+        name: auth.name,
         proxy: Config.HTTP_PROXY || undefined,
       };
     } catch (err: any) {
@@ -366,7 +368,22 @@ export function registerIpcHandlers(
     }
   );
 
-  // 5. Window Controls
+  // 5. Lists Management
+  ipcMain.handle(IPC_CHANNELS.LISTS_GET_USER_LISTS, async () => {
+    return Config.getUserLists();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.LISTS_SAVE_USER_LIST, async (_event, list: XListInfo) => {
+    Config.saveUserList(list);
+    return { success: true, lists: Config.getUserLists() };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.LISTS_FETCH_ONLINE, async () => {
+    const client = new XClient();
+    return await client.fetchUserLists();
+  });
+
+  // 6. Window Controls
   ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     win?.minimize();

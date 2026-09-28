@@ -59,3 +59,11 @@ export interface DeleteResult {
   dryRun: boolean;
 }
 
+export interface XListInfo {
+  id: string;
+  name: string;
+  description?: string;
+  member_count?: number;
+  is_pinned?: boolean;
+}
+

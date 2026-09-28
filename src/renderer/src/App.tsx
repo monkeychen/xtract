@@ -10,16 +10,21 @@ import { api } from './services/api.js';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('reports');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [xAuthStatus, setXAuthStatus] = useState<{ isValid: boolean; info?: string }>({
+  const [xAuthStatus, setXAuthStatus] = useState<{ isValid: boolean; info?: string; screenName?: string }>({
     isValid: true,
-    info: 'Twitter User @demo_investor',
+    info: '@cza55008',
+    screenName: 'cza55008',
   });
   const [proxyStatus, setProxyStatus] = useState<string | undefined>('127.0.0.1:7890');
   const [studioQuery, setStudioQuery] = useState('');
 
   const loadStatus = async () => {
     const auth = await api.checkAuth();
-    setXAuthStatus({ isValid: auth.isValid, info: auth.info });
+    setXAuthStatus({
+      isValid: auth.isValid,
+      info: auth.info,
+      screenName: auth.screenName || (auth.info?.startsWith('@') ? auth.info.slice(1) : undefined),
+    });
     setProxyStatus(auth.proxy);
   };
 
@@ -66,6 +71,7 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onConfigUpdated={loadStatus}
+        screenName={xAuthStatus.screenName}
       />
     </div>
   );

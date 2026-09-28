@@ -1,7 +1,7 @@
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../../main/types';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, XListInfo } from '../../main/types';
 import type { StreamEvent, AppConfigView, XtractAPI } from '../../preload/index';
 
-export type { Tweet, TrendTopic, DeleteFilter, DeleteResult, StreamEvent, AppConfigView, XtractAPI };
+export type { Tweet, TrendTopic, DeleteFilter, DeleteResult, StreamEvent, AppConfigView, XtractAPI, XListInfo };
 
 export interface ReportItem {
   id: string;

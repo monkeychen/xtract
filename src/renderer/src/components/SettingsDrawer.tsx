@@ -6,12 +6,14 @@ interface SettingsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onConfigUpdated: () => void;
+  screenName?: string;
 }
 
 export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   isOpen,
   onClose,
   onConfigUpdated,
+  screenName,
 }) => {
   const [config, setConfig] = useState<AppConfigView | null>(null);
   const [proxy, setProxy] = useState('http://127.0.0.1:7890');
@@ -112,7 +114,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                 </span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '12px' }}>
-                @demo_investor
+                @{screenName || 'cza55008'}
               </div>
               <button
                 className="secondary-button"

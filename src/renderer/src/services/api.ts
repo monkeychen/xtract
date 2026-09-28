@@ -1,4 +1,4 @@
-import type { XtractAPI, StreamEvent, AppConfigView } from '../types';
+import type { XtractAPI, StreamEvent, AppConfigView, XListInfo } from '../types';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
 
@@ -13,7 +13,8 @@ class ApiService {
     }
     return {
       isValid: true,
-      info: 'Twitter User @demo_investor',
+      info: '@cza55008',
+      screenName: 'cza55008',
       proxy: '127.0.0.1:7890 (Proxy Direct)',
     };
   }
@@ -85,6 +86,30 @@ class ApiService {
     }
     await new Promise((resolve) => setTimeout(resolve, 800));
     return { fetched: options.limit || 20, inserted: 4, skipped: 16 };
+  }
+
+  async getUserLists(): Promise<XListInfo[]> {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.getUserLists();
+    }
+    return [
+      { id: '1827364512938', name: 'AI 核心圈', member_count: 42 },
+      { id: '1827364512939', name: '独立开发者', member_count: 128 },
+    ];
+  }
+
+  async saveUserList(list: XListInfo) {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.saveUserList(list);
+    }
+    return { success: true, lists: [list] };
+  }
+
+  async fetchOnlineLists(): Promise<XListInfo[]> {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.fetchOnlineLists();
+    }
+    return this.getUserLists();
   }
 
   async getTrends(category: string = 'tech', top: number = 10): Promise<TrendTopic[]> {

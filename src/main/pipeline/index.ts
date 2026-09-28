@@ -120,6 +120,14 @@ export class Pipeline {
   ): Promise<Tweet[]> {
     process.stderr.write(`⏳ 开始抓取 X 列表 (${listIdOrUrl}) 的最新推文（目标 ${limit} 篇）...\n`);
 
+    const match = listIdOrUrl.match(/(\d{5,})/);
+    if (match) {
+      Config.saveUserList({
+        id: match[1],
+        name: `X 列表 #${match[1].slice(-4)}`,
+      });
+    }
+
     const tweets = await this.client.fetchListTimeline(listIdOrUrl, { limit, timeout });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);

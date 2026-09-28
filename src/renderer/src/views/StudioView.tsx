@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Tweet } from '../types.js';
+import type { Tweet, XListInfo } from '../types.js';
 import { api } from '../services/api.js';
 
 interface StudioViewProps {
@@ -16,8 +16,10 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   // Source-specific inputs
   const [searchQuery, setSearchQuery] = useState('AI');
   const [userHandle, setUserHandle] = useState('karpathy');
-  const [selectedList, setSelectedList] = useState('ai');
+  const [userLists, setUserLists] = useState<XListInfo[]>([]);
+  const [selectedList, setSelectedList] = useState('1827364512938');
   const [customListId, setCustomListId] = useState('');
+  const [isSyncingLists, setIsSyncingLists] = useState(false);
   const [streamFilter, setStreamFilter] = useState('');
 
   // Filtering & Pagination
@@ -36,6 +38,42 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Load user lists from local/online
+  const loadUserLists = async () => {
+    try {
+      const lists = await api.getUserLists();
+      setUserLists(lists);
+      if (lists.length > 0 && (!selectedList || selectedList === 'ai')) {
+        setSelectedList(lists[0].id);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadUserLists();
+  }, []);
+
+  const handleSyncOnlineLists = async () => {
+    setIsSyncingLists(true);
+    showToast('正在从 X 线上同步账号列表...');
+    try {
+      const lists = await api.fetchOnlineLists();
+      setUserLists(lists);
+      if (lists.length > 0) {
+        setSelectedList(lists[0].id);
+        showToast(`已从 X 同步 ${lists.length} 个列表`);
+      } else {
+        showToast('X 账号暂无自建列表，可直接输入公开列表链接添加');
+      }
+    } catch (err: any) {
+      showToast(`同步列表失败: ${err?.message || String(err)}`);
+    } finally {
+      setIsSyncingLists(false);
+    }
   };
 
   // Close menus on outside click
@@ -94,8 +132,31 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         const res = await api.fetchUser(handle, { limit: crawlLimit });
         showToast(`正在抓取博主 @${handle} 的最新 ${crawlLimit} 条推文包...\n新增入库 ${res.inserted} 条`);
       } else if (source === 'lists') {
-        const listId = selectedList === 'custom' ? customListId.trim() : (selectedList === 'ai' ? '1827364512938' : '1827364512939');
-        const res = await api.fetchList(listId || '1827364512938', { limit: crawlLimit });
+        let listId = selectedList;
+        if (selectedList === 'custom') {
+          listId = customListId.trim();
+        }
+        if (!listId) {
+          showToast('请选择或输入有效的 X 列表 ID 或链接');
+          setIsLoading(false);
+          return;
+        }
+        const match = listId.match(/(\d{5,})/);
+        const cleanId = match ? match[1] : listId;
+
+        const res = await api.fetchList(cleanId, { limit: crawlLimit });
+
+        // Auto-save custom list to local list store
+        if (!userLists.some((l) => l.id === cleanId)) {
+          const newList: XListInfo = {
+            id: cleanId,
+            name: `X 列表 #${cleanId.slice(-4)}`,
+          };
+          await api.saveUserList(newList);
+          await loadUserLists();
+          setSelectedList(cleanId);
+        }
+
         showToast(`正在抓取 X 列表最新 ${crawlLimit} 条推文...\n新增入库 ${res.inserted} 条`);
       }
       await loadLocalTweets();
@@ -459,8 +520,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 value={selectedList}
                 onChange={(e) => setSelectedList(e.target.value)}
               >
-                <option value="ai">📑 AI 核心圈 (42人)</option>
-                <option value="indie">📑 独立开发者 (128人)</option>
+                {userLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    📑 {l.name} {l.member_count ? `(${l.member_count}人)` : ''}
+                  </option>
+                ))}
                 <option value="custom">+ 输入其他公开 List 链接...</option>
               </select>
               {selectedList === 'custom' && (
@@ -474,7 +538,16 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onChange={(e) => setCustomListId(e.target.value)}
                 />
               )}
-              <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>已存 45 篇</span>
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                onClick={handleSyncOnlineLists}
+                disabled={isSyncingLists}
+                title="从 X 线上同步账号自建与关注列表"
+              >
+                <span>{isSyncingLists ? '同步中...' : '☁️ 同步'}</span>
+              </button>
+              <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>已存 {totalDbCount} 篇</span>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"

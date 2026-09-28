@@ -1,4 +1,4 @@
-import type { Tweet, TrendTopic } from '../types.js';
+import type { Tweet, TrendTopic, XListInfo } from '../types.js';
 
 /**
  * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images.
@@ -366,4 +366,49 @@ export function parseTrendsFromGraphQL(payload: any): TrendTopic[] {
   walk(payload);
   trends.sort((a, b) => a.rank - b.rank);
   return trends;
+}
+
+/**
+ * Extracts X Lists from GraphQL responses (ListsManagementPageTimeline, Lists, etc.)
+ */
+export function extractListsFromGraphQL(payload: any): XListInfo[] {
+  const lists: XListInfo[] = [];
+  const seenIds = new Set<string>();
+
+  function processListObject(obj: any): void {
+    if (!obj || typeof obj !== 'object') return;
+    const id = obj.id_str || obj.rest_id || (typeof obj.id === 'string' ? obj.id : '');
+    const name = obj.name;
+    if (id && name && !seenIds.has(id)) {
+      seenIds.add(id);
+      lists.push({
+        id,
+        name: typeof name === 'string' ? name : String(name),
+        description: typeof obj.description === 'string' ? obj.description : undefined,
+        member_count: typeof obj.member_count === 'number' ? obj.member_count : undefined,
+        is_pinned: Boolean(obj.is_pinned),
+      });
+    }
+  }
+
+  function walk(d: any): void {
+    if (!d || typeof d !== 'object') return;
+
+    if (d.__typename === 'TimelineList' || d.__typename === 'List') {
+      processListObject(d);
+    }
+    if (d.list && typeof d.list === 'object') {
+      processListObject(d.list);
+    }
+    if (d.timelineList && typeof d.timelineList === 'object') {
+      processListObject(d.timelineList);
+    }
+
+    for (const v of Object.values(d)) {
+      walk(v);
+    }
+  }
+
+  walk(payload);
+  return lists;
 }

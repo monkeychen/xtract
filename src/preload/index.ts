@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './channels.js';
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../main/types.js';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, XListInfo } from '../main/types.js';
 
 export interface StreamEvent {
   taskId: string;
@@ -25,7 +25,7 @@ export interface AppConfigView {
 
 export interface XtractAPI {
   // Auth & Session
-  checkAuth: () => Promise<{ isValid: boolean; info?: string; proxy?: string; error?: string }>;
+  checkAuth: () => Promise<{ isValid: boolean; info?: string; screenName?: string; proxy?: string; error?: string }>;
   login: (service?: 'x' | 'openai' | 'gemini') => Promise<{ success: boolean; error?: string }>;
 
   // Configuration
@@ -83,6 +83,11 @@ export interface XtractAPI {
     options?: { outputPath?: string; minLikes?: number; minRetweets?: number }
   ) => Promise<{ outputPath: string; count: number }>;
 
+  // Lists Management
+  getUserLists: () => Promise<XListInfo[]>;
+  saveUserList: (list: XListInfo) => Promise<{ success: boolean; lists: XListInfo[] }>;
+  fetchOnlineLists: () => Promise<XListInfo[]>;
+
   // Window Controls
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<void>;
@@ -120,6 +125,10 @@ export const xtractApiImplementation: XtractAPI = {
   deleteTweets: (filter) => ipcRenderer.invoke(IPC_CHANNELS.TWEETS_DELETE, filter),
   exportTweets: (limit, options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_EXPORT, { limit, ...options }),
+
+  getUserLists: () => ipcRenderer.invoke(IPC_CHANNELS.LISTS_GET_USER_LISTS),
+  saveUserList: (list) => ipcRenderer.invoke(IPC_CHANNELS.LISTS_SAVE_USER_LIST, list),
+  fetchOnlineLists: () => ipcRenderer.invoke(IPC_CHANNELS.LISTS_FETCH_ONLINE),
 
   minimizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
   maximizeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),

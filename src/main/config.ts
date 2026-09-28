@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import dotenv from 'dotenv';
+import type { XListInfo } from './types.js';
 
 // Load .env
 const projectRoot = process.cwd();
@@ -13,6 +14,8 @@ export class Config {
   static readonly REPORTS_DIR = path.join(projectRoot, 'output', 'reports');
   static readonly DB_PATH = path.join(projectRoot, 'data', 'tweets.db');
   static readonly AUTH_STATE_PATH = path.join(projectRoot, 'data', 'auth_state.json');
+  static readonly AUTH_USER_PATH = path.join(projectRoot, 'data', 'auth_user.json');
+  static readonly USER_LISTS_PATH = path.join(projectRoot, 'data', 'user_lists.json');
 
   // X Credentials
   static readonly X_AUTH_TOKEN = (process.env.X_AUTH_TOKEN || '').trim();
@@ -77,5 +80,75 @@ export class Config {
 
   static hasXCredentials(): boolean {
     return fs.existsSync(this.AUTH_STATE_PATH) || Boolean(this.X_AUTH_TOKEN && this.X_CT0);
+  }
+
+  static getCachedUser(): { id: string; name: string; screen_name: string; verified_at?: string } | null {
+    try {
+      if (fs.existsSync(this.AUTH_USER_PATH)) {
+        const raw = fs.readFileSync(this.AUTH_USER_PATH, 'utf-8');
+        return JSON.parse(raw);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  static setCachedUser(user: { id: string; name: string; screen_name: string }): void {
+    try {
+      this.ensureDirs();
+      const payload = {
+        ...user,
+        verified_at: new Date().toISOString(),
+      };
+      fs.writeFileSync(this.AUTH_USER_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+    } catch (err) {
+      process.stderr.write(`⚠️ 保存账号缓存失败: ${err}\n`);
+    }
+  }
+
+  static getUserLists(): XListInfo[] {
+    try {
+      if (fs.existsSync(this.USER_LISTS_PATH)) {
+        const raw = fs.readFileSync(this.USER_LISTS_PATH, 'utf-8');
+        const lists = JSON.parse(raw);
+        if (Array.isArray(lists) && lists.length > 0) {
+          return lists;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    // Default initial lists for clean out-of-the-box experience
+    return [
+      { id: '1827364512938', name: 'AI 核心圈', member_count: 42 },
+      { id: '1827364512939', name: '独立开发者', member_count: 128 },
+    ];
+  }
+
+  static saveUserList(list: XListInfo): void {
+    try {
+      this.ensureDirs();
+      const current = this.getUserLists();
+      const index = current.findIndex((item) => item.id === list.id);
+      if (index >= 0) {
+        current[index] = { ...current[index], ...list };
+      } else {
+        current.push(list);
+      }
+      fs.writeFileSync(this.USER_LISTS_PATH, JSON.stringify(current, null, 2), 'utf-8');
+    } catch (err) {
+      process.stderr.write(`⚠️ 保存列表缓存失败: ${err}\n`);
+    }
+  }
+
+  static deleteUserList(listId: string): void {
+    try {
+      this.ensureDirs();
+      const current = this.getUserLists().filter((item) => item.id !== listId);
+      fs.writeFileSync(this.USER_LISTS_PATH, JSON.stringify(current, null, 2), 'utf-8');
+    } catch (err) {
+      process.stderr.write(`⚠️ 删除列表缓存失败: ${err}\n`);
+    }
   }
 }

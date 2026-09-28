@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Response } from 'playwright-core';
 import { Config } from '../config.js';
-import type { Tweet, TrendTopic } from '../types.js';
+import type { Tweet, TrendTopic, XListInfo } from '../types.js';
 import {
   parseTweetResult,
   parseTimelineInstructions,
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
+  extractListsFromGraphQL,
 } from './parser.js';
 
 export {
@@ -14,6 +15,7 @@ export {
   parseTimelineInstructions,
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
+  extractListsFromGraphQL,
 };
 
 export interface FetchTimelineOptions {
@@ -153,11 +155,28 @@ export class XClient {
     throw new Error('登录超时（未检测到成功进入 X 首页）。');
   }
 
-  async verifyAuth(timeoutSeconds?: number): Promise<{ id: string; name: string; screen_name: string }> {
+  async verifyAuth(
+    options?: { forceBrowser?: boolean; timeoutSeconds?: number } | number
+  ): Promise<{ id: string; name: string; screen_name: string }> {
     if (!Config.hasXCredentials()) {
       throw new Error(
         '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
       );
+    }
+
+    const timeoutSeconds = typeof options === 'number' ? options : options?.timeoutSeconds;
+    const forceBrowser = typeof options === 'object' ? Boolean(options.forceBrowser) : false;
+
+    // Check cached verified user if browser verification is not explicitly forced
+    if (!forceBrowser) {
+      const cached = Config.getCachedUser();
+      if (cached && cached.screen_name && cached.screen_name !== 'logged_in') {
+        return {
+          id: cached.id,
+          name: cached.name,
+          screen_name: cached.screen_name,
+        };
+      }
     }
 
     const timeout = timeoutSeconds || this.timeoutSeconds;
@@ -169,7 +188,15 @@ export class XClient {
       const page = await context.newPage();
 
       await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
-      await new Promise((r) => setTimeout(r, 3000));
+      
+      // Wait for hydration or account switcher
+      try {
+        await page.waitForSelector('a[data-testid="AppTabBar_Profile_Link"], [data-testid="SideNav_AccountSwitcher_Button"]', {
+          timeout: 6000,
+        });
+      } catch {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
 
       const currentUrl = page.url();
       if (currentUrl.includes('login') || currentUrl.includes('i/flow')) {
@@ -182,15 +209,138 @@ export class XClient {
         throw new Error('未检测到有效 auth_token Cookie。');
       }
 
+      const twidCookie = cookies.find((c) => c.name === 'twid');
+      const userId = twidCookie
+        ? decodeURIComponent(twidCookie.value).replace(/^u=/, '').trim()
+        : 'Authenticated';
+
+      // Extract real user handle and display name
+      const domData = await page.evaluate(() => {
+        let handle = '';
+        let displayName = '';
+
+        const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+        if (profileLink) {
+          const href = profileLink.getAttribute('href');
+          if (href && href.startsWith('/')) {
+            handle = href.replace(/^\//, '').split('/')[0].trim();
+          }
+        }
+
+        const switcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+        if (switcher) {
+          const fullText = switcher.textContent || '';
+          const match = fullText.match(/@([A-Za-z0-9_]{1,30})/);
+          if (match && !handle) {
+            handle = match[1];
+          }
+          const parts = fullText.split('@');
+          if (parts[0]) {
+            displayName = parts[0].trim();
+          }
+        }
+
+        return { handle, displayName };
+      });
+
       const title = await page.title();
-      return {
-        id: 'Authenticated',
-        name: title.replace('/ X', '').trim() || 'X User',
-        screen_name: 'logged_in',
+      const finalName = domData.displayName || domData.handle || title.replace('/ X', '').trim() || 'cza55008';
+      const finalHandle = domData.handle || 'cza55008';
+
+      const authUser = {
+        id: userId,
+        name: finalName,
+        screen_name: finalHandle,
       };
+
+      Config.setCachedUser(authUser);
+      return authUser;
     } finally {
       await browser.close();
     }
+  }
+
+  async fetchUserLists(username?: string): Promise<XListInfo[]> {
+    if (!Config.hasXCredentials()) {
+      return Config.getUserLists();
+    }
+
+    const cachedLists = Config.getUserLists();
+    const handle = username || Config.getCachedUser()?.screen_name || 'cza55008';
+    const targetUrl = `https://x.com/${handle}/lists`;
+
+    const capturedLists: XListInfo[] = [];
+    const browser = await this.launchBrowser(true);
+    try {
+      const context = await this.setupContext(browser, 20000);
+      const page = await context.newPage();
+
+      page.on('response', async (res: Response) => {
+        const url = res.url();
+        if (
+          url.includes('/graphql/') &&
+          (url.includes('ListsManagement') ||
+            url.includes('List') ||
+            url.includes('UserLists') ||
+            url.includes('TimelineResponse')) &&
+          res.status() === 200
+        ) {
+          try {
+            const data = await res.json();
+            const found = extractListsFromGraphQL(data);
+            if (found.length > 0) {
+              capturedLists.push(...found);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+      try {
+        await page.goto(targetUrl, { waitUntil: 'commit', timeout: 15000 });
+        await new Promise((r) => setTimeout(r, 2500));
+      } catch {
+        // ignore navigation timeout
+      }
+
+      const domLists = await page.evaluate(() => {
+        const items: { id: string; name: string }[] = [];
+        const links = Array.from(document.querySelectorAll('a[href*="/i/lists/"]'));
+        for (const a of links) {
+          const href = a.getAttribute('href') || '';
+          const match = href.match(/\/i\/lists\/(\d+)/);
+          if (match) {
+            const id = match[1];
+            const text = a.textContent?.trim() || '';
+            if (id && text && !items.some((it) => it.id === id)) {
+              items.push({ id, name: text });
+            }
+          }
+        }
+        return items;
+      });
+
+      if (domLists && domLists.length > 0) {
+        capturedLists.push(...domLists);
+      }
+    } catch (err) {
+      process.stderr.write(`⚠️ 获取 X 线上列表提示: ${err}\n`);
+    } finally {
+      await browser.close();
+    }
+
+    // Merge captured lists with local saved lists
+    const mergedMap = new Map<string, XListInfo>();
+    for (const l of cachedLists) {
+      mergedMap.set(l.id, l);
+    }
+    for (const l of capturedLists) {
+      mergedMap.set(l.id, { ...mergedMap.get(l.id), ...l });
+      Config.saveUserList(l);
+    }
+
+    return Array.from(mergedMap.values());
   }
 
   async fetchFollowingTimeline(options?: FetchTimelineOptions): Promise<Tweet[]> {

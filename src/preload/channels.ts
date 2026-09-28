@@ -25,6 +25,11 @@ export const IPC_CHANNELS = {
   TWEETS_DELETE: 'tweets:delete',
   TWEETS_EXPORT: 'tweets:export',
 
+  // Lists Management
+  LISTS_GET_USER_LISTS: 'lists:get-user-lists',
+  LISTS_SAVE_USER_LIST: 'lists:save-user-list',
+  LISTS_FETCH_ONLINE: 'lists:fetch-online',
+
   // Window Controls
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

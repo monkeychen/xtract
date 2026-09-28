@@ -5,7 +5,7 @@ interface MastheadProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   onOpenSettings: () => void;
-  xAuthStatus: { isValid: boolean; info?: string };
+  xAuthStatus: { isValid: boolean; info?: string; screenName?: string };
   proxyStatus?: string;
 }
 
@@ -16,7 +16,11 @@ export const Masthead: React.FC<MastheadProps> = ({
   xAuthStatus,
   proxyStatus,
 }) => {
-  const displayUser = xAuthStatus.info ? xAuthStatus.info.replace('Twitter User ', '') : '@demo_investor';
+  const displayUser = xAuthStatus.screenName
+    ? `@${xAuthStatus.screenName}`
+    : xAuthStatus.info
+    ? (xAuthStatus.info.startsWith('@') ? xAuthStatus.info : `@${xAuthStatus.info.replace('Twitter User ', '').replace(/^@/, '')}`)
+    : '@cza55008';
 
   return (
     <header className="masthead">

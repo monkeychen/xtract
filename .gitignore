@@ -6,6 +6,8 @@
 !.env.example
 cookies.json
 data/auth_state.json
+data/auth_user.json
+data/user_lists.json
 data/*_auth.json
 data/chatgpt_auth.json
 data/gemini_auth.json
