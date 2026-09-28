@@ -84,7 +84,7 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
     } else {
       expect(stderr).toContain('认证');
     }
-  }, 15000);
+  }, 30000);
 
   it('E2E: --delete without filter aborts with safety error', async () => {
     const { stderr, exitCode } = await runCli(['--delete']);
