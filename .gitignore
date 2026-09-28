@@ -23,6 +23,8 @@ data/*.sqlite3
 data/tweets.db
 data/raw/*
 !data/raw/.gitkeep
+data/browser_profile/
+scratch/
 data/*.log
 *.log
 

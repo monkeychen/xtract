@@ -16,6 +16,7 @@ export class Config {
   static readonly AUTH_STATE_PATH = path.join(projectRoot, 'data', 'auth_state.json');
   static readonly AUTH_USER_PATH = path.join(projectRoot, 'data', 'auth_user.json');
   static readonly USER_LISTS_PATH = path.join(projectRoot, 'data', 'user_lists.json');
+  static readonly BROWSER_PROFILE_DIR = path.join(projectRoot, 'data', 'browser_profile');
 
   // X Credentials
   static readonly X_AUTH_TOKEN = (process.env.X_AUTH_TOKEN || '').trim();
@@ -71,7 +72,7 @@ export class Config {
   static readonly FETCH_TIMEOUT = parseInt(process.env.FETCH_TIMEOUT || '60', 10);
 
   static ensureDirs(): void {
-    for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR]) {
+    for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR, this.BROWSER_PROFILE_DIR]) {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }

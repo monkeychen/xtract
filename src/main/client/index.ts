@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { chromium, type Browser, type BrowserContext, type Response } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Page, type Response } from 'playwright-core';
 import { Config } from '../config.js';
 import type { Tweet, TrendTopic, XListInfo } from '../types.js';
 import {
@@ -108,6 +108,95 @@ export class XClient {
     context.setDefaultTimeout(effectiveTimeoutMs);
 
     return context;
+  }
+
+  private async createSession(
+    headless = true,
+    timeoutMs?: number
+  ): Promise<{
+    context: BrowserContext;
+    page: Page;
+    close: () => Promise<void>;
+  }> {
+    const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
+    Config.ensureDirs();
+    const profileDir = Config.BROWSER_PROFILE_DIR;
+
+    const proxy = Config.HTTP_PROXY ? { server: Config.HTTP_PROXY } : undefined;
+    const args = [
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+      '--disable-infobars',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+    ];
+
+    try {
+      let context: BrowserContext;
+      try {
+        context = await chromium.launchPersistentContext(profileDir, {
+          channel: 'chrome',
+          headless,
+          proxy,
+          args,
+          userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          viewport: { width: 1280, height: 900 },
+          locale: 'zh-CN',
+          timezoneId: 'Asia/Shanghai',
+        });
+      } catch {
+        context = await chromium.launchPersistentContext(profileDir, {
+          headless,
+          proxy,
+          args,
+          userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          viewport: { width: 1280, height: 900 },
+          locale: 'zh-CN',
+          timezoneId: 'Asia/Shanghai',
+        });
+      }
+
+      if (Config.X_AUTH_TOKEN) {
+        const cookies = [
+          { name: 'auth_token', value: Config.X_AUTH_TOKEN, domain: '.x.com', path: '/' },
+        ];
+        if (Config.X_CT0) {
+          cookies.push({ name: 'ct0', value: Config.X_CT0, domain: '.x.com', path: '/' });
+        }
+        await context.addCookies(cookies);
+      }
+
+      await context.addInitScript(
+        'Object.defineProperty(navigator, "webdriver", { get: () => undefined });'
+      );
+      context.setDefaultNavigationTimeout(effectiveTimeoutMs);
+      context.setDefaultTimeout(effectiveTimeoutMs);
+
+      const page = context.pages()[0] || (await context.newPage());
+
+      return {
+        context,
+        page,
+        close: async () => {
+          await context.close().catch(() => {});
+        },
+      };
+    } catch {
+      // Fallback: If lock conflict occurs or persistent context fails, fall back to ephemeral browser
+      const browser = await this.launchBrowser(headless);
+      const context = await this.setupContext(browser, effectiveTimeoutMs);
+      const page = await context.newPage();
+      return {
+        context,
+        page,
+        close: async () => {
+          await browser.close().catch(() => {});
+        },
+      };
+    }
   }
 
   async loginInteractive(timeoutSeconds?: number): Promise<void> {
@@ -474,12 +563,44 @@ export class XClient {
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
 
+    process.stderr.write(
+      `⏳ 正在通过推特双轨机制拉取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`
+    );
+
+    // 轨道 1：官方实时搜索流 (SearchTimeline: from:username)
+    // 优势：极速（3~5秒）、推特边缘直接下发推文数据、彻底绕过博主个人主页 18+ UI chunks 的水合瓶颈
+    try {
+      process.stderr.write(`🌐 [双轨-主轨] 正在通过推特实时搜索流检索 @${cleanUser} 的推文...\n`);
+      const searchTweets = await this.fetchSearchTimeline(`from:${cleanUser}`, {
+        searchType: 'live',
+        limit: Math.max(limit, 20),
+        pageDelay,
+        timeout: Math.min(timeout, 25),
+      });
+
+      const matched = searchTweets.filter(
+        (t) => t.author_username.toLowerCase() === cleanUser.toLowerCase()
+      );
+
+      if (matched.length > 0) {
+        process.stderr.write(
+          `✓ [双轨-主轨] 成功获取到 ${matched.length} 条 @${cleanUser} 的推文\n`
+        );
+        return matched.slice(0, limit);
+      }
+      process.stderr.write(`ℹ️ [双轨-主轨] 搜索流未命中推文，自动平滑切换至博主主页兜底抓取...\n`);
+    } catch (err: any) {
+      process.stderr.write(
+        `⚠️ [双轨-主轨] 实时流检索提示: ${err?.message || err}，切换至博主主页兜底...\n`
+      );
+    }
+
+    // 轨道 2：个人主页兜底抓取 (UserTimeline Fallback)
     const capturedInstructions: any[][] = [];
-    const browser = await this.launchBrowser(true);
+    const session = await this.createSession(true, timeoutMs);
 
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = session.page;
 
       page.on('response', async (res: Response) => {
         const url = res.url();
@@ -503,25 +624,16 @@ export class XClient {
         }
       });
 
-      // Warm up session on home to pass Turnstile/Cloudflare checks
-      process.stderr.write(`🌐 正在建立安全会话上下文...\n`);
-      await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
-      try {
-        await page.waitForSelector('div[role="tablist"], [role="tab"]', { timeout: 8000 });
-      } catch {
-        // ignore
-      }
-
       const userUrl = `https://x.com/${cleanUser}`;
-      process.stderr.write(`🌐 正在打开博主主页 ${userUrl} 并监听推文流...\n`);
-      await page.goto(userUrl, { waitUntil: 'commit', timeout: timeoutMs });
+      process.stderr.write(`🌐 [双轨-备轨] 正在打开博主主页 ${userUrl} 并监听推文流...\n`);
+      await page.goto(userUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
       // Wait for initial batch with gentle scroll assist
       for (let i = 0; i < Math.max(20, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedInstructions.length > 0) break;
-        if (i === 3 || i === 7) {
-          await page.evaluate(() => window.scrollBy(0, 1500));
+        if (i % 4 === 0) {
+          await page.evaluate(() => window.scrollBy(0, 1500)).catch(() => {});
         }
       }
 
@@ -529,13 +641,13 @@ export class XClient {
       const pagesNeeded = Math.max(1, Math.ceil(limit / 20));
       for (let pIdx = 1; pIdx < pagesNeeded; pIdx++) {
         process.stderr.write(`📜 正在向下滚动加载第 ${pIdx + 1} 页...\n`);
-        await page.evaluate(() => window.scrollBy(0, 2500));
+        await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => {});
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
       }
 
       await new Promise((r) => setTimeout(r, 2000));
     } finally {
-      await browser.close();
+      await session.close();
     }
 
     const seenIds = new Set<string>();
@@ -656,11 +768,10 @@ export class XClient {
     const timeoutMs = timeout * 1000;
 
     const capturedInstructions: any[][] = [];
-    const browser = await this.launchBrowser(true);
+    const session = await this.createSession(true, timeoutMs);
 
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = session.page;
 
       page.on('response', async (res: Response) => {
         const url = res.url();
@@ -683,23 +794,26 @@ export class XClient {
 
       const typeLabel = searchType === 'top' ? '热门' : '实时最新';
       process.stderr.write(`🌐 正在打开 X 搜索 (${typeLabel}: '${cleanQ}') 并监听推文流...\n`);
-      await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
       for (let i = 0; i < Math.max(30, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedInstructions.length > 0) break;
+        if (i % 4 === 0) {
+          await page.evaluate(() => window.scrollBy(0, 1000)).catch(() => {});
+        }
       }
 
       const pagesNeeded = Math.max(1, Math.ceil(limit / 20));
       for (let pIdx = 1; pIdx < pagesNeeded; pIdx++) {
         process.stderr.write(`📜 正在向下滚动加载第 ${pIdx + 1} 页...\n`);
-        await page.evaluate(() => window.scrollBy(0, 2500));
+        await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => {});
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
       }
 
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1500));
     } finally {
-      await browser.close();
+      await session.close();
     }
 
     const seenIds = new Set<string>();
