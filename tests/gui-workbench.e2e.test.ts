@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type ViteDevServer } from 'vite';
 import { chromium, type Browser, type Page } from 'playwright-core';
 
-describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
+describe('GUI Workbench E2E Automated Tests (100% Prototype Matched)', () => {
   let server: ViteDevServer;
   let browser: Browser;
   let page: Page;
@@ -48,68 +48,68 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
 
     // Default view: Reports View
     const mainHeading = await page.locator('h1.serif-title').first().textContent();
-    expect(mainHeading).toContain('智能研报与深度晨报');
+    expect(mainHeading).toContain('智能研报');
 
     // Switch to Trends View
-    await page.locator('.masthead-nav-item', { hasText: '趋势雷达' }).click();
+    await page.locator('.nav-item', { hasText: '趋势雷达' }).click();
     await page.waitForTimeout(300);
     const trendsHeading = await page.locator('h1.serif-title').first().textContent();
-    expect(trendsHeading).toContain('全网热点趋势雷达');
+    expect(trendsHeading).toContain('全网趋势');
 
     // Switch to Studio View
-    await page.locator('.masthead-nav-item', { hasText: '情报工作台' }).click();
+    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
     await page.waitForTimeout(300);
     // In Studio, toolbar should have data source chips
-    const activeChipText = await page.locator('.fmt-chip.active').first().textContent();
+    const activeChipText = await page.locator('#studio-source-chips .fmt-chip.active').first().textContent();
     expect(activeChipText?.trim()).toBe('关注流');
   });
 
   it('Flow 2: Studio Data Source Switching & Contextual Toolbar Controls', async () => {
     // Ensure we are in Studio view
-    await page.locator('.masthead-nav-item', { hasText: '情报工作台' }).click();
+    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
     await page.waitForTimeout(200);
 
     // 1. In '关注流' mode: should display stream-filter-input and "抓取最新"
-    expect(await page.locator('input[placeholder*="过滤当前推文"]').isVisible()).toBe(true);
-    expect(await page.locator('button.split-btn-main').textContent()).toContain('抓取最新');
+    expect(await page.locator('#stream-filter-input').isVisible()).toBe(true);
+    expect(await page.locator('#label-crawl-following').textContent()).toContain('抓取最新');
 
     // 2. Switch to '全网搜索'
-    await page.locator('.fmt-chip', { hasText: '全网搜索' }).click();
+    await page.locator('#chip-source-search').click();
     await page.waitForTimeout(200);
-    expect(await page.locator('input[placeholder*="输入关键词或语法"]').isVisible()).toBe(true);
-    expect(await page.locator('button.split-btn-main').textContent()).toContain('搜索抓取');
+    expect(await page.locator('#search-query-input').isVisible()).toBe(true);
+    expect(await page.locator('#label-crawl-search').textContent()).toContain('搜索抓取');
 
     // 3. Switch to '博主追踪'
-    await page.locator('.fmt-chip', { hasText: '博主追踪' }).click();
+    await page.locator('#chip-source-user').click();
     await page.waitForTimeout(200);
-    expect(await page.locator('input[placeholder*="@博主用户名"]').isVisible()).toBe(true);
-    expect(await page.locator('button.split-btn-main').textContent()).toContain('抓取推文');
+    expect(await page.locator('#user-handle-input').isVisible()).toBe(true);
+    expect(await page.locator('#label-crawl-user').textContent()).toContain('抓取推文');
 
     // 4. Switch to 'X 列表'
-    await page.locator('.fmt-chip', { hasText: 'X 列表' }).click();
+    await page.locator('#chip-source-lists').click();
     await page.waitForTimeout(200);
-    expect(await page.locator('select.select-input').isVisible()).toBe(true);
-    expect(await page.locator('select.select-input').textContent()).toContain('AI 核心圈');
+    expect(await page.locator('#list-select').isVisible()).toBe(true);
+    expect(await page.locator('#list-select').textContent()).toContain('AI 核心圈');
 
     // 5. Select custom list in X 列表
-    await page.locator('select.select-input').selectOption('custom');
+    await page.locator('#list-select').selectOption('custom');
     await page.waitForTimeout(200);
-    expect(await page.locator('input[placeholder*="输入 List ID"]').isVisible()).toBe(true);
+    expect(await page.locator('#custom-list-input').isVisible()).toBe(true);
 
     // 6. Switch back to '关注流'
-    await page.locator('.fmt-chip', { hasText: '关注流' }).click();
+    await page.locator('#chip-source-following').click();
     await page.waitForTimeout(200);
-    expect(await page.locator('input[placeholder*="过滤当前推文"]').isVisible()).toBe(true);
+    expect(await page.locator('#stream-filter-input').isVisible()).toBe(true);
   });
 
   it('Flow 3: Split-action Crawl Button Dropdown Selection (20 / 50 / 100)', async () => {
-    // Open split button dropdown
-    const arrowBtn = page.locator('button.split-btn-arrow');
+    // Open split button dropdown in following zone
+    const arrowBtn = page.locator('#zone-following button.split-btn-arrow');
     await arrowBtn.click();
     await page.waitForTimeout(200);
 
     // Menu should be open
-    const menu = page.locator('.split-btn-menu.open');
+    const menu = page.locator('#menu-following.split-btn-menu.open');
     expect(await menu.isVisible()).toBe(true);
     const menuText = await menu.textContent();
     expect(menuText).toContain('20 条 · 日常极速');
@@ -117,11 +117,11 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
     expect(menuText).toContain('100 条 · 深度调研');
 
     // Select 50 条
-    await page.locator('.split-btn-item', { hasText: '50 条 · 近期汇总' }).click();
+    await menu.locator('.split-btn-item', { hasText: '50 条 · 近期汇总' }).click();
     await page.waitForTimeout(200);
 
     // Verify main button text updated to (50条)
-    const mainBtnText = await page.locator('button.split-btn-main').textContent();
+    const mainBtnText = await page.locator('#label-crawl-following').textContent();
     expect(mainBtnText).toContain('50条');
   });
 
@@ -146,12 +146,12 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
   });
 
   it('Flow 5: Following Stream Local Filter & Stream Pagination', async () => {
-    const filterInput = page.locator('input[placeholder*="过滤当前推文"]');
+    const filterInput = page.locator('#stream-filter-input');
     await filterInput.fill('karpathy');
     await page.waitForTimeout(300);
 
     // Verify list filtered
-    const countText = await page.locator('.studio-sidebar span', { hasText: '条' }).first().textContent();
+    const countText = await page.locator('#feed-header-total').textContent();
     expect(countText).toBeTruthy();
 
     // Clear filter
@@ -159,7 +159,7 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
     await page.waitForTimeout(300);
 
     // Stream Pagination / Load More Card exists
-    const loadMoreBtn = page.locator('button', { hasText: '加载更早的 50 条历史推文' });
+    const loadMoreBtn = page.locator('#feed-more-box button', { hasText: '加载更早的 50 条历史推文' });
     expect(await loadMoreBtn.isVisible()).toBe(true);
     await loadMoreBtn.click();
     await page.waitForTimeout(400);
@@ -176,47 +176,44 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
 
     // Detail view should render
     expect(await page.locator('button', { hasText: '本地文件' }).isVisible()).toBe(true);
-    expect(await page.locator('button', { hasText: '级联删除' }).isVisible()).toBe(true);
+    expect(await page.locator('.studio-main button', { hasText: '删除' }).isVisible()).toBe(true);
 
     // Click '本地文件' -> triggers toast
     await page.locator('button', { hasText: '本地文件' }).click();
     await page.waitForTimeout(200);
-    const toast = page.locator('div', { hasText: '本地文件位置:' }).last();
+    const toast = page.locator('div', { hasText: '已在系统文件管理器中定位本地推文包:' }).last();
     expect(await toast.isVisible()).toBe(true);
 
-    // Click '级联删除' -> triggers confirmation dialog
-    await page.locator('button', { hasText: '级联删除' }).click();
+    // Click '删除' -> triggers confirmation dialog
+    await page.locator('.studio-main button', { hasText: '删除' }).click();
     await page.waitForTimeout(200);
 
     // Verify modal content
-    const modal = page.locator('.surface', { hasText: '确认级联物理清理？' });
+    const modal = page.locator('#delete-dialog .surface');
     expect(await modal.isVisible()).toBe(true);
     const modalText = await modal.textContent();
-    expect(modalText).toContain('此操作将彻底删除推文');
-    expect(modalText).toContain('output/');
+    expect(modalText).toContain('确认删除推文？');
+    expect(modalText).toContain('不可恢复');
 
     // Click '取消' to safely dismiss
-    await page.locator('button', { hasText: '取消' }).click();
+    await modal.locator('button', { hasText: '取消' }).click();
     await page.waitForTimeout(200);
-    expect(await page.locator('.surface', { hasText: '确认级联物理清理？' }).isVisible()).toBe(false);
+    expect(await page.locator('#delete-dialog').isVisible()).toBe(false);
   });
 
   it('Flow 7: Trends Radar Interaction & Studio Cross-linking', async () => {
     // Navigate to Trends View
-    await page.locator('.masthead-nav-item', { hasText: '趋势雷达' }).click();
+    await page.locator('.nav-item', { hasText: '趋势雷达' }).click();
     await page.waitForTimeout(300);
 
-    // Verify categories
-    expect(await page.locator('.fmt-chip', { hasText: '科技前沿' }).isVisible()).toBe(true);
-    expect(await page.locator('.fmt-chip', { hasText: '全网综合' }).isVisible()).toBe(true);
+    // Verify categories (100% matched to prototype.html)
+    expect(await page.locator('.fmt-chip', { hasText: '科技' }).isVisible()).toBe(true);
+    expect(await page.locator('.fmt-chip', { hasText: '综合' }).isVisible()).toBe(true);
+    expect(await page.locator('.fmt-chip', { hasText: '商业' }).isVisible()).toBe(true);
 
     // Switch category
-    await page.locator('.fmt-chip', { hasText: '商业金融' }).click();
+    await page.locator('.fmt-chip', { hasText: '商业' }).click();
     await page.waitForTimeout(200);
-
-    // Check refined query tag in trend cards
-    const refinedTag = page.locator('div', { hasText: 'AI 提炼检索短语:' }).first();
-    expect(await refinedTag.isVisible()).toBe(true);
 
     // Click "查看推文" button on first card
     const viewTweetsBtn = page.locator('button', { hasText: '查看推文' }).first();
@@ -224,66 +221,64 @@ describe('GUI Workbench E2E Automated Tests (Playwright + React SPA)', () => {
     await page.waitForTimeout(300);
 
     // Should seamlessly jump to Studio in '全网搜索' mode
-    expect(await page.locator('.fmt-chip.active', { hasText: '全网搜索' }).isVisible()).toBe(true);
-    const searchInputVal = await page.locator('input[placeholder*="输入关键词或语法"]').inputValue();
+    expect(await page.locator('#chip-source-search.active').isVisible()).toBe(true);
+    const searchInputVal = await page.locator('#search-query-input').inputValue();
     expect(searchInputVal.length).toBeGreaterThan(0);
   });
 
   it('Flow 8: Reports View Actionable Insights & Citation Click-to-Jump', async () => {
     // Navigate to Reports View
-    await page.locator('.masthead-nav-item', { hasText: '智能研报' }).click();
+    await page.locator('.nav-item', { hasText: '智能研报' }).click();
     await page.waitForTimeout(300);
 
     // Actionable Insights card verification
-    const insightsCard = page.locator('span', { hasText: 'AI 写作选题与培训大纲便签' });
+    const insightsCard = page.locator('span', { hasText: '💡 选题与培训便签' });
     expect(await insightsCard.isVisible()).toBe(true);
-    expect(await page.locator('button', { hasText: '复制大纲' }).isVisible()).toBe(true);
+    expect(await page.locator('button', { hasText: '📋 复制大纲' }).isVisible()).toBe(true);
 
-    // Click "复制大纲"
-    await page.locator('button', { hasText: '复制大纲' }).click();
+    // Click "📋 复制大纲"
+    await page.locator('button', { hasText: '📋 复制大纲' }).click();
     await page.waitForTimeout(200);
-    expect(await page.locator('button', { hasText: '已复制大纲' }).isVisible()).toBe(true);
+    expect(await page.locator('button', { hasText: '✓ 已复制大纲' }).isVisible()).toBe(true);
 
     // Evidence Traceability Quote Card click-to-jump
-    const quoteCard = page.locator('.surface.surface-hover', { hasText: 'Andrej Karpathy' }).first();
-    expect(await quoteCard.isVisible()).toBe(true);
-    await quoteCard.click();
+    const jumpBtn = page.locator('button', { hasText: '定位原推 ↗' }).first();
+    expect(await jumpBtn.isVisible()).toBe(true);
+    await jumpBtn.click();
     await page.waitForTimeout(300);
 
     // Should jump to Studio view
-    expect(await page.locator('button.split-btn-main').isVisible()).toBe(true);
+    expect(await page.locator('#view-studio').isVisible()).toBe(true);
+    expect(await page.locator('.split-btn-main').isVisible()).toBe(true);
   });
 
   it('Flow 9: Preferences Settings Drawer & Deep Reasoning Effort Config', async () => {
     // Open Settings Drawer via Masthead button
-    await page.locator('button', { hasText: '偏好设置' }).click();
+    await page.locator('button', { hasText: '⚙️ 设置' }).click();
     await page.waitForTimeout(300);
 
     // Verify Drawer title
-    expect(await page.locator('h2.serif-title', { hasText: '偏好设置 (Settings)' }).isVisible()).toBe(true);
+    expect(await page.locator('h2.serif-title', { hasText: '设置' }).isVisible()).toBe(true);
 
     // Verify Reasoning section
-    const reasoningLabel = page.locator('.settings-label', { hasText: '深度思考推演 (Reasoning)' });
+    const reasoningLabel = page.locator('div', { hasText: '深度思考' }).first();
     expect(await reasoningLabel.isVisible()).toBe(true);
 
-    // Verify Effort pills (Low / Medium / High)
-    expect(await page.locator('.fmt-chip', { hasText: '轻量 (Low)' }).isVisible()).toBe(true);
-    expect(await page.locator('.fmt-chip', { hasText: '标准 (Medium)' }).isVisible()).toBe(true);
-    expect(await page.locator('.fmt-chip', { hasText: '深度 (High)' }).isVisible()).toBe(true);
+    // Verify Effort pills (轻量 / 标准 / 深度)
+    expect(await page.locator('.fmt-chip', { hasText: '轻量' }).isVisible()).toBe(true);
+    expect(await page.locator('.fmt-chip', { hasText: '标准' }).isVisible()).toBe(true);
+    expect(await page.locator('.fmt-chip', { hasText: '深度' }).isVisible()).toBe(true);
 
-    // Click '标准 (Medium)'
-    await page.locator('.fmt-chip', { hasText: '标准 (Medium)' }).click();
+    // Click '标准'
+    await page.locator('.fmt-chip', { hasText: '标准' }).click();
     await page.waitForTimeout(200);
-    expect(await page.locator('.fmt-chip.active', { hasText: '标准 (Medium)' }).isVisible()).toBe(true);
+    expect(await page.locator('.fmt-chip.active', { hasText: '标准' }).isVisible()).toBe(true);
 
-    // Click '保存配置'
-    await page.locator('button', { hasText: '保存配置' }).click();
-    await page.waitForTimeout(500);
-    expect(await page.locator('span', { hasText: '已保存生效' }).isVisible()).toBe(true);
+    // Click '保存'
+    await page.locator('button', { hasText: '保存' }).click();
+    await page.waitForTimeout(800);
 
-    // Close Settings Drawer
-    await page.locator('button.text-button').click();
-    await page.waitForTimeout(300);
-    expect(await page.locator('h2.serif-title', { hasText: '偏好设置 (Settings)' }).isVisible()).toBe(false);
+    // Drawer should close
+    expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
   });
 });

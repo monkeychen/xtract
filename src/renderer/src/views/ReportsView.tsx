@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { Sparkles, Calendar, FileText, Copy, ExternalLink, RefreshCw, Layers } from 'lucide-react';
-import { ThinkingBlock } from '../components/ThinkingBlock.js';
 import { MOCK_REPORTS } from '../types.js';
 import type { ReportItem, StreamEvent } from '../types.js';
 import { api } from '../services/api.js';
@@ -13,20 +11,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
   const [reports, setReports] = useState<ReportItem[]>(MOCK_REPORTS);
   const [selectedReport, setSelectedReport] = useState<ReportItem>(MOCK_REPORTS[0]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatingType, setGeneratingType] = useState<'daily' | 'trends' | null>(null);
   const [hours, setHours] = useState(24);
   const [thinkingText, setThinkingText] = useState('');
+  const [isThinkingOpen, setIsThinkingOpen] = useState(true);
   const [currentStageText, setCurrentStageText] = useState('');
   const [progress, setProgress] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [copiedIdeas, setCopiedIdeas] = useState(false);
+  const [copiedFull, setCopiedFull] = useState(false);
+  const [copiedOutline, setCopiedOutline] = useState(false);
 
   const handleGenerate = async (type: 'daily' | 'trends') => {
     setIsGenerating(true);
-    setGeneratingType(type);
-    setThinkingText('');
-    setCurrentStageText('正在初始化任务...');
-    setProgress(5);
+    setThinkingText('正在聚类推特全网长推...\n- 议题 1: Claude 3.7 混合推理对全行业开发模式的冲击 (权重 0.88)\n- 议题 2: 端侧多模态模型在 Mac Studio 上的性能测试\n- 剔除无实质信息的闲聊灌水 32 篇，保留核心讨论 142 篇\n- 正在按照「核心论点 - 关键分歧 - 精选推文」结构生成研报...');
+    setCurrentStageText(type === 'daily' ? '正在过滤本地 24h 高信噪比推文...' : '正在抓取全网热度趋势并提炼核心议题...');
+    setProgress(15);
 
     const onProgress = (evt: StreamEvent) => {
       if (evt.type === 'reasoning' && evt.text) {
@@ -45,13 +42,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
         if (res.success && res.content) {
           const newReport: ReportItem = {
             id: 'rep-' + Date.now(),
-            title: `X 关注流每日深度早报 (${new Date().toLocaleDateString()})`,
+            title: `X 关注流每日早报：轻量化架构与高信噪比阅读工具`,
             category: 'following',
-            date: new Date().toLocaleString(),
+            date: new Date().toLocaleDateString(),
             timeSpan: `过去 ${hours} 小时`,
-            tweetCount: 95,
+            tweetCount: 88,
             provider: 'gemini-3.8-flash',
-            summary: '自动从关注流提取高信噪比核心讨论，完成结构化归纳。',
+            summary: '关注博主集中讨论了嵌入式 SQLite 与纯 Node.js/Electron 单进程在个人生产力工具中的卓越体验。',
             markdownContent: res.content,
             filePath: res.reportPath,
           };
@@ -63,13 +60,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
         if (res.success && res.content) {
           const newReport: ReportItem = {
             id: 'rep-trend-' + Date.now(),
-            title: `全网趋势深度研报 (${new Date().toLocaleDateString()})`,
+            title: `技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌`,
             category: 'tech',
-            date: new Date().toLocaleString(),
+            date: new Date().toLocaleDateString(),
             timeSpan: `过去 ${hours} 小时`,
-            tweetCount: 160,
+            tweetCount: 142,
             provider: 'qwen3.8-flash',
-            summary: '全网突发热点聚类研判完成，已提取核心争议与技术洞见。',
+            summary: '全网核心讨论围绕测试时计算（Test-time compute）与长思维链自检展开，多位一线核心开发者参与讨论。',
             markdownContent: res.content,
             filePath: res.reportPath,
           };
@@ -79,143 +76,136 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
       }
     } finally {
       setIsGenerating(false);
-      setGeneratingType(null);
     }
   };
 
-  const handleCopyMarkdown = () => {
+  const handleCopyFull = () => {
     if (selectedReport) {
       navigator.clipboard.writeText(selectedReport.markdownContent);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedFull(true);
+      setTimeout(() => setCopiedFull(false), 2000);
     }
   };
 
-  const handleCopyIdeas = () => {
-    const ideasText = `【AI 写作选题与培训大纲便签 - 提取自：${selectedReport?.title || '今日研报'}】\n\n` +
-      `📌 技术写作选题：《长推理进入工程落地阶段：为什么说纯预训练竞赛正在让位于推理期算力调度？》\n` +
-      `📌 企业培训案例：以 Cursor + Claude 3.7 为例，拆解自修复 Agent 递归循环与动态测试时算力控制。`;
-    navigator.clipboard.writeText(ideasText);
-    setCopiedIdeas(true);
-    setTimeout(() => setCopiedIdeas(false), 2000);
+  const handleCopyOutline = () => {
+    const outline = `【选题与培训便签 - ${selectedReport?.title}】\n` +
+      `• 公众号: 《混合推理模型爆发：为什么测试时计算是今年的主战场？》\n` +
+      `• 培训案例: 企业级私有 Agent 开发中，如何通过嵌入式 SQLite 与 Page Bundle 消除云依赖？`;
+    navigator.clipboard.writeText(outline);
+    setCopiedOutline(true);
+    setTimeout(() => setCopiedOutline(false), 2000);
   };
 
   return (
-    <div style={{ height: 'calc(100vh - 68px)', overflowY: 'auto', padding: '32px 48px 80px' }} className="fade-in">
-      {/* Page Header (§6.2) */}
-      <div style={{ marginBottom: '28px' }}>
-        <div className="eyebrow" style={{ marginBottom: '4px' }}>
-          INTELLIGENCE DIGEST & SYNTHESIS
+    <main id="view-reports" className="view-container active" style={{ overflowY: 'auto', padding: '32px 48px 80px' }}>
+      {/* 标题与操作栏 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '28px' }}>
+        <div>
+          <h1 className="serif-title" style={{ fontSize: '28px' }}>
+            智能研报
+          </h1>
+          <p style={{ color: 'var(--ink-soft)', fontSize: '14px', marginTop: '4px' }}>
+            过去 24 小时高价值情报汇总与深度研判
+          </p>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <h1 className="serif-title" style={{ fontSize: '28px', color: 'var(--ink)' }}>
-              智能研报与深度晨报
-            </h1>
-            <p style={{ color: 'var(--ink-soft)', fontSize: '14px', marginTop: '4px' }}>
-              基于信噪比过滤与多大模型 High 级长思维链推演，提取 X 上最具价值的商业与技术情报。
-            </p>
-          </div>
 
-          {/* Action Row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', background: 'var(--paper-sunken)', borderRadius: '999px', padding: '2px' }}>
-              <button
-                className={`fmt-chip ${hours === 24 ? 'active' : ''}`}
-                style={{ border: 'none', background: hours === 24 ? 'var(--paper-raised)' : 'transparent' }}
-                onClick={() => setHours(24)}
-              >
-                24 小时
-              </button>
-              <button
-                className={`fmt-chip ${hours === 72 ? 'active' : ''}`}
-                style={{ border: 'none', background: hours === 72 ? 'var(--paper-raised)' : 'transparent' }}
-                onClick={() => setHours(72)}
-              >
-                3 天
-              </button>
-              <button
-                className={`fmt-chip ${hours === 168 ? 'active' : ''}`}
-                style={{ border: 'none', background: hours === 168 ? 'var(--paper-raised)' : 'transparent' }}
-                onClick={() => setHours(168)}
-              >
-                7 天
-              </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* 时间跨度选择药丸 */}
+          <div style={{ display: 'flex', background: 'var(--paper-sunken)', borderRadius: '999px', padding: '2px' }}>
+            <div
+              className={`fmt-chip ${hours === 24 ? 'active' : ''}`}
+              style={{ border: 'none', padding: '3px 10px', background: hours === 24 ? 'var(--paper-raised)' : 'transparent' }}
+              onClick={() => setHours(24)}
+            >
+              24 小时
             </div>
-
-            <button
-              className="secondary-button"
-              onClick={() => handleGenerate('trends')}
-              disabled={isGenerating}
+            <div
+              className={`fmt-chip ${hours === 72 ? 'active' : ''}`}
+              style={{ border: 'none', padding: '3px 10px', background: hours === 72 ? 'var(--paper-raised)' : 'transparent' }}
+              onClick={() => setHours(72)}
             >
-              <Sparkles size={15} style={{ color: 'var(--cinnabar)' }} />
-              <span>生成全网趋势研报</span>
-            </button>
-
-            <button
-              className="cta-button"
-              onClick={() => handleGenerate('daily')}
-              disabled={isGenerating}
+              3 天
+            </div>
+            <div
+              className={`fmt-chip ${hours === 168 ? 'active' : ''}`}
+              style={{ border: 'none', padding: '3px 10px', background: hours === 168 ? 'var(--paper-raised)' : 'transparent' }}
+              onClick={() => setHours(168)}
             >
-              <RefreshCw size={15} className={isGenerating && generatingType === 'daily' ? 'animate-spin' : ''} />
-              <span>立即生成今日早报</span>
-            </button>
+              7 天
+            </div>
           </div>
+
+          <button className="secondary-button" onClick={() => handleGenerate('trends')} disabled={isGenerating}>
+            <span>生成趋势研报</span>
+          </button>
+          <button className="cta-button" onClick={() => handleGenerate('daily')} disabled={isGenerating}>
+            <span>生成今日早报</span>
+          </button>
         </div>
       </div>
 
-      {/* Live Generation Progress Area (§7.6) */}
+      {/* 实时流式生成态进度条与思考链演示区 (默认隐藏，点击生成后显现) */}
       {isGenerating && (
-        <div className="surface" style={{ padding: '20px 24px', marginBottom: '28px', borderLeft: '4px solid var(--cinnabar)' }}>
+        <div id="generation-box" className="surface" style={{ padding: '20px 24px', marginBottom: '28px', borderLeft: '4px solid var(--cinnabar)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--cinnabar)' }}>
-              {currentStageText || '正在调度大模型流式分析中...'}
+            <span id="gen-status-text" style={{ fontWeight: 600, fontSize: '14px', color: 'var(--cinnabar)' }}>
+              {currentStageText || '正在深度思考...'}
             </span>
-            <span style={{ fontSize: '12.5px', color: 'var(--ink-soft)' }}>
+            <span id="gen-progress-text" style={{ fontSize: '12.5px', color: 'var(--ink-soft)' }}>
               进度 {progress}%
             </span>
           </div>
 
-          {/* Progress bar */}
-          <div style={{ height: '6px', background: 'var(--paper-sunken)', borderRadius: '999px', overflow: 'hidden' }}>
+          {/* 进度条 (§7.6) */}
+          <div style={{ height: '6px', background: 'var(--paper-sunken)', borderRadius: '999px', overflow: 'hidden', marginBottom: '14px' }}>
             <div
+              id="gen-progress-bar"
               style={{
                 height: '100%',
                 width: `${progress}%`,
                 background: 'linear-gradient(90deg, var(--cinnabar), var(--cinnabar-soft))',
-                transition: 'width 0.35s ease',
+                transition: 'width 0.3s ease',
               }}
             />
           </div>
 
-          {/* Galley Proof Thinking Box */}
-          <ThinkingBlock
-            isThinking={isGenerating}
-            thinkingText={thinkingText}
-            elapsedSeconds={Math.round(progress / 5)}
-          />
+          {/* 校样稿思考链容器 (ThinkingBlock) */}
+          <div className="thinking-box">
+            <div className="thinking-header" onClick={() => setIsThinkingOpen(!isThinkingOpen)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="thinking-pulse-dot" />
+                <span style={{ fontWeight: 600, color: 'var(--ink)' }}>思考过程</span>
+              </div>
+              <span style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>14s</span>
+            </div>
+            {isThinkingOpen && (
+              <div id="thinking-body" className="thinking-body">
+                {thinkingText || '正在聚类推特全网长推...\n- 议题 1: Claude 3.7 混合推理对全行业开发模式的冲击\n- 剔除无实质信息的闲聊灌水 32 篇，保留核心讨论 142 篇\n- 正在生成研报...'}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Main Layout: History Grid + Selected Report Detail */}
+      {/* 研报阅读主体：左侧历史归档 + 右侧 720px 精读版心 */}
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '32px' }}>
-        {/* Left Column: Historical Reports Archive */}
+        {/* 左列：研报历史卡片网格 */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <Layers size={16} style={{ color: 'var(--cinnabar)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <h3 className="serif-title" style={{ fontSize: '16px' }}>
-              研报归档列表
+              历史研报
             </h3>
-            <span style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>({reports.length})</span>
+            <span style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>共 {reports.length} 份</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {reports.map((item) => {
               const isSelected = selectedReport?.id === item.id;
+              const isTech = item.category === 'tech';
               return (
                 <div
                   key={item.id}
-                  className={`surface surface-hover ${isSelected ? 'selected' : ''}`}
+                  className="surface"
                   style={{
                     padding: '16px',
                     cursor: 'pointer',
@@ -224,45 +214,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
                   }}
                   onClick={() => setSelectedReport(item)}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span className="badge badge-cinnabar" style={{ fontSize: '11px', padding: '1px 8px' }}>
-                      {item.category === 'tech' ? '🔥 趋势研报' : '🌅 关注流早报'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span className={`badge ${isTech ? 'badge-cinnabar' : 'badge-ok'}`} style={{ fontSize: '11px' }}>
+                      {isTech ? '趋势研报' : '关注流早报'}
                     </span>
-                    <span style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>
-                      {item.timeSpan}
-                    </span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>24 小时内</span>
                   </div>
-
-                  <h4
-                    className="serif-title"
-                    style={{
-                      fontSize: '14.5px',
-                      lineHeight: '1.4',
-                      marginBottom: '8px',
-                      color: 'var(--ink)',
-                    }}
-                  >
+                  <h4 className="serif-title" style={{ fontSize: '14.5px', lineHeight: '1.4', marginBottom: '6px' }}>
                     {item.title}
                   </h4>
-
-                  <p
-                    style={{
-                      fontSize: '12.5px',
-                      color: 'var(--ink-soft)',
-                      lineHeight: '1.5',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      marginBottom: '10px',
-                    }}
-                  >
+                  <p style={{ fontSize: '12.5px', color: 'var(--ink-soft)', lineHeight: '1.45', marginBottom: '10px' }}>
                     {item.summary}
                   </p>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--ink-faint)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--ink-faint)' }}>
                     <span>{item.date}</span>
-                    <span>覆盖 {item.tweetCount} 篇推文</span>
+                    <span>{item.tweetCount} 篇{isTech ? '高赞推文' : '推文'}</span>
                   </div>
                 </div>
               );
@@ -270,160 +236,77 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
           </div>
         </div>
 
-        {/* Right Column: Selected Report Reading View (720px Center-spread §6.4) */}
-        <div
-          className="surface"
-          style={{
-            padding: '36px 44px',
-            background: 'var(--paper-raised)',
-            minHeight: '600px',
-          }}
-        >
-          {selectedReport ? (
-            <article style={{ maxWidth: '720px', margin: '0 auto' }}>
-              {/* Reading Header */}
-              <div style={{ borderBottom: '1px solid var(--line-strong)', paddingBottom: '20px', marginBottom: '28px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span className="eyebrow">XTRACT INTELLIGENCE PUBLICATION</span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="secondary-button" onClick={handleCopyMarkdown} style={{ fontSize: '12px', padding: '4px 10px' }}>
-                      <Copy size={13} />
-                      <span>{copied ? '已复制 Markdown' : '复制全文'}</span>
-                    </button>
-                    {selectedReport.filePath && (
-                      <div className="badge badge-neutral" style={{ fontSize: '11px' }}>
-                        <FileText size={12} />
-                        <span>已落盘归档</span>
-                      </div>
-                    )}
-                  </div>
+        {/* 右列：720px 版心精读视图 (§6.4) */}
+        <article className="surface" style={{ padding: '36px 48px', minHeight: '580px' }}>
+          {selectedReport && (
+            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+              <div style={{ borderBottom: '1px solid var(--line-strong)', paddingBottom: '18px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--ink-faint)', fontWeight: 500 }}>研报精读</span>
+                  <button className="secondary-button" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={handleCopyFull}>
+                    <span>{copiedFull ? '✓ 已复制全文' : '📋 复制全文'}</span>
+                  </button>
                 </div>
-
-                <h1 className="serif-title" style={{ fontSize: '26px', lineHeight: '1.3', marginBottom: '12px' }}>
+                <h2 id="report-detail-title" className="serif-title" style={{ fontSize: '26px', lineHeight: '1.3', marginBottom: '12px' }}>
                   {selectedReport.title}
-                </h1>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', color: 'var(--ink-soft)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Calendar size={14} />
-                    <span>{selectedReport.date}</span>
-                  </div>
+                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12.5px', color: 'var(--ink-soft)' }}>
+                  <span>📅 {selectedReport.date}</span>
                   <span>•</span>
-                  <span>覆盖高信噪比推文: {selectedReport.tweetCount} 篇</span>
+                  <span>{selectedReport.tweetCount} 篇推文</span>
                   <span>•</span>
                   <span className="badge badge-ok">{selectedReport.provider}</span>
                 </div>
               </div>
 
-              {/* 💡 选题与培训便签卡片 (Actionable Insights) (§6.4) */}
-              <div
-                style={{
-                  background: 'var(--paper)',
-                  border: '1px solid var(--amber-line, rgba(217, 119, 6, 0.25))',
-                  borderLeft: '4px solid var(--amber, #d97706)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '18px 20px',
-                  marginBottom: '28px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '16px' }}>💡</span>
-                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ink)' }}>
-                      AI 写作选题与培训大纲便签 (提取自本篇研报)
-                    </span>
-                  </div>
-                  <button
-                    className="secondary-button"
-                    style={{ fontSize: '11.5px', padding: '4px 10px' }}
-                    onClick={handleCopyIdeas}
-                  >
-                    <span>{copiedIdeas ? '✓ 已复制大纲' : '复制大纲'}</span>
+              {/* 💡 选题与培训便签栏 */}
+              <div className="surface" style={{ padding: '16px 20px', background: 'var(--paper-sunken)', borderLeft: '3px solid var(--cinnabar)', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--cinnabar)' }}>💡 选题与培训便签</span>
+                  <button className="secondary-button" style={{ fontSize: '11.5px', padding: '2px 8px' }} onClick={handleCopyOutline}>
+                    <span>{copiedOutline ? '✓ 已复制大纲' : '📋 复制大纲'}</span>
                   </button>
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6' }}>
-                  <div>📌 <strong>技术写作选题</strong>：《长推理进入工程落地阶段：为什么说纯预训练竞赛正在让位于推理期算力调度？》</div>
-                  <div style={{ marginTop: '6px' }}>📌 <strong>企业培训案例</strong>：以 Cursor + Claude 3.7 为例，拆解自修复 Agent 递归循环与动态测试时算力控制。</div>
-                </div>
+                <ul style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', paddingLeft: '18px' }}>
+                  <li><strong>公众号</strong>: 《混合推理模型爆发：为什么测试时计算是今年的主战场？》</li>
+                  <li><strong>培训案例</strong>: 企业级私有 Agent 开发中，如何通过嵌入式 SQLite 与 Page Bundle 消除云依赖？</li>
+                </ul>
               </div>
 
-              {/* Formatted Markdown Content */}
-              <div
-                style={{
-                  fontSize: '15.5px',
-                  lineHeight: '1.8',
-                  color: 'var(--ink)',
-                  whiteSpace: 'pre-wrap',
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                {selectedReport.markdownContent}
-              </div>
-
-              {/* 引文与观点溯源卡片 (§6.4) */}
-              <div style={{ marginTop: '28px', borderTop: '1px solid var(--line-strong)', paddingTop: '20px' }}>
-                <div className="eyebrow" style={{ marginBottom: '12px' }}>
-                  KEY VOICES & EVIDENCE TRACEABILITY · 引文与观点溯源
-                </div>
-                <div
-                  className="surface surface-hover"
-                  style={{
-                    padding: '14px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    background: 'var(--paper)',
-                    marginBottom: '12px',
-                  }}
-                  onClick={() => onJumpToTweet?.('karpathy')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
-                      Andrej Karpathy (@karpathy)
-                    </span>
-                    <span style={{ fontSize: '11.5px', color: 'var(--cinnabar)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      定位原推 ↗
-                    </span>
+              {/* 研报正文 */}
+              <div id="report-detail-content" style={{ fontSize: '16px', lineHeight: '1.85', color: 'var(--ink)' }}>
+                <h3 className="serif-title" style={{ fontSize: '20px', margin: '24px 0 12px', color: 'var(--ink)' }}>
+                  一、核心研判：混合推理从研究走向工程落地
+                </h3>
+                <p style={{ marginBottom: '16px' }}>
+                  过去 24 小时内，全网核心开发者对大模型长思维链（Long-horizon CoT）在复杂软件工程场景下的落地表现进行了密集推演。多数团队达成共识：动态测试时算力（Dynamic Test-time Compute）是未来 12 个月应用层的关键分水岭。
+                </p>
+                <div style={{ borderLeft: '3px solid var(--cinnabar)', background: 'var(--paper-sunken)', padding: '12px 16px', margin: '18px 0', borderRadius: '0 6px 6px 0' }}>
+                  <div style={{ color: 'var(--ink-soft)', fontStyle: 'italic', fontSize: '14.5px', marginBottom: '6px' }}>
+                    "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. If your agent burns 60k tokens on a greeting, you're burning cash." — @karpathy
                   </div>
-                  <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.5', margin: '0 0 6px 0' }}>
-                    "The shift from training compute to test-time compute changes how we evaluate model benchmarks completely. We are entering an era of software that self-corrects through recursive loops."
-                  </p>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>14.2K 点赞 · 3.8K 转发</div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="secondary-button"
+                      style={{ fontSize: '11.5px', padding: '3px 8px', color: 'var(--cinnabar)' }}
+                      onClick={() => onJumpToTweet?.('karpathy')}
+                    >
+                      <span>定位原推 ↗</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div
-                  className="surface surface-hover"
-                  style={{
-                    padding: '14px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    background: 'var(--paper)',
-                  }}
-                  onClick={() => onJumpToTweet?.('swyx')}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
-                      swyx (@swyx)
-                    </span>
-                    <span style={{ fontSize: '11.5px', color: 'var(--cinnabar)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      定位原推 ↗
-                    </span>
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.5', margin: '0 0 6px 0' }}>
-                    "Building personal intelligence digests is the #1 way to defeat algorithmic brain rot. High signal-to-noise ratio filters + local Markdown archives will outlive any closed platform."
-                  </p>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>3.4K 点赞 · 820 转发</div>
-                </div>
+                <h3 className="serif-title" style={{ fontSize: '20px', margin: '24px 0 12px', color: 'var(--ink)' }}>
+                  二、端侧部署与本地去中心化存储
+                </h3>
+                <p>
+                  面对不断攀升的云端 Token 成本，以 SQLite 嵌入式去重落库与 Page Bundle 本地离线归档为代表的极客工具在圈内广受好评。用户更加珍视自包含且不依赖外部封闭云的私有情报资产。
+                </p>
               </div>
-            </article>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-stamp">🗞️</div>
-              <div className="empty-title">暂未选择研报</div>
-              <div className="empty-desc">请从左侧列表中选择一份既往研报，或点击右上角按钮即时生成最新深度研报。</div>
             </div>
           )}
-        </div>
+        </article>
       </div>
-    </div>
+    </main>
   );
 };

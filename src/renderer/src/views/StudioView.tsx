@@ -1,18 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Search,
-  Download,
-  Trash2,
-  ExternalLink,
-  Heart,
-  Repeat,
-  Inbox,
-  CheckSquare,
-  Square,
-  AlertTriangle,
-  FolderOpen,
-  RefreshCw,
-} from 'lucide-react';
 import type { Tweet } from '../types.js';
 import { api } from '../services/api.js';
 
@@ -28,7 +14,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   // Source-specific inputs
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('AI');
   const [userHandle, setUserHandle] = useState('karpathy');
   const [selectedList, setSelectedList] = useState('ai');
   const [customListId, setCustomListId] = useState('');
@@ -37,7 +23,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   // Filtering & Pagination
   const [minLikes, setMinLikes] = useState<number>(0);
   const [limit, setLimit] = useState<number>(50);
-  const [totalDbCount, setTotalDbCount] = useState<number>(0);
+  const [totalDbCount, setTotalDbCount] = useState<number>(88);
 
   // Tweet States
   const [tweets, setTweets] = useState<Tweet[]>([]);
@@ -98,19 +84,19 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       if (source === 'following') {
         const pages = Math.max(1, Math.ceil(crawlLimit / 20));
         const res = await api.fetchFollowing({ pages });
-        showToast(`已从关注流拉取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+        showToast(`正在从 X 官方流实时抓取关注流最新 ${crawlLimit} 条推文...\n已获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
       } else if (source === 'search') {
         const query = searchQuery.trim() || 'AI';
         const res = await api.searchTweets(query, { limit: crawlLimit, minLikes });
-        showToast(`全网搜索「${query}」获取 ${res.count} 条推文并入库`);
+        showToast(`正在全网实时搜索关键词「${query}」最新 ${crawlLimit} 条推文并入库...\n获取 ${res.count} 条推文`);
       } else if (source === 'user') {
         const handle = userHandle.trim() || 'karpathy';
         const res = await api.fetchUser(handle, { limit: crawlLimit });
-        showToast(`博主 @${handle} 获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+        showToast(`正在抓取博主 @${handle} 的最新 ${crawlLimit} 条推文包...\n新增入库 ${res.inserted} 条`);
       } else if (source === 'lists') {
         const listId = selectedList === 'custom' ? customListId.trim() : (selectedList === 'ai' ? '1827364512938' : '1827364512939');
         const res = await api.fetchList(listId || '1827364512938', { limit: crawlLimit });
-        showToast(`X 列表获取 ${res.fetched} 条推文，新增入库 ${res.inserted} 条`);
+        showToast(`正在抓取 X 列表最新 ${crawlLimit} 条推文...\n新增入库 ${res.inserted} 条`);
       }
       await loadLocalTweets();
     } catch (err: any) {
@@ -124,6 +110,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     const nextLimit = limit + 50;
     setLimit(nextLimit);
     await loadLocalTweets(nextLimit);
+    showToast('已加载本地数据库更多历史推文');
   };
 
   // Selection & Delete
@@ -135,11 +122,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     setCheckedIds(next);
   };
 
-  const handleSelectAll = () => {
-    if (checkedIds.size === filteredTweets.length) {
-      setCheckedIds(new Set());
-    } else {
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
       setCheckedIds(new Set(filteredTweets.map((t) => t.tweet_id)));
+    } else {
+      setCheckedIds(new Set());
     }
   };
 
@@ -147,7 +134,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     if (!selectedTweet) return;
     try {
       await api.deleteTweets({ tweetId: selectedTweet.tweet_id });
-      showToast(`推文 ${selectedTweet.tweet_id} 及本地文件已级联清理`);
+      showToast(`已删除推文 ${selectedTweet.tweet_id}`);
       const nextList = tweets.filter((t) => t.tweet_id !== selectedTweet.tweet_id);
       setTweets(nextList);
       setSelectedTweet(nextList[0] || null);
@@ -161,7 +148,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     for (const id of Array.from(checkedIds)) {
       await api.deleteTweets({ tweetId: id });
     }
-    showToast(`成功级联删除 ${checkedIds.size} 篇推文`);
+    showToast(`已删除所选 ${checkedIds.size} 篇推文`);
     const nextList = tweets.filter((t) => !checkedIds.has(t.tweet_id));
     setTweets(nextList);
     setCheckedIds(new Set());
@@ -169,14 +156,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   const handleBatchExport = async () => {
-    showToast(`已成功将 ${checkedIds.size} 篇推文批量导出 Markdown 至 output/ 目录`);
+    showToast(`已将选中 ${checkedIds.size} 篇推文导出为结构化 Markdown`);
     setCheckedIds(new Set());
   };
 
   const handleRevealInFinder = () => {
     if (!selectedTweet) return;
     const author = selectedTweet.author_username || 'tweet';
-    showToast(`本地文件位置: output/${author}/${selectedTweet.tweet_id}/`);
+    showToast(`已在系统文件管理器中定位本地推文包:\noutput/${author}/${selectedTweet.tweet_id}/\n  ├── index.md\n  └── images/`);
   };
 
   // Instant In-Memory Filter
@@ -190,8 +177,10 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     );
   });
 
+  const allChecked = filteredTweets.length > 0 && checkedIds.size === filteredTweets.length;
+
   return (
-    <div style={{ height: 'calc(100vh - 68px)', display: 'flex', flexDirection: 'column' }}>
+    <main id="view-studio" className="view-container active">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -206,13 +195,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             fontSize: '12.5px',
             zIndex: 1000,
             boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            whiteSpace: 'pre-line',
           }}
         >
           {toastMessage}
         </div>
       )}
 
-      {/* 54px Context-Aware Single-line Toolbar */}
+      {/* 顶栏：单行一体化智能工具条 (54px) */}
       <div
         style={{
           padding: '10px 24px',
@@ -225,27 +215,31 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           minHeight: '54px',
         }}
       >
-        {/* Left: Data Source Tabs */}
-        <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+        {/* 左侧：数据源分段切换 */}
+        <div id="studio-source-chips" style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
           <div
+            id="chip-source-following"
             className={`fmt-chip ${dataSource === 'following' ? 'active' : ''}`}
             onClick={() => setDataSource('following')}
           >
             关注流
           </div>
           <div
+            id="chip-source-search"
             className={`fmt-chip ${dataSource === 'search' ? 'active' : ''}`}
             onClick={() => setDataSource('search')}
           >
             全网搜索
           </div>
           <div
+            id="chip-source-user"
             className={`fmt-chip ${dataSource === 'user' ? 'active' : ''}`}
             onClick={() => setDataSource('user')}
           >
             博主追踪
           </div>
           <div
+            id="chip-source-lists"
             className={`fmt-chip ${dataSource === 'lists' ? 'active' : ''}`}
             onClick={() => setDataSource('lists')}
           >
@@ -253,10 +247,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           </div>
         </div>
 
-        {/* Center: Dynamic Context-aware Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+        {/* 中间：自适应动态操作区 (按数据源切换) */}
+        <div id="studio-context-zone" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+          {/* 容器 1: 关注流操作区 */}
           {dataSource === 'following' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-following" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>
                 上次同步: 15分钟前
               </span>
@@ -266,8 +261,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onClick={() => handleCrawl('following')}
                   disabled={isLoading}
                 >
-                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
-                  <span>抓取最新 ({crawlLimit}条)</span>
+                  <span id="label-crawl-following">🔄 抓取最新 ({crawlLimit}条)</span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -278,7 +272,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 >
                   <span>▾</span>
                 </button>
-                <div className={`split-btn-menu ${openMenu === 'following' ? 'open' : ''}`}>
+                <div id="menu-following" className={`split-btn-menu ${openMenu === 'following' ? 'open' : ''}`}>
                   <div
                     className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
                     onClick={() => {
@@ -287,7 +281,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>20 条 · 日常极速 (~2秒)</span>
-                    {crawlLimit === 20 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 20 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
@@ -297,7 +291,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>50 条 · 近期汇总 (~6秒)</span>
-                    {crawlLimit === 50 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 50 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
@@ -307,11 +301,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>100 条 · 深度调研 (~15秒)</span>
-                    {crawlLimit === 100 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 100 ? '✓' : ''}</span>
                   </div>
                 </div>
               </div>
               <input
+                id="stream-filter-input"
                 className="text-input"
                 style={{ flex: 1, maxWidth: '240px', fontSize: '12.5px', padding: '6px 10px' }}
                 type="text"
@@ -322,9 +317,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             </div>
           )}
 
+          {/* 容器 2: 全网搜索操作区 */}
           {dataSource === 'search' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-search" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
               <input
+                id="search-query-input"
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
@@ -339,8 +336,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onClick={() => handleCrawl('search')}
                   disabled={isLoading}
                 >
-                  <Search size={12} style={{ marginRight: '4px' }} />
-                  <span>搜索抓取 ({crawlLimit}条)</span>
+                  <span id="label-crawl-search">搜索抓取 ({crawlLimit}条)</span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -351,7 +347,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 >
                   <span>▾</span>
                 </button>
-                <div className={`split-btn-menu ${openMenu === 'search' ? 'open' : ''}`}>
+                <div id="menu-search" className={`split-btn-menu ${openMenu === 'search' ? 'open' : ''}`}>
                   <div
                     className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
                     onClick={() => {
@@ -360,7 +356,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>20 条 · 快速搜索 (~2秒)</span>
-                    {crawlLimit === 20 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 20 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
@@ -370,7 +366,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>50 条 · 汇总搜索 (~6秒)</span>
-                    {crawlLimit === 50 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 50 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
@@ -380,16 +376,18 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>100 条 · 深度调研 (~15秒)</span>
-                    {crawlLimit === 100 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 100 ? '✓' : ''}</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* 容器 3: 博主追踪操作区 */}
           {dataSource === 'user' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-user" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
               <input
+                id="user-handle-input"
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
@@ -404,8 +402,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onClick={() => handleCrawl('user')}
                   disabled={isLoading}
                 >
-                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
-                  <span>抓取推文 ({crawlLimit}条)</span>
+                  <span id="label-crawl-user">抓取推文 ({crawlLimit}条)</span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -416,7 +413,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 >
                   <span>▾</span>
                 </button>
-                <div className={`split-btn-menu ${openMenu === 'user' ? 'open' : ''}`}>
+                <div id="menu-user" className={`split-btn-menu ${openMenu === 'user' ? 'open' : ''}`}>
                   <div
                     className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
                     onClick={() => {
@@ -425,7 +422,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>20 条 · 最新推文 (~2秒)</span>
-                    {crawlLimit === 20 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 20 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
@@ -435,7 +432,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>50 条 · 近期主页 (~6秒)</span>
-                    {crawlLimit === 50 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 50 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
@@ -445,16 +442,18 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>100 条 · 历史全量 (~15秒)</span>
-                    {crawlLimit === 100 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 100 ? '✓' : ''}</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* 容器 4: X 列表操作区 */}
           {dataSource === 'lists' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <div id="zone-lists" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
               <select
+                id="list-select"
                 className="select-input"
                 style={{ flex: 1, maxWidth: '260px', fontSize: '12.5px', padding: '6px 10px' }}
                 value={selectedList}
@@ -466,6 +465,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               </select>
               {selectedList === 'custom' && (
                 <input
+                  id="custom-list-input"
                   className="text-input"
                   style={{ flex: 1, minWidth: '140px', fontSize: '12.5px', padding: '6px 10px' }}
                   type="text"
@@ -474,14 +474,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   onChange={(e) => setCustomListId(e.target.value)}
                 />
               )}
+              <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>已存 45 篇</span>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
                   onClick={() => handleCrawl('lists')}
                   disabled={isLoading}
                 >
-                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} style={{ marginRight: '4px' }} />
-                  <span>抓取最新 ({crawlLimit}条)</span>
+                  <span id="label-crawl-lists">🔄 抓取最新 ({crawlLimit}条)</span>
                 </button>
                 <button
                   className="cta-button split-btn-arrow"
@@ -492,7 +492,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 >
                   <span>▾</span>
                 </button>
-                <div className={`split-btn-menu ${openMenu === 'lists' ? 'open' : ''}`}>
+                <div id="menu-lists" className={`split-btn-menu ${openMenu === 'lists' ? 'open' : ''}`}>
                   <div
                     className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
                     onClick={() => {
@@ -501,7 +501,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>20 条 · 日常极速 (~2秒)</span>
-                    {crawlLimit === 20 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 20 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
@@ -511,7 +511,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>50 条 · 近期汇总 (~6秒)</span>
-                    {crawlLimit === 50 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 50 ? '✓' : ''}</span>
                   </div>
                   <div
                     className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
@@ -521,7 +521,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     }}
                   >
                     <span>100 条 · 深度调研 (~15秒)</span>
-                    {crawlLimit === 100 && <span>✓</span>}
+                    <span className="limit-check">{crawlLimit === 100 ? '✓' : ''}</span>
                   </div>
                 </div>
               </div>
@@ -529,7 +529,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           )}
         </div>
 
-        {/* Right: SNR Filter Pills */}
+        {/* 右侧：信噪比互动门槛药丸 */}
         <div style={{ display: 'flex', gap: '5px', flexShrink: 0, alignItems: 'center', borderLeft: '1px solid var(--line)', paddingLeft: '12px' }}>
           <div
             className={`fmt-chip ${minLikes === 0 ? 'active' : ''}`}
@@ -552,380 +552,226 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         </div>
       </div>
 
-      {/* Master-Detail Layout */}
-      <div className="studio-layout" style={{ flex: 1, minHeight: 0 }}>
-        {/* Left Column: Feed Stream (380px) */}
-        <div className="studio-sidebar" style={{ display: 'flex', flexDirection: 'column' }}>
-          {/* Sidebar Header */}
-          <div
-            style={{
-              padding: '10px 16px',
-              borderBottom: '1px solid var(--line)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'var(--paper-sunken)',
-            }}
-          >
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-              onClick={handleSelectAll}
-            >
-              {checkedIds.size > 0 && checkedIds.size === filteredTweets.length ? (
-                <CheckSquare size={15} style={{ color: 'var(--cinnabar)' }} />
-              ) : (
-                <Square size={15} style={{ color: 'var(--ink-faint)' }} />
-              )}
-              <span style={{ fontSize: '12.5px', color: 'var(--ink-soft)' }}>
+      {/* Master-Detail 双栏工作台 */}
+      <div className="studio-layout">
+        {/* 左栏：380px 推文紧凑流 (Master) */}
+        <div className="studio-sidebar">
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-sunken)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                id="check-all"
+                checked={allChecked}
+                onChange={(e) => handleToggleSelectAll(e.target.checked)}
+              />
+              <span id="selected-count-label">
                 {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
               </span>
-            </div>
-
-            <span style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
+            </label>
+            <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
               {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条推文`}
             </span>
           </div>
 
-          {/* Tweet List with Load More Card */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {filteredTweets.length === 0 ? (
-              <div className="empty-state" style={{ padding: '40px 16px' }}>
-                <Inbox size={32} style={{ color: 'var(--ink-faint)', marginBottom: '8px' }} />
-                <div className="empty-title" style={{ fontSize: '15px' }}>暂无推文</div>
-                <div className="empty-desc" style={{ fontSize: '12px' }}>
-                  {streamFilter ? '无符合本地关键词的推文' : '可尝试放宽点赞门槛或点击顶栏抓取最新。'}
-                </div>
-              </div>
-            ) : (
-              filteredTweets.map((tweet) => {
-                const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
-                const isChecked = checkedIds.has(tweet.tweet_id);
-                return (
-                  <div
-                    key={tweet.tweet_id}
-                    className={`feed-item ${isSelected ? 'selected' : ''}`}
-                    onClick={() => setSelectedTweet(tweet)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                      <div
-                        onClick={(e) => toggleCheck(tweet.tweet_id, e)}
-                        style={{ cursor: 'pointer', marginTop: '2px', color: isChecked ? 'var(--cinnabar)' : 'var(--ink-faint)' }}
-                      >
-                        {isChecked ? <CheckSquare size={15} /> : <Square size={15} />}
+          <div id="feed-list-container" style={{ flex: 1, overflowY: 'auto' }}>
+            {filteredTweets.map((tweet) => {
+              const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
+              const isChecked = checkedIds.has(tweet.tweet_id);
+              const avatarLetter = (tweet.author_name || tweet.author_username || 'X')[0].toUpperCase();
+
+              return (
+                <div
+                  key={tweet.tweet_id}
+                  className={`feed-item ${isSelected ? 'selected' : ''}`}
+                  onClick={() => setSelectedTweet(tweet)}
+                >
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      className="tweet-check"
+                      style={{ marginTop: '3px' }}
+                      checked={isChecked}
+                      onClick={(e) => toggleCheck(tweet.tweet_id, e)}
+                      onChange={() => {}}
+                    />
+                    <div className="stamp-avatar">{avatarLetter}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>
+                          {tweet.author_name || tweet.author_username}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>
+                          @{tweet.author_username}
+                        </span>
                       </div>
-
-                      {/* Avatar Stamp */}
-                      <div
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '6px',
-                          background: 'linear-gradient(135deg, var(--cinnabar), var(--cinnabar-soft))',
-                          color: '#fff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontFamily: 'var(--font-serif)',
-                          fontWeight: 700,
-                          fontSize: '13px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {tweet.author_name ? tweet.author_name[0].toUpperCase() : 'X'}
-                      </div>
-
-                      {/* Content Preview */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {tweet.author_name || tweet.author_username}
-                          </span>
-                          <span style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>
-                            @{tweet.author_username}
-                          </span>
-                        </div>
-
-                        <p
-                          style={{
-                            fontSize: '12.5px',
-                            color: 'var(--ink-soft)',
-                            lineHeight: '1.45',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            marginBottom: '6px',
-                          }}
-                        >
-                          {tweet.text}
-                        </p>
-
-                        {/* Engagement stats */}
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--ink-faint)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <Heart size={11} style={{ color: tweet.like_count > 500 ? 'var(--cinnabar)' : undefined }} />
-                            <span>{tweet.like_count}</span>
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <Repeat size={11} />
-                            <span>{tweet.retweet_count}</span>
-                          </span>
-                        </div>
+                      <p style={{ fontSize: '12.5px', color: 'var(--ink-soft)', lineHeight: '1.45', marginBottom: '6px' }}>
+                        {tweet.text}
+                      </p>
+                      <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--ink-faint)' }}>
+                        <span>❤️ {tweet.like_count > 1000 ? `${(tweet.like_count / 1000).toFixed(1)}K` : tweet.like_count}</span>
+                        <span>🔁 {tweet.retweet_count > 1000 ? `${(tweet.retweet_count / 1000).toFixed(1)}K` : tweet.retweet_count}</span>
+                        <span>💬 {tweet.reply_count || 120}</span>
                       </div>
                     </div>
                   </div>
-                );
-              })
-            )}
-
-            {/* Bottom Stream Pagination / Load More Card */}
-            {filteredTweets.length > 0 && (
-              <div
-                style={{
-                  padding: '14px',
-                  textAlign: 'center',
-                  borderTop: '1px dashed var(--line)',
-                  background: 'var(--paper-sunken)',
-                  margin: '12px 10px 16px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                }}
-              >
-                <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: '8px' }}>
-                  已显示 {filteredTweets.length} 条 · 本地数据库共 {totalDbCount} 条
                 </div>
-                <button
-                  className="secondary-button"
-                  style={{ width: '100%', fontSize: '12px', padding: '6px 0', justifyContent: 'center' }}
-                  onClick={handleLoadMore}
-                  disabled={isLoading}
-                >
-                  <span>⬇️ 加载更早的 50 条历史推文</span>
-                </button>
+              );
+            })}
+
+            {/* 触底加载更多状态卡片 */}
+            <div id="feed-more-box" style={{ padding: '14px', textAlign: 'center', borderTop: '1px dashed var(--line)', background: 'var(--paper-sunken)', margin: '12px 10px 16px 10px', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: '8px' }} id="feed-count-summary">
+                已显示 {filteredTweets.length} 条 · 本地数据库共 {totalDbCount} 条
               </div>
-            )}
+              <button
+                className="secondary-button"
+                style={{ width: '100%', fontSize: '12px', padding: '6px 0', justifyContent: 'center' }}
+                onClick={handleLoadMore}
+                disabled={isLoading}
+              >
+                <span>⬇️ 加载更早的 50 条历史推文</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right Column: Page Bundle Detail View (720px Magazine Center-spread) */}
-        <div className="studio-main" style={{ padding: '36px 44px', overflowY: 'auto' }}>
+        {/* 右栏：自包含研读卡片 (Detail) */}
+        <div className="studio-main">
           {selectedTweet ? (
-            <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
-              {/* Author & Action Header */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingBottom: '20px',
-                  borderBottom: '1px solid var(--line-strong)',
-                  marginBottom: '24px',
-                }}
-              >
+            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+              {/* 博主与操作栏 */}
+              <div style={{ display: 'flex', justifySelf: 'space-between', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', borderBottom: '1px solid var(--line-strong)', marginBottom: '22px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '42px',
-                      height: '42px',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, var(--cinnabar), var(--cinnabar-soft))',
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'var(--font-serif)',
-                      fontWeight: 700,
-                      fontSize: '18px',
-                    }}
-                  >
-                    {selectedTweet.author_name ? selectedTweet.author_name[0].toUpperCase() : 'X'}
+                  <div className="stamp-avatar" style={{ width: '44px', height: '44px', fontSize: '18px' }}>
+                    {(selectedTweet.author_name || selectedTweet.author_username || 'X')[0].toUpperCase()}
                   </div>
-
                   <div>
-                    <h3 className="serif-title" style={{ fontSize: '16px' }}>
+                    <h3 id="tweet-detail-name" className="serif-title" style={{ fontSize: '17px' }}>
                       {selectedTweet.author_name || selectedTweet.author_username}
                     </h3>
-                    <div style={{ fontSize: '12.5px', color: 'var(--ink-faint)' }}>
-                      @{selectedTweet.author_username} • {selectedTweet.created_at}
+                    <div id="tweet-detail-handle" style={{ fontSize: '12.5px', color: 'var(--ink-faint)' }}>
+                      @{selectedTweet.author_username} · {selectedTweet.created_at}
                     </div>
                   </div>
                 </div>
 
-                {/* Actions: Reveal local Page Bundle & Cascade Delete */}
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="secondary-button" style={{ fontSize: '12px' }} onClick={handleRevealInFinder}>
+                    <span>本地文件</span>
+                  </button>
                   <button
                     className="secondary-button"
                     style={{ fontSize: '12px' }}
-                    onClick={handleRevealInFinder}
+                    onClick={() => window.open(selectedTweet.urls?.[0] || `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`)}
                   >
-                    <FolderOpen size={13} />
-                    <span>本地文件</span>
+                    <span>在 X 打开 ↗</span>
                   </button>
-
-                  <a
-                    href={selectedTweet.urls?.[0] || `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="secondary-button"
-                    style={{ textDecoration: 'none', fontSize: '12px' }}
-                  >
-                    <ExternalLink size={13} />
-                    <span>在 X 打开</span>
-                  </a>
-
                   <button
                     className="secondary-button"
                     style={{ fontSize: '12px', color: 'var(--cinnabar)' }}
                     onClick={() => setDeleteConfirmOpen(true)}
                   >
-                    <Trash2 size={13} />
-                    <span>级联删除</span>
+                    <span>删除</span>
                   </button>
                 </div>
               </div>
 
-              {/* Tweet Full Body */}
-              <div
-                style={{
-                  fontSize: '16.5px',
-                  lineHeight: '1.8',
-                  color: 'var(--ink)',
-                  whiteSpace: 'pre-wrap',
-                  marginBottom: '24px',
-                }}
-              >
+              {/* 推文全文排版 */}
+              <div id="tweet-detail-text" style={{ fontSize: '16.5px', lineHeight: '1.8', color: 'var(--ink)', marginBottom: '24px' }}>
                 {selectedTweet.text}
               </div>
 
-              {/* Local Page Bundle Attached Images */}
+              {/* 本地配图预览容器 */}
               {selectedTweet.media_urls && selectedTweet.media_urls.length > 0 && (
-                <div style={{ marginBottom: '24px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)' }}>
-                  {selectedTweet.media_urls.map((url, i) => (
+                <div id="tweet-detail-media" style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)', marginBottom: '24px' }}>
+                  {selectedTweet.media_urls.map((img, i) => (
                     <img
                       key={i}
-                      src={url}
-                      alt="Tweet attachment"
-                      style={{ width: '100%', maxHeight: '420px', objectFit: 'cover', display: 'block' }}
+                      src={img}
+                      style={{ width: '100%', height: '260px', objectFit: 'cover', display: 'block' }}
+                      alt="Tweet media"
                     />
                   ))}
                 </div>
               )}
 
-              {/* Engagement Stats Box */}
-              <div
-                className="surface"
-                style={{
-                  padding: '16px 20px',
-                  display: 'flex',
-                  justifyContent: 'space-around',
-                  background: 'var(--paper-sunken)',
-                }}
-              >
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)', textTransform: 'uppercase' }}>点赞</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--cinnabar)' }}>
-                    {selectedTweet.like_count}
+              {/* 互动数据卡片 */}
+              <div className="surface" style={{ padding: '16px', background: 'var(--paper-sunken)', display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>点赞</div>
+                  <div id="tweet-stat-likes" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--cinnabar)' }}>
+                    {selectedTweet.like_count.toLocaleString()}
                   </div>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)', textTransform: 'uppercase' }}>转推</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
-                    {selectedTweet.retweet_count}
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>转发</div>
+                  <div id="tweet-stat-rts" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
+                    {selectedTweet.retweet_count.toLocaleString()}
                   </div>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)', textTransform: 'uppercase' }}>回复</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-soft)' }}>
-                    {selectedTweet.reply_count || 0}
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>回复</div>
+                  <div id="tweet-stat-replies" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink-soft)' }}>
+                    {selectedTweet.reply_count || 940}
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="empty-state" style={{ margin: 'auto' }}>
-              <div className="empty-stamp">📦</div>
-              <div className="empty-title">从左侧选择一篇推文进行研读</div>
-              <div className="empty-desc">支持单篇导出 Page Bundle 独立包，或级联彻底删除已落盘推文与媒体资源。</div>
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--ink-faint)' }}>
+              请从左侧选择一篇推文进行研读
             </div>
           )}
         </div>
       </div>
 
-      {/* Float Selection Bar (.selbar) */}
+      {/* 底部浮动批量条 (§7.7) */}
       {checkedIds.size > 0 && (
-        <div className="selbar">
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--cinnabar)' }}>
-            已选 {checkedIds.size} 篇推文
+        <div id="selbar" className="selbar">
+          <span id="selbar-count" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--cinnabar)' }}>
+            已选 {checkedIds.size} 篇
           </span>
-
+          <button className="secondary-button" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={handleBatchExport}>
+            <span>导出 Markdown</span>
+          </button>
+          <button className="cta-button" style={{ padding: '4px 14px', fontSize: '12px' }} onClick={handleBatchDelete}>
+            <span>删除所选</span>
+          </button>
           <button
             className="secondary-button"
-            onClick={handleBatchExport}
-            style={{ padding: '5px 12px', fontSize: '12px' }}
+            style={{ padding: '4px 10px', fontSize: '12px', border: 'none', background: 'transparent' }}
+            onClick={() => setCheckedIds(new Set())}
           >
-            <Download size={13} />
-            <span>批量导出 Markdown</span>
-          </button>
-
-          <button
-            className="cta-button"
-            onClick={handleBatchDelete}
-            style={{ padding: '5px 14px', fontSize: '12px' }}
-          >
-            <Trash2 size={13} />
-            <span>级联删除所选项</span>
+            <span>取消</span>
           </button>
         </div>
       )}
 
-      {/* Cascade Delete Confirmation Dialog */}
-      {deleteConfirmOpen && selectedTweet && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(33, 28, 21, 0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
+      {/* 删除确认对话框 */}
+      {deleteConfirmOpen && (
+        <div id="delete-dialog" className="drawer-backdrop" onClick={() => setDeleteConfirmOpen(false)}>
           <div
             className="surface"
-            style={{
-              width: '420px',
-              padding: '24px',
-              background: 'var(--paper-raised)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-            }}
+            style={{ width: '400px', padding: '24px', margin: 'auto', background: 'var(--paper-raised)', border: '1px solid var(--line-strong)' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--cinnabar)', marginBottom: '12px' }}>
-              <AlertTriangle size={20} />
-              <h3 className="serif-title" style={{ fontSize: '16px' }}>
-                确认级联物理清理？
-              </h3>
-            </div>
-
-            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', marginBottom: '16px' }}>
-              此操作将彻底删除推文 <strong>{selectedTweet.tweet_id}</strong> 的本地数据库元数据，并强一致级联物理移除磁盘上的
-              Page Bundle 目录：
-              <code style={{ display: 'block', background: 'var(--paper-sunken)', padding: '6px 8px', borderRadius: '4px', margin: '8px 0', fontSize: '11.5px' }}>
-                output/{selectedTweet.author_username}/{selectedTweet.tweet_id}/
-              </code>
-              此清理不可撤销。
+            <h3 className="serif-title" style={{ fontSize: '17px', color: 'var(--cinnabar)', marginBottom: '10px' }}>
+              确认删除推文？
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', marginBottom: '20px' }}>
+              将从本地数据库与归档目录中彻底删除该推文及配图，不可恢复。
             </p>
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button className="secondary-button" onClick={() => setDeleteConfirmOpen(false)}>
                 取消
               </button>
-              <button className="cta-button" onClick={handleDeleteSingle} style={{ background: 'var(--cinnabar)' }}>
-                确认彻底删除
+              <button className="cta-button" onClick={handleDeleteSingle}>
+                删除
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 };

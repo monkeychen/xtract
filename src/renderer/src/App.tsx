@@ -32,8 +32,7 @@ export const App: React.FC = () => {
     setActiveTab('studio');
   };
 
-  const handleJumpToTweet = (tweetIdOrHandle: string) => {
-    setStudioQuery(tweetIdOrHandle);
+  const handleJumpToTweet = (_tweetIdOrHandle: string) => {
     setActiveTab('studio');
   };
 
@@ -42,7 +41,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* 68px Masthead Navigation Bar */}
       <Masthead
         activeTab={activeTab}
@@ -52,19 +51,17 @@ export const App: React.FC = () => {
         proxyStatus={proxyStatus}
       />
 
-      {/* Main View Container */}
-      <main style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'reports' && <ReportsView onJumpToTweet={handleJumpToTweet} />}
-        {activeTab === 'trends' && (
-          <TrendsView
-            onSearchInStudio={handleSearchInStudio}
-            onGenerateDigestForTrend={handleGenerateDigestForTrend}
-          />
-        )}
-        {activeTab === 'studio' && <StudioView initialSearchQuery={studioQuery} />}
-      </main>
+      {/* Primary Views (100% matched to prototype.html) */}
+      {activeTab === 'reports' && <ReportsView onJumpToTweet={handleJumpToTweet} />}
+      {activeTab === 'trends' && (
+        <TrendsView
+          onSearchInStudio={handleSearchInStudio}
+          onGenerateDigestForTrend={handleGenerateDigestForTrend}
+        />
+      )}
+      {activeTab === 'studio' && <StudioView initialSearchQuery={studioQuery} />}
 
-      {/* Preferences & Model Settings Drawer */}
+      {/* Slide-over Settings Drawer */}
       <SettingsDrawer
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
