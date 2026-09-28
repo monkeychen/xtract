@@ -366,13 +366,16 @@ export class XClient {
         const url = res.url();
         if (
           url.includes('/graphql/') &&
-          (url.includes('HomeLatestTimeline') || url.includes('HomeTimeline')) &&
+          (url.includes('HomeLatestTimeline') ||
+            url.includes('HomeTimeline') ||
+            url.includes('HomeTimelineV2') ||
+            url.includes('TimelineResponse')) &&
           res.status() === 200
         ) {
           try {
             const data = await res.json();
-            const inst = data?.data?.home?.home_timeline_urt?.instructions;
-            if (Array.isArray(inst) && inst.length > 0) {
+            const inst = extractTimelineInstructions(data);
+            if (inst.length > 0) {
               capturedInstructions.push(inst);
             }
           } catch {
@@ -384,9 +387,11 @@ export class XClient {
       process.stderr.write(`🌐 正在打开 x.com/home 并挂载网络监听器...\n`);
       await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
 
-      // Wait for navigation tabs
+      // Wait for navigation tabs or hydration
       try {
-        await page.waitForSelector('div[role="tablist"], [role="tab"]', { timeout: 15000 });
+        await page.waitForSelector('div[role="tablist"], [role="tab"], a[href="/home"]', {
+          timeout: 10000,
+        });
       } catch {
         // ignore
       }
@@ -395,32 +400,48 @@ export class XClient {
         throw new Error('X 认证失败：页面被重定向至登录页。请检查 auth_token 是否过期。');
       }
 
-      // Click "Following" tab
+      // Try finding and clicking "Following" tab
       try {
         const tabs = page.locator('[role="tab"]');
         const count = await tabs.count();
+        let clickedTab = false;
         for (let i = 0; i < count; i++) {
           const tab = tabs.nth(i);
           const text = (await tab.textContent()) || '';
           if (/Following|正在关注|关注/i.test(text)) {
             process.stderr.write('📌 切换至「正在关注 (Following)」时间线...\n');
             await tab.click();
-            await new Promise((r) => setTimeout(r, 4000));
+            clickedTab = true;
+            await new Promise((r) => setTimeout(r, 2500));
             break;
           }
+        }
+        if (!clickedTab && count > 1) {
+          // Default: second tab is usually Following
+          const secondTab = tabs.nth(1);
+          await secondTab.click().catch(() => {});
         }
       } catch {
         // ignore tab click error
       }
 
-      // Paginate by scrolling
+      // Initial batch wait with gentle scroll assist
+      for (let i = 0; i < Math.max(10, timeout / 2); i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (capturedInstructions.length > 0) break;
+        if (i === 2 || i === 5) {
+          await page.evaluate(() => window.scrollBy(0, 1000)).catch(() => {});
+        }
+      }
+
+      // Paginate by scrolling if user requested more
       for (let pIdx = 1; pIdx < maxPages; pIdx++) {
         process.stderr.write(`📜 正在向下滚动加载第 ${pIdx + 1} 页推文...\n`);
-        await page.evaluate(() => window.scrollBy(0, 2500));
+        await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => {});
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
       }
 
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1500));
     } finally {
       await browser.close();
     }

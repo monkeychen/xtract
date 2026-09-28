@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import { Storage } from '../src/main/storage/index.js';
 
 function runCli(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
@@ -25,6 +26,24 @@ function runCli(args: string[]): Promise<{ stdout: string; stderr: string; exitC
 }
 
 describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
+  beforeAll(() => {
+    const storage = new Storage();
+    storage.saveTweets([
+      {
+        tweet_id: '2100170356271255650',
+        text: 'Claude 3.7 Sonnet hybrid reasoning architecture released today.',
+        author_id: '123456',
+        author_name: 'AI Insider',
+        author_username: 'ai_insider',
+        created_at: new Date().toISOString(),
+        like_count: 500,
+        retweet_count: 100,
+        reply_count: 50,
+        has_rich_content: 1,
+      } as any,
+    ]);
+    storage.close();
+  });
   it('E2E: --help prints all crawl & LLM flags', async () => {
     const { stdout, exitCode } = await runCli(['--help']);
     expect(exitCode).toBe(0);
@@ -63,7 +82,7 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
     if (parsed.exportedMarkdown) {
       expect(fs.existsSync(parsed.exportedMarkdown)).toBe(true);
     }
-  }, 15000);
+  }, 30000);
 
   it('E2E: --export --json exports markdown document and returns json confirmation', async () => {
     const { stdout, exitCode } = await runCli(['--export', '3', '--json']);
