@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { ProxyAgent } from 'undici';
 import { Config } from '../config.js';
 import type { StreamChunk } from '../types.js';
 
@@ -133,7 +132,7 @@ export class OpenAICompatProvider implements BaseLLMProvider {
   readonly modelName: string;
   readonly defaultModel: string;
   private readonly isTokenPlan: boolean;
-  private readonly proxyAgent?: ProxyAgent;
+  private proxyAgent?: any;
 
   constructor(options?: {
     provider?: string;
@@ -216,9 +215,17 @@ export class OpenAICompatProvider implements BaseLLMProvider {
     }
     this.modelName = targetModel;
 
-    // Proxy agent setup if needed
-    if (Config.HTTP_PROXY && (this.providerKey.includes('openai') || this.providerKey.includes('gemini'))) {
-      this.proxyAgent = new ProxyAgent(Config.HTTP_PROXY);
+    // Proxy agent setup if needed (Node CLI only)
+    if (
+      Config.HTTP_PROXY &&
+      !(process as any).versions?.electron &&
+      (this.providerKey.includes('openai') || this.providerKey.includes('gemini'))
+    ) {
+      import('undici')
+        .then(({ ProxyAgent }) => {
+          this.proxyAgent = new ProxyAgent(Config.HTTP_PROXY);
+        })
+        .catch(() => {});
     }
   }
 

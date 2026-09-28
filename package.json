@@ -5,9 +5,11 @@
   "main": "dist-electron/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx scripts/dev.ts",
+    "dev:web": "vite",
     "dev:cli": "tsx src/main/index.ts",
-    "build": "tsc && vite build && electron-builder",
+    "build": "vite build && tsx scripts/build.ts",
+    "build:app": "vite build && tsx scripts/build.ts && electron-builder",
     "test": "vitest run"
   },
   "keywords": [

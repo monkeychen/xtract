@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
-import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { Config } from '../config.js';
 import type { Tweet, DeleteFilter, DeleteResult } from '../types.js';
 
@@ -55,11 +54,16 @@ export async function downloadImage(
       },
       signal: controller.signal,
     };
-    if (Config.HTTP_PROXY) {
-      fetchOptions.dispatcher = new ProxyAgent(Config.HTTP_PROXY);
+    if (Config.HTTP_PROXY && !(process as any).versions?.electron) {
+      try {
+        const { ProxyAgent } = await import('undici');
+        fetchOptions.dispatcher = new ProxyAgent(Config.HTTP_PROXY);
+      } catch {
+        // ignore
+      }
     }
 
-    const res = await undiciFetch(url, fetchOptions);
+    const res = await fetch(url, fetchOptions);
 
     if (res.ok) {
       const buffer = Buffer.from(await res.arrayBuffer());
@@ -88,7 +92,16 @@ export class Storage {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    this.db = new Database(this.dbPath);
+    const isElectron = Boolean((process as any).versions?.electron);
+    const nativeBinding = isElectron
+      ? path.resolve(Config.PROJECT_ROOT, 'native/electron/better_sqlite3.node')
+      : path.resolve(Config.PROJECT_ROOT, 'native/node/better_sqlite3.node');
+
+    const dbOptions: any = {};
+    if (fs.existsSync(nativeBinding)) {
+      dbOptions.nativeBinding = nativeBinding;
+    }
+    this.db = new Database(this.dbPath, dbOptions);
     this.initDb();
   }
 

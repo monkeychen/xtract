@@ -442,7 +442,11 @@ if (isCLI) {
     const { fileURLToPath } = await import('node:url');
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const preloadPath = path.resolve(__dirname, '../preload/index.js');
+    const fs = await import('node:fs');
+    let preloadPath = path.resolve(__dirname, '../preload/index.cjs');
+    if (!fs.existsSync(preloadPath)) {
+      preloadPath = path.resolve(__dirname, '../preload/index.js');
+    }
 
     app.whenReady().then(() => {
       const win = new BrowserWindow({
