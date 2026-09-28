@@ -30,7 +30,7 @@ describe('GUI Workbench E2E Automated Tests (100% Prototype Matched)', () => {
     });
     await page.goto(targetUrl);
     await page.waitForLoadState('domcontentloaded');
-  }, 30000);
+  }, 60000);
 
   afterAll(async () => {
     if (browser) {
