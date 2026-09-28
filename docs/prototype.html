@@ -438,14 +438,9 @@
        ========================================================================== -->
   <header class="masthead">
     <div style="display: flex; align-items: center; gap: 14px;">
-      <div style="display: flex; flex-direction: column;">
-        <div style="display: flex; align-items: baseline; gap: 8px;">
-          <span class="serif-title" style="font-size: 22px; letter-spacing: 0.04em;">XTRACT</span>
-          <span class="eyebrow" style="font-size: 10px;">INTELLIGENCE RADAR</span>
-        </div>
-        <span style="font-size: 11px; color: var(--ink-soft); margin-top: -2px;">
-          X 实时情报雷达 & AI 深度内参
-        </span>
+      <div style="display: flex; align-items: baseline; gap: 8px;">
+        <span class="serif-title" style="font-size: 22px; letter-spacing: 0.04em;">XTRACT</span>
+        <span style="font-size: 12px; color: var(--ink-soft); font-weight: 500;">情报雷达</span>
       </div>
 
       <div style="width: 1px; height: 28px; background: var(--line); margin: 0 10px;"></div>
@@ -467,19 +462,19 @@
     <!-- 右侧状态指示胶囊与设置触发器 -->
     <div style="display: flex; align-items: center; gap: 12px;">
       <!-- X 登录会话胶囊 -->
-      <div class="badge badge-ok" style="cursor: pointer; border: 1px solid var(--line); padding: 4px 10px;" onclick="openSettings()" title="点击查看凭证状态">
+      <div class="badge badge-ok" style="cursor: pointer; border: 1px solid var(--line); padding: 4px 10px;" onclick="openSettings()" title="点击查看账号设置">
         <span class="badge-dot"></span>
-        <span>X 会话: @demo_investor (有效)</span>
+        <span>@demo_investor</span>
       </div>
 
       <!-- 代理直连/穿透胶囊 -->
-      <div class="badge badge-neutral" style="border: 1px solid var(--line); padding: 4px 10px;" title="HTTP 代理穿透已配置">
-        <span>🛡️ 代理 127.0.0.1:7890</span>
+      <div class="badge badge-neutral" style="border: 1px solid var(--line); padding: 4px 10px;" title="网络代理已配置">
+        <span>🛡️ 127.0.0.1:7890</span>
       </div>
 
       <!-- 设置抽屉按钮 -->
       <button class="secondary-button" onclick="openSettings()">
-        <span>⚙️ 偏好设置</span>
+        <span>⚙️ 设置</span>
       </button>
     </div>
   </header>
@@ -491,10 +486,9 @@
     <!-- 标题与操作栏 -->
     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px;">
       <div>
-        <div class="eyebrow" style="margin-bottom: 4px;">INTELLIGENCE DIGEST & SYNTHESIS</div>
-        <h1 class="serif-title" style="font-size: 28px;">智能研报与深度晨报</h1>
+        <h1 class="serif-title" style="font-size: 28px;">智能研报</h1>
         <p style="color: var(--ink-soft); font-size: 14px; margin-top: 4px;">
-          基于互动量信噪比过滤与国内外多大模型 High 级长思维链推演，提取最具价值的情报。
+          过去 24 小时高价值情报汇总与深度研判
         </p>
       </div>
 
@@ -507,10 +501,10 @@
         </div>
 
         <button class="secondary-button" onclick="triggerMockStream('trends')">
-          <span>⚡ 生成全网趋势研报</span>
+          <span>生成趋势研报</span>
         </button>
         <button class="cta-button" onclick="triggerMockStream('daily')">
-          <span>🌅 立即生成今日早报</span>
+          <span>生成今日早报</span>
         </button>
       </div>
     </div>
@@ -519,7 +513,7 @@
     <div id="generation-box" class="surface" style="display: none; padding: 20px 24px; margin-bottom: 28px; border-left: 4px solid var(--cinnabar);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <span id="gen-status-text" style="font-weight: 600; font-size: 14px; color: var(--cinnabar);">
-          大模型流式思考中...
+          正在深度思考...
         </span>
         <span id="gen-progress-text" style="font-size: 12.5px; color: var(--ink-soft);">进度 45%</span>
       </div>
@@ -534,9 +528,9 @@
         <div class="thinking-header" onclick="toggleThinkingBody()">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="thinking-pulse-dot"></span>
-            <span style="font-weight: 600; color: var(--ink);">AI 深度思考推演链 (High Reasoning)</span>
+            <span style="font-weight: 600; color: var(--ink);">思考过程</span>
           </div>
-          <span style="font-size: 11.5px; color: var(--ink-faint);">耗时: 14s · 点击折叠/展开</span>
+          <span style="font-size: 11.5px; color: var(--ink-faint);">14s</span>
         </div>
         <div id="thinking-body" class="thinking-body">正在聚类推特全网长推...
 - 议题 1: Claude 3.7 混合推理对全行业开发模式的冲击 (权重 0.88)
@@ -551,7 +545,7 @@
       <!-- 左列：研报历史卡片网格 -->
       <div>
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-          <h3 class="serif-title" style="font-size: 16px;">研报归档列表</h3>
+          <h3 class="serif-title" style="font-size: 16px;">历史研报</h3>
           <span style="font-size: 12px; color: var(--ink-faint);">共 2 份</span>
         </div>
 
@@ -559,8 +553,8 @@
           <!-- 研报卡片 1 -->
           <div class="surface" style="padding: 16px; cursor: pointer; border-color: var(--cinnabar); background: var(--cinnabar-wash);" onclick="selectReport(1)">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span class="badge badge-cinnabar" style="font-size: 11px;">🔥 全网趋势研报</span>
-              <span style="font-size: 11.5px; color: var(--ink-faint);">过去 24 小时</span>
+              <span class="badge badge-cinnabar" style="font-size: 11px;">趋势研报</span>
+              <span style="font-size: 11.5px; color: var(--ink-faint);">24 小时内</span>
             </div>
             <h4 class="serif-title" style="font-size: 14.5px; line-height: 1.4; margin-bottom: 6px;">
               技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌
@@ -570,15 +564,15 @@
             </p>
             <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint);">
               <span>2026-09-27 10:00</span>
-              <span>覆盖 142 篇高赞推文</span>
+              <span>142 篇高赞推文</span>
             </div>
           </div>
 
           <!-- 研报卡片 2 -->
           <div class="surface" style="padding: 16px; cursor: pointer;" onclick="selectReport(2)">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span class="badge badge-ok" style="font-size: 11px;">🌅 关注流早报</span>
-              <span style="font-size: 11.5px; color: var(--ink-faint);">过去 24 小时</span>
+              <span class="badge badge-ok" style="font-size: 11px;">关注流早报</span>
+              <span style="font-size: 11.5px; color: var(--ink-faint);">24 小时内</span>
             </div>
             <h4 class="serif-title" style="font-size: 14.5px; line-height: 1.4; margin-bottom: 6px;">
               X 关注流每日早报：轻量化架构与高信噪比阅读工具
@@ -588,7 +582,7 @@
             </p>
             <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint);">
               <span>2026-09-26 09:30</span>
-              <span>覆盖 88 篇推文</span>
+              <span>88 篇推文</span>
             </div>
           </div>
         </div>
@@ -599,7 +593,7 @@
         <div style="max-width: 720px; margin: 0 auto;">
           <div style="border-bottom: 1px solid var(--line-strong); padding-bottom: 18px; margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span class="eyebrow">XTRACT INTELLIGENCE PUBLICATION</span>
+              <span style="font-size: 12px; color: var(--ink-faint); font-weight: 500;">研报精读</span>
               <button class="secondary-button" style="font-size: 12px; padding: 4px 10px;" onclick="alert('已复制研报 Markdown 全文至剪贴板')">
                 <span>📋 复制全文</span>
               </button>
@@ -610,21 +604,21 @@
             <div style="display: flex; align-items: center; gap: 14px; font-size: 12.5px; color: var(--ink-soft);">
               <span>📅 2026-09-27 10:00:15</span>
               <span>•</span>
-              <span>覆盖精选推文: 142 篇</span>
+              <span>142 篇推文</span>
               <span>•</span>
-              <span class="badge badge-ok">gemini-3.8-flash (High Reasoning)</span>
+              <span class="badge badge-ok">gemini-3.8-flash</span>
             </div>
           </div>
 
-          <!-- 💡 选题与培训便签栏 (Actionable Insights) -->
+          <!-- 💡 选题与培训便签栏 -->
           <div class="surface" style="padding: 16px 20px; background: var(--paper-sunken); border-left: 3px solid var(--cinnabar); margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-weight: 600; font-size: 13.5px; color: var(--cinnabar);">💡 写作选题与培训洞察 (Actionable Insights)</span>
+              <span style="font-weight: 600; font-size: 13.5px; color: var(--cinnabar);">💡 选题与培训便签</span>
               <button class="secondary-button" style="font-size: 11.5px; padding: 2px 8px;" onclick="alert('已复制 3 条选题大纲至剪贴板！')">📋 复制大纲</button>
             </div>
             <ul style="font-size: 13px; color: var(--ink-soft); line-height: 1.6; padding-left: 18px;">
-              <li><strong>选题 1 (技术公众号)</strong>: 《混合推理模型爆发：为什么测试时计算（Test-time Compute）是今年的主战场？》</li>
-              <li><strong>选题 2 (企业培训案例)</strong>: 企业级私有 Agent 开发中，如何通过嵌入式 SQLite 与 Page Bundle 消除云数据库依赖？</li>
+              <li><strong>公众号</strong>: 《混合推理模型爆发：为什么测试时计算是今年的主战场？》</li>
+              <li><strong>培训案例</strong>: 企业级私有 Agent 开发中，如何通过嵌入式 SQLite 与 Page Bundle 消除云依赖？</li>
             </ul>
           </div>
 
@@ -642,7 +636,7 @@
               </div>
               <div style="display: flex; justify-content: flex-end;">
                 <button class="secondary-button" style="font-size: 11.5px; padding: 3px 8px; color: var(--cinnabar);" onclick="jumpToStudioTweet(1)">
-                  <span>🔗 在情报工作台中定位原推与高清配图 ↗</span>
+                  <span>定位原推 ↗</span>
                 </button>
               </div>
             </div>
@@ -666,25 +660,24 @@
     <!-- 标题 -->
     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
       <div>
-        <div class="eyebrow" style="margin-bottom: 4px;">EXPLORE TRENDS DISCOVERY</div>
-        <h1 class="serif-title" style="font-size: 28px;">全网热点趋势雷达</h1>
+        <h1 class="serif-title" style="font-size: 28px;">全网趋势</h1>
         <p style="color: var(--ink-soft); font-size: 14px; margin-top: 4px;">
-          零输入发现盲区热点，大模型辅助提炼检索短语，支持一键深入挖掘。
+          当前 X 热门议题与讨论聚合
         </p>
       </div>
 
-      <button class="secondary-button" onclick="alert('已重新嗅探全网 X 趋势流')">
-        <span>🔄 刷新全网趋势</span>
+      <button class="secondary-button" onclick="alert('已重新获取全网趋势')">
+        <span>🔄 刷新</span>
       </button>
     </div>
 
     <!-- 分类药丸 (§7.4) -->
     <div style="display: flex; gap: 8px; margin-bottom: 26px;">
-      <div class="fmt-chip active" onclick="filterTrends(this, 'tech')">🔥 科技前沿 (Tech)</div>
-      <div class="fmt-chip" onclick="filterTrends(this, 'all')">全网综合 (All Trends)</div>
-      <div class="fmt-chip" onclick="filterTrends(this, 'business')">商业金融 (Business)</div>
-      <div class="fmt-chip" onclick="filterTrends(this, 'news')">全球要闻 (News)</div>
-      <div class="fmt-chip" onclick="filterTrends(this, 'entertainment')">文娱体育 (Entertainment)</div>
+      <div class="fmt-chip active" onclick="filterTrends(this, 'tech')">科技</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'all')">综合</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'business')">商业</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'news')">要闻</div>
+      <div class="fmt-chip" onclick="filterTrends(this, 'entertainment')">文娱</div>
     </div>
 
     <!-- 趋势卡片网格 -->
@@ -698,16 +691,15 @@
           </div>
           <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">Claude 3.7 Sonnet</h3>
           <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
-            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
             "Claude 3.7" OR "Hybrid Reasoning" lang:en
           </div>
         </div>
         <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
           <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('Claude 3.7')">
-            <span>🔍 检索推文</span>
+            <span>查看推文</span>
           </button>
           <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
-            <span>⚡ 挖掘研报</span>
+            <span>生成研报</span>
           </button>
         </div>
       </div>
@@ -721,16 +713,15 @@
           </div>
           <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">DeepSeek V4</h3>
           <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
-            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
             DeepSeek V4 open source lang:en
           </div>
         </div>
         <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
           <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('DeepSeek V4')">
-            <span>🔍 检索推文</span>
+            <span>查看推文</span>
           </button>
           <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
-            <span>⚡ 挖掘研报</span>
+            <span>生成研报</span>
           </button>
         </div>
       </div>
@@ -744,16 +735,15 @@
           </div>
           <h3 class="serif-title" style="font-size: 18px; margin-bottom: 8px;">OpenAI GPT-5</h3>
           <div style="background: var(--paper-sunken); padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); color: var(--ink-soft); margin-bottom: 16px;">
-            <div style="font-size: 10.5px; color: var(--ink-faint); margin-bottom: 2px;">AI 提炼检索短语:</div>
             GPT-5 release schedule OR Altman
           </div>
         </div>
         <div style="display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px;">
           <button class="secondary-button" style="flex: 1; justify-content: center;" onclick="jumpToStudioSearch('OpenAI GPT-5')">
-            <span>🔍 检索推文</span>
+            <span>查看推文</span>
           </button>
           <button class="cta-button" style="flex: 1; justify-content: center;" onclick="switchTab('reports'); triggerMockStream('trends');">
-            <span>⚡ 挖掘研报</span>
+            <span>生成研报</span>
           </button>
         </div>
       </div>
@@ -767,38 +757,32 @@
     <!-- 顶栏：多源选择、关键词检索与信噪比门槛控制 -->
     <div style="padding: 14px 28px; background: var(--paper); border-bottom: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
-        <!-- 多源管道切换药丸 (§7.1, §7.3) -->
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 13px; font-weight: 600; color: var(--ink-soft);">数据源:</span>
-          <div style="display: flex; gap: 6px;">
-            <div class="fmt-chip" onclick="setDataSource(this, 'following')">📡 关注流 (Following)</div>
-            <div class="fmt-chip active" onclick="setDataSource(this, 'search')">🔍 关键词搜索 (Search)</div>
-            <div class="fmt-chip" onclick="setDataSource(this, 'user')">👤 博主专栏 (User)</div>
-            <div class="fmt-chip" onclick="setDataSource(this, 'lists')">📑 X Lists 列表</div>
-          </div>
+        <!-- 多源数据管道切换药丸 -->
+        <div style="display: flex; gap: 6px;">
+          <div class="fmt-chip" onclick="setDataSource(this, 'following')">关注流</div>
+          <div class="fmt-chip active" onclick="setDataSource(this, 'search')">全网搜索</div>
+          <div class="fmt-chip" onclick="setDataSource(this, 'user')">博主</div>
+          <div class="fmt-chip" onclick="setDataSource(this, 'lists')">列表</div>
         </div>
 
-        <!-- 信噪比药丸 (§7.3) -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 13px; color: var(--ink-soft);">信噪比门槛:</span>
-          <div style="display: flex; gap: 6px;">
-            <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部</div>
-            <div class="fmt-chip" onclick="setSnrFilter(this, 50)">⭐ 50+ 赞</div>
-            <div class="fmt-chip" onclick="setSnrFilter(this, 200)">👑 200+ 赞 (爆款)</div>
-          </div>
+        <!-- 互动量门槛药丸 -->
+        <div style="display: flex; gap: 6px;">
+          <div class="fmt-chip active" onclick="setSnrFilter(this, 0)">全部</div>
+          <div class="fmt-chip" onclick="setSnrFilter(this, 50)">50+ 赞</div>
+          <div class="fmt-chip" onclick="setSnrFilter(this, 200)">200+ 赞</div>
         </div>
       </div>
 
       <!-- 搜索框与高级语法栏 -->
       <div style="display: flex; gap: 10px; align-items: center;">
         <div style="display: flex; flex: 1; gap: 8px; min-width: 0;">
-          <input id="studio-search-input" class="text-input" style="flex: 1; min-width: 0;" type="text" placeholder="搜索全网关键词、博主或语法 (如: 'AI min_faves:100 lang:en')..." value="AI">
+          <input id="studio-search-input" class="text-input" style="flex: 1; min-width: 0;" type="text" placeholder="搜索关键词、博主或语法 (如: AI min_faves:100)..." value="AI">
           <button class="cta-button" style="padding: 8px 18px;" onclick="alert('执行检索: ' + document.getElementById('studio-search-input').value)">
-            <span>搜索抓取</span>
+            <span>搜索</span>
           </button>
         </div>
-        <button class="secondary-button" style="padding: 8px 14px; font-size: 12.5px;" onclick="alert('已启动 Playwright 嗅探并增量去重落库')">
-          <span>🔄 嗅探增量同步</span>
+        <button class="secondary-button" style="padding: 8px 14px; font-size: 12.5px;" onclick="alert('已同步最新推文')">
+          <span>🔄 刷新</span>
         </button>
       </div>
     </div>
@@ -810,9 +794,9 @@
         <div style="padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--paper-sunken);">
           <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer;">
             <input type="checkbox" id="check-all" onchange="toggleSelectAll(this)">
-            <span id="selected-count-label">全选推文</span>
+            <span id="selected-count-label">全选</span>
           </label>
-          <span style="font-size: 12px; color: var(--ink-faint);">命中 3 条</span>
+          <span style="font-size: 12px; color: var(--ink-faint);">3 条推文</span>
         </div>
 
         <div style="flex: 1; overflow-y: auto;">
@@ -884,7 +868,7 @@
         </div>
       </div>
 
-      <!-- 右栏：Page Bundle 自包含研读卡片 (Detail) -->
+      <!-- 右栏：自包含研读卡片 (Detail) -->
       <div class="studio-main">
         <div style="max-width: 720px; margin: 0 auto;">
           <!-- 博主与操作栏 -->
@@ -899,13 +883,13 @@
 
             <div style="display: flex; gap: 8px;">
               <button class="secondary-button" style="font-size: 12px;" onclick="revealInFinder()">
-                <span>📂 打开本地目录</span>
+                <span>本地文件</span>
               </button>
               <button class="secondary-button" style="font-size: 12px;" onclick="window.open('https://x.com/karpathy')">
                 <span>在 X 打开 ↗</span>
               </button>
               <button class="secondary-button" style="font-size: 12px; color: var(--cinnabar);" onclick="openDeleteDialog()">
-                <span>级联删除 🗑️</span>
+                <span>删除</span>
               </button>
             </div>
           </div>
@@ -923,15 +907,15 @@
           <!-- 互动数据卡片 -->
           <div class="surface" style="padding: 16px; background: var(--paper-sunken); display: flex; justify-content: space-around; text-align: center;">
             <div>
-              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">点赞 (Likes)</div>
+              <div style="font-size: 11px; color: var(--ink-faint);">点赞</div>
               <div id="tweet-stat-likes" style="font-size: 18px; font-weight: 700; color: var(--cinnabar);">14,200</div>
             </div>
             <div>
-              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">转发 (Retweets)</div>
+              <div style="font-size: 11px; color: var(--ink-faint);">转发</div>
               <div id="tweet-stat-rts" style="font-size: 18px; font-weight: 700; color: var(--ink);">3,820</div>
             </div>
             <div>
-              <div style="font-size: 11px; color: var(--ink-faint); text-transform: uppercase;">回复 (Replies)</div>
+              <div style="font-size: 11px; color: var(--ink-faint);">回复</div>
               <div id="tweet-stat-replies" style="font-size: 18px; font-weight: 700; color: var(--ink-soft);">940</div>
             </div>
           </div>
@@ -941,12 +925,12 @@
 
     <!-- 底部浮动批量条 (§7.7) -->
     <div id="selbar" class="selbar">
-      <span id="selbar-count" style="font-size: 13px; font-weight: 600; color: var(--cinnabar);">已选 1 篇推文</span>
+      <span id="selbar-count" style="font-size: 13px; font-weight: 600; color: var(--cinnabar);">已选 1 篇</span>
       <button class="secondary-button" style="padding: 4px 12px; font-size: 12px;" onclick="alert('已将选中推文导出为结构化 Markdown')">
-        <span>批量导出 Markdown</span>
+        <span>导出 Markdown</span>
       </button>
-      <button class="cta-button" style="padding: 4px 14px; font-size: 12px;" onclick="alert('执行级联清理')">
-        <span>级联彻底清理</span>
+      <button class="cta-button" style="padding: 4px 14px; font-size: 12px;" onclick="alert('已删除所选推文')">
+        <span>删除所选</span>
       </button>
       <button class="secondary-button" style="padding: 4px 10px; font-size: 12px; border: none; background: transparent;" onclick="clearSelection()">
         <span>取消</span>
@@ -961,57 +945,56 @@
     <div class="drawer-panel" onclick="event.stopPropagation()">
       <div style="padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--paper);">
         <div>
-          <h2 class="serif-title" style="font-size: 18px;">偏好设置 (Settings)</h2>
-          <p style="font-size: 12px; color: var(--ink-soft);">7 大主流大模型、X 官方会话与代理</p>
+          <h2 class="serif-title" style="font-size: 18px;">设置</h2>
         </div>
         <button class="secondary-button" style="padding: 4px 8px;" onclick="closeSettings()">✕</button>
       </div>
 
       <div style="flex: 1; overflow-y: auto; padding: 24px;">
-        <!-- X 凭证 -->
+        <!-- X 账号 -->
         <div style="margin-bottom: 24px;">
-          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">X 官方会话持久化 (Cookie Capture)</h3>
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">X 账号</h3>
           <div class="surface" style="padding: 14px; background: var(--paper);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 13px; color: var(--ink-soft);">会话捕获状态:</span>
-              <span class="badge badge-ok"><span class="badge-dot"></span>已捕获持久化 Cookie</span>
+              <span style="font-size: 13px; color: var(--ink-soft);">连接状态:</span>
+              <span class="badge badge-ok"><span class="badge-dot"></span>已连接</span>
             </div>
-            <div style="font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); margin-bottom: 10px;">
-              auth_token: 2a8f••••••••78b9
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); margin-bottom: 12px;">
+              @demo_investor
             </div>
-            <button class="secondary-button" style="width: 100%; justify-content: center;" onclick="alert('调出原生无痕窗口完成登录并秒级捕获 Cookie')">
-              <span>重新打开登录窗口截获凭证</span>
+            <button class="secondary-button" style="width: 100%; justify-content: center;" onclick="alert('调出原生登录窗口')">
+              <span>重新登录</span>
             </button>
           </div>
         </div>
 
-        <!-- 大模型与双轨认证 -->
+        <!-- 模型服务 -->
         <div style="margin-bottom: 24px;">
-          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">大模型调度引擎 (7 大主流大模型)</h3>
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">模型服务</h3>
           
           <div style="margin-bottom: 14px;">
-            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">大模型提供商</label>
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">提供商</label>
             <select class="select-input" onchange="handleModelChange(this.value)">
-              <option value="gemini">Google Gemini (默认 gemini-3.8-flash)</option>
-              <option value="openai">OpenAI GPT (默认 gpt-5.6-sol)</option>
-              <option value="deepseek">DeepSeek (默认 deepseek-flash)</option>
-              <option value="qwen-token-plan">阿里通义千问 (Token Plan 专属端点)</option>
-              <option value="zhipu-code-plan">智谱清言 (Coding Plan 专属端点)</option>
-              <option value="minimax">MiniMax (默认 MiniMax-M3)</option>
-              <option value="kimi">月之暗面 Kimi (默认 kimi-k3)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI GPT</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="qwen-token-plan">阿里通义千问</option>
+              <option value="zhipu-code-plan">智谱清言</option>
+              <option value="minimax">MiniMax</option>
+              <option value="kimi">月之暗面 Kimi</option>
             </select>
           </div>
 
           <div style="margin-bottom: 14px;">
-            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">认证模式</label>
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">认证方式</label>
             <div style="display: flex; gap: 8px;">
-              <div class="fmt-chip active" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">API-Key 模式</div>
-              <div class="fmt-chip" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">账号订阅免 Key 模式</div>
+              <div class="fmt-chip active" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">API Key</div>
+              <div class="fmt-chip" style="flex: 1; justify-content: center;" onclick="setAuthMode(this)">账号免 Key</div>
             </div>
           </div>
 
           <div style="margin-bottom: 14px;">
-            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">模型名称覆盖</label>
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px;">模型名称</label>
             <input id="input-model-name" class="text-input" type="text" value="gemini-3.8-flash">
           </div>
 
@@ -1020,12 +1003,11 @@
             <input class="text-input" type="password" placeholder="sk-••••••••••••••••" value="AIzaSyDummyKeyForPrototype12345">
           </div>
 
-          <!-- 深度思考 / 长推理开关与分级配置 (§7.5, §7.6) -->
+          <!-- 深度思考开关与分级配置 -->
           <div class="surface" style="padding: 14px; background: var(--paper-sunken); border: 1px solid var(--line); margin-bottom: 6px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <div style="font-size: 13px; font-weight: 600; color: var(--ink);">开启深度思考 / 推理模式 (Reasoning)</div>
-                <div style="font-size: 11.5px; color: var(--ink-soft); margin-top: 2px;">启用长思维链推理，研报具备极高洞察力</div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--ink);">深度思考</div>
               </div>
               <label class="switch">
                 <input type="checkbox" id="reasoning-toggle" checked onchange="toggleReasoningEffort(this.checked)">
@@ -1034,45 +1016,42 @@
             </div>
 
             <div id="reasoning-effort-container" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-strong);">
-              <label style="font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 6px;">推理强度级别 (Effort Level)</label>
+              <label style="font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 6px;">思考深度</label>
               <div style="display: flex; gap: 6px;">
-                <div class="fmt-chip" onclick="setEffort(this, 'low')">Low (轻量)</div>
-                <div class="fmt-chip" onclick="setEffort(this, 'medium')">Medium (标准)</div>
-                <div class="fmt-chip active" onclick="setEffort(this, 'high')">High (长推理)</div>
-              </div>
-              <div id="reasoning-param-hint" style="font-family: var(--font-mono); font-size: 11px; color: var(--cinnabar); margin-top: 8px;">
-                Gemini: thinking_level=HIGH (--effort high)
+                <div class="fmt-chip" onclick="setEffort(this, 'low')">轻量</div>
+                <div class="fmt-chip" onclick="setEffort(this, 'medium')">标准</div>
+                <div class="fmt-chip active" onclick="setEffort(this, 'high')">深度</div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 代理穿透 -->
+        <!-- 网络代理 -->
         <div>
-          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">网络代理穿透</h3>
+          <h3 class="serif-title" style="font-size: 15px; margin-bottom: 10px; color: var(--ink);">网络代理</h3>
           <input class="text-input" type="text" value="http://127.0.0.1:7890">
         </div>
       </div>
 
       <div style="padding: 16px 24px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; background: var(--paper);">
         <button class="secondary-button" onclick="closeSettings()">取消</button>
-        <button class="cta-button" onclick="alert('配置已持久化至本地'); closeSettings();">保存设置</button>
+        <button class="cta-button" onclick="alert('配置已保存'); closeSettings();">保存</button>
       </div>
     </div>
   </div>
 
   <!-- ==========================================================================
-       级联删除确认对话框
+       删除确认对话框
        ========================================================================== -->
   <div id="delete-dialog" class="drawer-backdrop" onclick="closeDeleteDialog(event)">
-    <div class="surface" style="width: 420px; padding: 24px; margin: auto; background: var(--paper-raised); border: 1px solid var(--line-strong);" onclick="event.stopPropagation()">
-      <h3 class="serif-title" style="font-size: 17px; color: var(--cinnabar); margin-bottom: 10px;">⚠️ 确认永久级联删除？</h3>
+    <div class="surface" style="width: 400px; padding: 24px; margin: auto; background: var(--paper-raised); border: 1px solid var(--line-strong);" onclick="event.stopPropagation()">
+      <h3 class="serif-title" style="font-size: 17px; color: var(--cinnabar); margin-bottom: 10px;">确认删除推文？</h3>
       <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.6; margin-bottom: 20px;">
-        此操作将同步从 SQLite 数据库移除该推文记录，并物理删除本地 <code>output/{author}/{tweet_id}/</code> 目录与所有关联配图，不可逆。
+        将从本地数据库与归档目录中彻底删除该推文及配图，不可恢复。
       </p>
       <div style="display: flex; justify-content: flex-end; gap: 10px;">
         <button class="secondary-button" onclick="closeDeleteDialog()">取消</button>
-        <button class="cta-button" onclick="alert('已级联删除该推文及对应本地 Page Bundle 文件'); closeDeleteDialog();">确认删除</button>
+        <button class="cta-button" onclick="alert('已删除该推文'); closeDeleteDialog();">删除</button>
       </div>
     </div>
   </div>
@@ -1267,12 +1246,9 @@
         'kimi': 'kimi-k3'
       };
       if (defaults[val]) modelInput.value = defaults[val];
-      const activeEffort = document.querySelector('#reasoning-effort-container .fmt-chip.active');
-      const level = activeEffort ? (activeEffort.innerText.includes('Low') ? 'low' : (activeEffort.innerText.includes('Medium') ? 'medium' : 'high')) : 'high';
-      updateReasoningHint(level);
     }
 
-    // 8. 级联删除弹窗控制
+    // 8. 删除弹窗控制
     function openDeleteDialog() {
       document.getElementById('delete-dialog').classList.add('open');
     }
@@ -1295,9 +1271,9 @@
       }
     }
 
-    // 10. 系统访达 / 文件管理器中定位自包含推文包
+    // 10. 文件管理器中定位推文包
     function revealInFinder() {
-      alert('已在系统访达 (Finder) / 文件管理器中定位自包含推文包:\noutput/karpathy/18947291823901/\n  ├── index.md\n  └── images/\n      └── header.jpg');
+      alert('已在系统文件管理器中定位本地推文包:\noutput/karpathy/18947291823901/\n  ├── index.md\n  └── images/\n      └── header.jpg');
     }
 
     // 11. 多源数据管道切换
@@ -1306,16 +1282,16 @@
       el.classList.add('active');
       const input = document.getElementById('studio-search-input');
       if (source === 'following') {
-        input.placeholder = '在关注流中筛选关键词或标签 (留空抓取全部最新)...';
+        input.placeholder = '筛选关注流推文 (留空加载最新)...';
         input.value = '';
       } else if (source === 'search') {
-        input.placeholder = "搜索全网关键词、博主或语法 (如: 'AI min_faves:100 lang:en')...";
+        input.placeholder = "搜索关键词、博主或语法 (如: AI min_faves:100)...";
         input.value = 'AI';
       } else if (source === 'user') {
         input.placeholder = '输入博主用户名 (如: karpathy, sama)...';
         input.value = 'karpathy';
       } else if (source === 'lists') {
-        input.placeholder = '输入 X List ID 或链接...';
+        input.placeholder = '输入列表 ID 或链接...';
         input.value = '1827364512938';
       }
     }
@@ -1331,20 +1307,6 @@
     function setEffort(el, level) {
       el.parentElement.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
-      updateReasoningHint(level);
-    }
-
-    function updateReasoningHint(level) {
-      const provider = document.querySelector('select.select-input')?.value || 'gemini';
-      const hint = document.getElementById('reasoning-param-hint');
-      if (!hint) return;
-      if (provider === 'gemini') {
-        hint.innerText = `Gemini: thinking_level=${level.toUpperCase()} (--effort ${level})`;
-      } else if (provider === 'openai' || provider === 'qwen-token-plan' || provider === 'kimi') {
-        hint.innerText = `${provider}: reasoning_effort="${level}"`;
-      } else {
-        hint.innerText = `${provider}: thinking={type: "enabled"}, level="${level}"`;
-      }
     }
   </script>
 </body>
