@@ -131,7 +131,10 @@ if (isCLI) {
         const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
         const isTruncated = Boolean(
-          tweet?.text && tweet.text.length < 60 && tweet.text.includes('https://t.co/')
+          tweet?.text &&
+            (/…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+              /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+              (tweet.text.length < 120 && tweet.text.includes('https://t.co/')))
         );
         if (!tweet || isTruncated) {
           const msg = !tweet

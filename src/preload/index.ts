@@ -76,7 +76,7 @@ export interface XtractAPI {
   }) => Promise<Tweet[]>;
   viewTweet: (
     tweetIdOrUrl: string,
-    options?: { exportMd?: boolean; outputPath?: string }
+    options?: { exportMd?: boolean; outputPath?: string; forceRefresh?: boolean }
   ) => Promise<{ tweet: Tweet; exportPath?: string }>;
   deleteTweets: (filter: DeleteFilter) => Promise<DeleteResult>;
   exportTweets: (

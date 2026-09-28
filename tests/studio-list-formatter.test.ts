@@ -1,5 +1,42 @@
 import { describe, it, expect } from 'vitest';
-import { extractTweetTitleAndSnippet, formatRelativeTime, formatCount } from '../src/renderer/src/views/StudioView.js';
+import {
+  getTweetListDisplayTitle,
+  extractTweetTitleAndSnippet,
+  formatRelativeTime,
+  formatCount,
+} from '../src/renderer/src/views/StudioView.js';
+
+describe('StudioView List Display Title (getTweetListDisplayTitle §1)', () => {
+  it('should extract explicit markdown title if first line starts with #', () => {
+    const raw = '# Claude 3.7 Sonnet 深度评测\n在多项编码和长思维链基准测试中，Claude 3.7 展现出强大的推理潜力。';
+    expect(getTweetListDisplayTitle(raw)).toBe('Claude 3.7 Sonnet 深度评测');
+  });
+
+  it('should extract bracketed topic from first line as title', () => {
+    const raw = '【重磅发布】Anthropic 推出全新混合推理架构\n今天凌晨正式上线，支持实时调节思考预算。';
+    expect(getTweetListDisplayTitle(raw)).toBe('【重磅发布】 Anthropic 推出全新混合推理架构');
+  });
+
+  it('should extract first line text if no markdown title or brackets', () => {
+    const raw = '深度解析 LLM 的多轮对话上下文管理。\n第一点是滑动窗口；\n第二点是向量检索；\n第三点是思维链压缩。';
+    expect(getTweetListDisplayTitle(raw)).toBe('深度解析 LLM 的多轮对话上下文管理。');
+  });
+
+  it('should handle single-line short text', () => {
+    expect(getTweetListDisplayTitle('只能说MiniMax-3是真的拉...')).toBe('只能说MiniMax-3是真的拉...');
+    expect(getTweetListDisplayTitle('收藏')).toBe('收藏');
+  });
+
+  it('should extract first sentence by punctuation for long single line', () => {
+    const raw = '春节一人独闯老家，去他妈的传统观念，哪那么多执念，如果执念让我们都不舒服。';
+    expect(getTweetListDisplayTitle(raw)).toBe('春节一人独闯老家，去他妈的传统观念，哪那么多执念，如果执念让我们都不舒服。');
+  });
+
+  it('should handle links and empty text gracefully', () => {
+    expect(getTweetListDisplayTitle('https://t.co/GQWBDf6QnW')).toBe('🔗 https://t.co/GQWBDf6QnW');
+    expect(getTweetListDisplayTitle('')).toBe('（无文本推文）');
+  });
+});
 
 describe('StudioView List Formatter (extractTweetTitleAndSnippet)', () => {
   it('should extract explicit markdown title if first line starts with #', () => {

@@ -262,32 +262,99 @@ export function registerIpcHandlers(
   // 4. Tweets & Timeline
   ipcMain.handle(
     IPC_CHANNELS.TWEETS_FETCH_FOLLOWING,
-    async (_event, options?: { pages?: number }) => {
-      const [fetched, inserted, skipped] = await pipeline.fetchAndStore(options?.pages);
-      return { fetched, inserted, skipped };
+    async (event, options?: { pages?: number }) => {
+      const taskId = `following_${Date.now()}`;
+      const sendEv = (stage: string, text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: stage as any,
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      sendEv('fetch', '🌐 正在启动真实 Chrome 浏览器并建立安全会话...', 20);
+      try {
+        sendEv('fetch', '⏳ 正在从 X (关注流) 拦截推文数据包...', 45);
+        const [fetched, inserted, skipped] = await pipeline.fetchAndStore(options?.pages);
+        sendEv('done', `✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条`, 100);
+        return { fetched, inserted, skipped };
+      } catch (err: any) {
+        sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
+        throw err;
+      }
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.TWEETS_FETCH_USER,
-    async (_event, args: { username: string; limit?: number }) => {
-      const tweets = await pipeline.fetchUserAndStore(args.username, args.limit);
-      return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+    async (event, args: { username: string; limit?: number }) => {
+      const cleanUser = args.username.replace(/^@/, '').trim();
+      const taskId = `user_${Date.now()}`;
+      const sendEv = (stage: string, text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: stage as any,
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      sendEv('fetch', `🌐 正在启动双轨机制检索博主 @${cleanUser} 推文流...`, 20);
+      try {
+        sendEv('fetch', `⏳ 正在通过实时搜索流与主页双轨拦截 @${cleanUser} 的最新推文...`, 50);
+        const tweets = await pipeline.fetchUserAndStore(cleanUser, args.limit);
+        sendEv('done', `✓ 抓取完成：成功拉取并入库 ${tweets.length} 条 @${cleanUser} 的推文`, 100);
+        return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+      } catch (err: any) {
+        sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
+        throw err;
+      }
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.TWEETS_FETCH_LIST,
-    async (_event, args: { listId: string; limit?: number }) => {
-      const tweets = await pipeline.fetchListAndStore(args.listId, args.limit);
-      return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+    async (event, args: { listId: string; limit?: number }) => {
+      const taskId = `list_${Date.now()}`;
+      const sendEv = (stage: string, text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: stage as any,
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      sendEv('fetch', `🌐 正在打开 X 列表并挂载网络流嗅探器...`, 25);
+      try {
+        sendEv('fetch', `⏳ 正在拦截列表最新推文并同步本地元数据...`, 55);
+        const tweets = await pipeline.fetchListAndStore(args.listId, args.limit);
+        sendEv('done', `✓ 抓取完成：成功拉取并入库 ${tweets.length} 条列表推文`, 100);
+        return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+      } catch (err: any) {
+        sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
+        throw err;
+      }
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.TWEETS_SEARCH,
     async (
-      _event,
+      event,
       args: {
         query: string;
         searchType?: 'live' | 'top';
@@ -296,13 +363,35 @@ export function registerIpcHandlers(
         minRetweets?: number;
       }
     ) => {
-      const tweets = await pipeline.fetchSearchAndStore(args.query, {
-        searchType: args.searchType,
-        limit: args.limit,
-        minLikes: args.minLikes,
-        minRetweets: args.minRetweets,
-      });
-      return { count: tweets.length, tweets };
+      const taskId = `search_${Date.now()}`;
+      const sendEv = (stage: string, text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: stage as any,
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      sendEv('fetch', `🌐 正在向 X 发起全网实时搜索「${args.query}」...`, 25);
+      try {
+        sendEv('fetch', `⏳ 正在拦截 SearchTimeline 数据包并进行互动指标过滤...`, 60);
+        const tweets = await pipeline.fetchSearchAndStore(args.query, {
+          searchType: args.searchType,
+          limit: args.limit,
+          minLikes: args.minLikes,
+          minRetweets: args.minRetweets,
+        });
+        sendEv('done', `✓ 搜索完成：符合条件的推文共 ${tweets.length} 条已更新入库`, 100);
+        return { count: tweets.length, tweets };
+      } catch (err: any) {
+        sendEv('error', `❌ 搜索抓取失败: ${err?.message || String(err)}`, 100);
+        throw err;
+      }
     }
   );
 
@@ -320,20 +409,20 @@ export function registerIpcHandlers(
     ): Promise<Tweet[]> => {
       if (options?.user) {
         return storage.getTweetsByUser(options.user, {
-          limit: options.limit || 20,
+          limit: options.limit || 50,
           minLikes: options.minLikes || 0,
           minRetweets: options.minRetweets || 0,
         });
       }
       if (options?.query) {
         return storage.searchLocalTweets(options.query, {
-          limit: options.limit || 20,
+          limit: options.limit || 50,
           minLikes: options.minLikes || 0,
           minRetweets: options.minRetweets || 0,
         });
       }
       return storage.getRecentTweets({
-        limit: options?.limit || 20,
+        limit: options?.limit || 50,
         minLikes: options?.minLikes || 0,
         minRetweets: options?.minRetweets || 0,
       });
@@ -344,16 +433,20 @@ export function registerIpcHandlers(
     IPC_CHANNELS.TWEETS_VIEW,
     async (
       _event,
-      args: { tweetIdOrUrl: string; exportMd?: boolean; outputPath?: string }
+      args: { tweetIdOrUrl: string; exportMd?: boolean; outputPath?: string; forceRefresh?: boolean }
     ) => {
       const cleanId = args.tweetIdOrUrl.match(/\d{5,}/)?.[0] || args.tweetIdOrUrl.trim();
       let tweet = storage.getTweetById(cleanId);
 
-      // If missing or truncated short link, fetch fresh from network
+      // Check if text ends with truncated ellipsis and t.co link, or is explicitly requested to refresh
       const isTruncated = Boolean(
-        tweet?.text && tweet.text.length < 60 && tweet.text.includes('https://t.co/')
+        tweet?.text &&
+          (/…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+            /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+            (tweet.text.length < 120 && tweet.text.includes('https://t.co/')))
       );
-      if (!tweet || isTruncated) {
+
+      if (!tweet || isTruncated || args.forceRefresh) {
         try {
           await pipeline.fetchTweetAndStore(cleanId);
           tweet = storage.getTweetById(cleanId);
@@ -366,13 +459,23 @@ export function registerIpcHandlers(
         throw new Error(`未找到推文【${cleanId}】`);
       }
 
+      // Always ensure single tweet markdown package is generated so Finder reveal works 100%
       let exportPath: string | undefined;
-      if (args.exportMd !== false) {
+      try {
         const { filePath } = await storage.exportSingleTweetMarkdown(cleanId, {
           outputPath: args.outputPath,
           downloadImages: true,
         });
         exportPath = filePath;
+      } catch {
+        // fallback to standard path
+        exportPath = path.join(
+          Config.PROJECT_ROOT,
+          'output',
+          tweet.author_username || 'tweet',
+          tweet.tweet_id,
+          'index.md'
+        );
       }
 
       return { tweet, exportPath };

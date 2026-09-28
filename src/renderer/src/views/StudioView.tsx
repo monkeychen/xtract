@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Tweet, XListInfo } from '../types.js';
 import { api } from '../services/api.js';
 
@@ -15,8 +15,39 @@ type DataSource = 'following' | 'search' | 'user' | 'lists';
  * 2. 多行时，第一行作为标题（若包含前缀符号自动修剪）；剩余内容作为次级摘要
  * 3. 单行时长文本：按标点符号断句，首句为标题，剩余为摘要；若无断句，前 45 字符为标题，剩余为摘要
  * 4. 极简短推文（如“收藏”、“只能说MiniMax-3是真的拉...”）：直接全句作为标题，不生成冗余摘要
- * 5. 纯外链/图片：展示“分享链接 / 分享媒体”等语义化标题
+/**
+ * 提取推文列表单行标题/首要摘要 (§1 列表只显示推文标题，无标题显示摘要，无摘要显示第一行文字)
  */
+export function getTweetListDisplayTitle(rawText: string = ''): string {
+  const text = (rawText || '').trim();
+  if (!text) {
+    return '（无文本推文）';
+  }
+  if (/^https?:\/\/\S+$/.test(text)) {
+    return `🔗 ${text}`;
+  }
+
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length > 0) {
+    const firstLine = lines[0];
+    const mdMatch = firstLine.match(/^#+\s*(.+)$/);
+    if (mdMatch) return mdMatch[1].trim();
+
+    const bracketMatch = firstLine.match(/^([【\[《][^】\]》]+[】\]》])\s*(.*)$/);
+    if (bracketMatch && bracketMatch[2].length > 0) {
+      return `${bracketMatch[1]} ${bracketMatch[2]}`.trim();
+    }
+    return firstLine;
+  }
+
+  const matchSentence = text.match(/^(.{6,45}[。！？\?!;；])/);
+  if (matchSentence) {
+    return matchSentence[1].trim();
+  }
+
+  return text;
+}
+
 export function extractTweetTitleAndSnippet(rawText: string = ''): { title: string; snippet?: string } {
   const text = (rawText || '').trim();
   if (!text) {
@@ -123,13 +154,24 @@ export function formatCount(num?: number): string {
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' }) => {
-  const [dataSource, setDataSource] = useState<DataSource>('following');
+  const initialSource: DataSource = initialSearchQuery
+    ? initialSearchQuery.startsWith('@')
+      ? 'user'
+      : 'search'
+    : 'following';
+  const [dataSource, setDataSource] = useState<DataSource>(initialSource);
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   // Source-specific inputs
-  const [searchQuery, setSearchQuery] = useState('AI');
-  const [userHandle, setUserHandle] = useState('karpathy');
+  const [searchQuery, setSearchQuery] = useState(
+    initialSearchQuery && !initialSearchQuery.startsWith('@') ? initialSearchQuery : 'AI'
+  );
+  const [userHandle, setUserHandle] = useState(
+    initialSearchQuery && initialSearchQuery.startsWith('@')
+      ? initialSearchQuery.replace(/^@/, '')
+      : 'karpathy'
+  );
   const [userLists, setUserLists] = useState<XListInfo[]>([]);
   const [selectedList, setSelectedList] = useState('1827364512938');
   const [customListId, setCustomListId] = useState('');
@@ -211,6 +253,53 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     return () => document.removeEventListener('click', handleDocClick);
   }, []);
 
+  // Listen to real IPC streaming progress (§2.3)
+  useEffect(() => {
+    const unsubscribe = api.onStreamEvent((event) => {
+      if (!event) return;
+      if (event.stage === 'error') {
+        setCrawlProgress((prev) =>
+          prev
+            ? {
+                ...prev,
+                stage: '抓取失败',
+                detail: event.text || '发生未知错误',
+                percent: 100,
+                error: event.text,
+              }
+            : null
+        );
+        setIsLoading(false);
+      } else if (event.stage === 'done') {
+        setCrawlProgress((prev) =>
+          prev
+            ? {
+                ...prev,
+                stage: '抓取完成',
+                detail: event.text || '已完成落库去重',
+                percent: 100,
+                completed: true,
+              }
+            : null
+        );
+        setIsLoading(false);
+      } else {
+        setCrawlProgress((prev) => ({
+          active: true,
+          source: prev?.source || dataSource,
+          title: prev?.title || '正在抓取推文数据',
+          stage: event.text || '正在处理...',
+          detail: `进度: ${event.progress || 50}%`,
+          percent: event.progress || 50,
+        }));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [dataSource]);
+
   // Sync initial query
   useEffect(() => {
     if (initialSearchQuery) {
@@ -261,9 +350,44 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     }
   };
 
+  // 即时切换数据源并加载对应数据 (§2.1)
+  const handleSwitchDataSource = (newSource: DataSource) => {
+    setDataSource(newSource);
+    setStreamFilter('');
+    if (newSource === 'user') {
+      loadLocalTweets(limit, 'user', undefined, userHandle);
+    } else if (newSource === 'search') {
+      loadLocalTweets(limit, 'search', searchQuery);
+    } else if (newSource === 'following') {
+      loadLocalTweets(limit, 'following');
+    } else {
+      loadLocalTweets(limit, 'lists');
+    }
+  };
+
+  // 搜索框防抖联动本地查询
+  const searchDebounceRef = useRef<any>(null);
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      loadLocalTweets(limit, 'search', val);
+    }, 250);
+  };
+
+  // 博主输入框防抖联动本地查询
+  const userDebounceRef = useRef<any>(null);
+  const handleUserChange = (val: string) => {
+    setUserHandle(val);
+    if (userDebounceRef.current) clearTimeout(userDebounceRef.current);
+    userDebounceRef.current = setTimeout(() => {
+      loadLocalTweets(limit, 'user', undefined, val);
+    }, 250);
+  };
+
   useEffect(() => {
     loadLocalTweets(limit, dataSource);
-  }, [dataSource, minLikes]);
+  }, [minLikes]);
 
   // Select tweet and asynchronously fetch enriched details / Page Bundle
   const handleSelectTweet = async (tweet: Tweet) => {
@@ -488,25 +612,56 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
   const handleRevealInFinder = async () => {
     if (!selectedTweet) return;
-    const author = selectedTweet.author_username || 'tweet';
-    const targetPath =
-      exportPath || `output/${author}/${selectedTweet.tweet_id}/index.md`;
+    showToast('正在导出并定位本地推文包...');
     try {
-      await api.showItemInFolder(targetPath);
-    } catch {
-      // ignore
+      // 1. Ensure page bundle is exported and refreshed
+      const res = await api.viewTweet(selectedTweet.tweet_id, { exportMd: true });
+      const targetPath =
+        res?.exportPath ||
+        exportPath ||
+        `output/${selectedTweet.author_username || 'tweet'}/${selectedTweet.tweet_id}/index.md`;
+      if (res?.exportPath) {
+        setExportPath(res.exportPath);
+      }
+      // 2. Reveal in OS file manager
+      const revealRes = await api.showItemInFolder(targetPath);
+      if (revealRes?.success) {
+        showToast(`已在系统文件管理器中定位: ${targetPath}`);
+      } else {
+        showToast(`定位失败: ${revealRes?.error || '本地文件不存在'}`);
+      }
+    } catch (err: any) {
+      showToast(`定位失败: ${err?.message || String(err)}`);
     }
-    showToast(
-      `已在系统文件管理器中定位本地推文包:\noutput/${author}/${selectedTweet.tweet_id}/\n  ├── index.md\n  └── images/`
-    );
   };
 
   const handleOpenInX = async () => {
     if (!selectedTweet) return;
-    const url =
-      selectedTweet.urls?.[0] ||
-      `https://x.com/${selectedTweet.author_username}/status/${selectedTweet.tweet_id}`;
+    const url = `https://x.com/${selectedTweet.author_username || 'i'}/status/${selectedTweet.tweet_id}`;
     await api.openExternal(url);
+  };
+
+  const handleForceRefreshTweet = async () => {
+    if (!selectedTweet) return;
+    setIsDetailLoading(true);
+    showToast('正在从 X 官方实时同步该推文完整全文与高清多媒体...');
+    try {
+      const res = await api.viewTweet(selectedTweet.tweet_id, { forceRefresh: true, exportMd: true });
+      if (res?.tweet) {
+        setSelectedTweet(res.tweet);
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === res.tweet.tweet_id ? res.tweet : t))
+        );
+        showToast('✓ 已成功同步 X 线上完整全文与多媒体！');
+      }
+      if (res?.exportPath) {
+        setExportPath(res.exportPath);
+      }
+    } catch (err: any) {
+      showToast(`同步失败: ${err?.message || String(err)}`);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
 
   // Instant In-Memory Filter
@@ -563,28 +718,28 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           <div
             id="chip-source-following"
             className={`fmt-chip ${dataSource === 'following' ? 'active' : ''}`}
-            onClick={() => setDataSource('following')}
+            onClick={() => handleSwitchDataSource('following')}
           >
             关注流
           </div>
           <div
             id="chip-source-search"
             className={`fmt-chip ${dataSource === 'search' ? 'active' : ''}`}
-            onClick={() => setDataSource('search')}
+            onClick={() => handleSwitchDataSource('search')}
           >
             全网搜索
           </div>
           <div
             id="chip-source-user"
             className={`fmt-chip ${dataSource === 'user' ? 'active' : ''}`}
-            onClick={() => setDataSource('user')}
+            onClick={() => handleSwitchDataSource('user')}
           >
             博主追踪
           </div>
           <div
             id="chip-source-lists"
             className={`fmt-chip ${dataSource === 'lists' ? 'active' : ''}`}
-            onClick={() => setDataSource('lists')}
+            onClick={() => handleSwitchDataSource('lists')}
           >
             X 列表
           </div>
@@ -672,9 +827,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="输入关键词 (回车搜本地，或点击右侧实时抓取)..."
+                placeholder="输入关键词 (输入即搜本地，回车或右侧实时抓取)..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     loadLocalTweets(limit, 'search', e.currentTarget.value);
@@ -754,9 +909,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="@博主用户名 (回车本地筛选，或点击右侧抓取)..."
+                placeholder="@博主用户名 (输入即搜本地，回车或右侧实时抓取)..."
                 value={userHandle}
-                onChange={(e) => setUserHandle(e.target.value)}
+                onChange={(e) => handleUserChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     loadLocalTweets(limit, 'user', undefined, e.currentTarget.value);
@@ -963,9 +1118,17 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
               </span>
             </label>
-            <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
-              {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条推文`}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)' }}>
+                {dataSource === 'following' && '📡 关注流'}
+                {dataSource === 'search' && `🔍 搜: ${searchQuery}`}
+                {dataSource === 'user' && `👤 @${userHandle.replace(/^@/, '')}`}
+                {dataSource === 'lists' && '📋 X 列表'}
+              </span>
+              <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
+                {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条`}
+              </span>
+            </div>
           </div>
 
           {/* 实时抓取进度卡片 (§2.3) */}
@@ -1021,7 +1184,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               const isSelected = selectedTweet?.tweet_id === tweet.tweet_id;
               const isChecked = checkedIds.has(tweet.tweet_id);
               const avatarLetter = (tweet.author_name || tweet.author_username || 'X')[0].toUpperCase();
-              const { title, snippet } = extractTweetTitleAndSnippet(tweet.text);
+              const displayTitle = getTweetListDisplayTitle(tweet.text);
               const relTime = formatRelativeTime(tweet.created_at);
 
               return (
@@ -1030,7 +1193,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   className={`feed-item ${isSelected ? 'selected' : ''}`}
                   onClick={() => handleSelectTweet(tweet)}
                 >
-                  {/* 第 1 行：复选框、印章头像、作者昵称/Handle 与右侧相对时间 */}
+                  {/* 第 1 行：复选框、印章头像、作者昵称/Handle 与右侧相对时间、点赞指标 */}
                   <div className="feed-item-header">
                     <input
                       type="checkbox"
@@ -1049,9 +1212,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                       </span>
                     </div>
                     {relTime && <span className="feed-item-time">{relTime}</span>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--ink-faint)', flexShrink: 0 }}>
+                      <span>❤️ {formatCount(tweet.like_count)}</span>
+                      {tweet.retweet_count > 0 && <span>🔁 {formatCount(tweet.retweet_count)}</span>}
+                    </div>
                   </div>
 
-                  {/* 第 2 行：推文标题（单行截断，图文徽标） */}
+                  {/* 第 2 行：推文单行精炼标题/第一行文字 (§1 单行溢出省略，杜绝冗余次级摘要) */}
                   <div className="feed-item-title-row">
                     {tweet.media_urls && tweet.media_urls.length > 0 && (
                       <span className="feed-tag">📷 图文</span>
@@ -1060,22 +1227,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                       <span className="feed-tag">🔁 转推</span>
                     )}
                     <span className="feed-item-title" title={tweet.text}>
-                      {title}
+                      {displayTitle}
                     </span>
-                  </div>
-
-                  {/* 第 3 行：次级摘要（若有） */}
-                  {snippet && (
-                    <div className="feed-item-snippet" title={snippet}>
-                      {snippet}
-                    </div>
-                  )}
-
-                  {/* 第 4 行：紧凑互动指标 */}
-                  <div className="feed-item-footer">
-                    <span>❤️ {formatCount(tweet.like_count)}</span>
-                    <span>🔁 {formatCount(tweet.retweet_count)}</span>
-                    {tweet.reply_count ? <span>💬 {formatCount(tweet.reply_count)}</span> : null}
                   </div>
                 </div>
               );
@@ -1164,6 +1317,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   <button
                     className="secondary-button"
                     style={{ fontSize: '12px' }}
+                    onClick={handleForceRefreshTweet}
+                    disabled={isDetailLoading}
+                    title="从 X 线上强制拉取该推文的完整 Note Tweet / 长文与媒体"
+                  >
+                    <span>{isDetailLoading ? '⏳ 同步中...' : '🔄 同步全文'}</span>
+                  </button>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: '12px' }}
                     onClick={handleRevealInFinder}
                     title="在系统访达/资源管理器中高亮定位该推文的 Markdown 归档包 (index.md & 配图)"
                   >
@@ -1185,6 +1347,32 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                     <span>删除</span>
                   </button>
                 </div>
+              </div>
+
+              {/* 互动数据胶囊与推文指标卡 */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '14px',
+                  padding: '6px 12px',
+                  background: 'var(--paper-sunken)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--line)',
+                  fontSize: '12.5px',
+                  color: 'var(--ink-soft)',
+                }}
+              >
+                <span>❤️ 点赞: <strong style={{ color: 'var(--ink)' }}>{formatCount(selectedTweet.like_count)}</strong></span>
+                <span>🔁 转发: <strong style={{ color: 'var(--ink)' }}>{formatCount(selectedTweet.retweet_count)}</strong></span>
+                <span>💬 回复: <strong style={{ color: 'var(--ink)' }}>{formatCount(selectedTweet.reply_count)}</strong></span>
+                {selectedTweet.view_count ? (
+                  <span>👁️ 浏览: <strong style={{ color: 'var(--ink)' }}>{formatCount(selectedTweet.view_count)}</strong></span>
+                ) : null}
+                <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--ink-faint)' }}>
+                  ID: {selectedTweet.tweet_id}
+                </span>
               </div>
 
               {/* 归档文件与路径看板 (§2.4) */}

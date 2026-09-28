@@ -168,7 +168,7 @@ class ApiService {
 
   async viewTweet(
     tweetIdOrUrl: string,
-    options?: { exportMd?: boolean; outputPath?: string }
+    options?: { exportMd?: boolean; outputPath?: string; forceRefresh?: boolean }
   ): Promise<{ tweet: Tweet; exportPath?: string }> {
     if (this.hasNativeApi()) {
       return window.xtractAPI.viewTweet(tweetIdOrUrl, options);
