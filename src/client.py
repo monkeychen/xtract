@@ -13,6 +13,110 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 
+def parse_x_article_to_markdown(article_result: dict[str, Any]) -> tuple[str, list[str]]:
+    """
+    Parses an X Article Draft.js data structure into a formatted Markdown document,
+    extracting all embedded image URLs (including cover image and inline images).
+    """
+    if not article_result:
+        return "", []
+
+    title = (article_result.get("title") or "").strip()
+    preview = (article_result.get("preview_text") or "").strip()
+
+    # 1. Cover media
+    cover = article_result.get("cover_media", {})
+    cover_url = (
+        cover.get("media_info", {}).get("original_img_url")
+        or cover.get("media_info", {}).get("url")
+    )
+
+    # 2. Inline media entities map: media_id -> original_img_url
+    media_entities = article_result.get("media_entities", [])
+    media_dict: dict[str, str] = {}
+    for m in media_entities:
+        mid = str(m.get("media_id", ""))
+        url = (
+            m.get("media_info", {}).get("original_img_url")
+            or m.get("media_info", {}).get("url")
+        )
+        if mid and url:
+            media_dict[mid] = url
+
+    all_media_urls: list[str] = []
+    if cover_url and cover_url not in all_media_urls:
+        all_media_urls.append(cover_url)
+    for u in media_dict.values():
+        if u not in all_media_urls:
+            all_media_urls.append(u)
+
+    # 3. Draft.js content_state parsing
+    cs = article_result.get("content_state", {})
+    blocks = cs.get("blocks", [])
+    entity_map = cs.get("entityMap", {})
+
+    def get_entity(key: Any) -> dict[str, Any] | None:
+        if isinstance(entity_map, list):
+            try:
+                idx = int(key)
+                if 0 <= idx < len(entity_map):
+                    item = entity_map[idx]
+                    return item.get("value", item) if isinstance(item, dict) else None
+            except Exception:
+                return None
+        elif isinstance(entity_map, dict):
+            item = entity_map.get(str(key))
+            if isinstance(item, dict):
+                return item.get("value", item)
+        return None
+
+    md_lines: list[str] = []
+    if title:
+        md_lines.append(f"# {title}\n")
+    if cover_url:
+        md_lines.append(f"![封面图]({cover_url})\n")
+
+    for b in blocks:
+        b_type = b.get("type", "unstyled")
+        text = b.get("text", "")
+
+        if b_type == "header-one":
+            md_lines.append(f"# {text}\n")
+        elif b_type == "header-two":
+            md_lines.append(f"## {text}\n")
+        elif b_type == "header-three":
+            md_lines.append(f"### {text}\n")
+        elif b_type == "blockquote":
+            quote_text = "\n> ".join(text.splitlines())
+            md_lines.append(f"> {quote_text}\n")
+        elif b_type == "unordered-list-item":
+            md_lines.append(f"- {text}")
+        elif b_type == "ordered-list-item":
+            md_lines.append(f"1. {text}")
+        elif b_type == "atomic":
+            for r in b.get("entityRanges", []):
+                ent = get_entity(r.get("key"))
+                if ent and ent.get("type") == "MEDIA":
+                    data = ent.get("data", {})
+                    caption = data.get("caption", "").strip()
+                    items = data.get("mediaItems", [])
+                    for mi in items:
+                        mid = str(mi.get("mediaId", ""))
+                        img_url = media_dict.get(mid)
+                        if img_url:
+                            alt = caption or "插图"
+                            md_lines.append(f"![{alt}]({img_url})")
+                            if caption:
+                                md_lines.append(f"*{caption}*\n")
+        else:
+            # unstyled or other paragraph
+            if text.strip():
+                md_lines.append(f"{text}\n")
+
+    full_md = "\n".join(md_lines).strip()
+    return full_md, all_media_urls
+
+
 def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
     """Extracts clean tweet dictionary from a tweet_results GraphQL node."""
     if not tweet_result:
@@ -34,9 +138,22 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
     author_name = user_core.get("name") or user_legacy.get("name", "")
     author_username = user_core.get("screen_name") or user_legacy.get("screen_name", "")
 
-    # Check for long-form note tweet (X Articles / Long Tweets)
+    # Check for long-form note tweet (X Long Tweets)
     note_tweet = tweet_result.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
     full_text = note_tweet.get("text") or legacy.get("full_text", "")
+
+    # Check for X Article (Long-form rich-text articles with Draft.js blocks & images)
+    article_images: list[str] = []
+    article_obj = tweet_result.get("article", {})
+    article_res = article_obj.get("article_results", {}).get("result", {})
+    if article_res:
+        article_md, article_images = parse_x_article_to_markdown(article_res)
+        if article_md:
+            lead_in = full_text.strip()
+            if lead_in:
+                full_text = f"{lead_in}\n\n---\n\n{article_md}"
+            else:
+                full_text = article_md
 
     # Retweet info
     is_retweet = "retweeted_status_result" in legacy
@@ -77,6 +194,10 @@ def parse_tweet_result(tweet_result: dict[str, Any]) -> dict[str, Any] | None:
                 best_video = max(mp4_variants, key=lambda v: v.get("bitrate", 0))
                 if best_video.get("url") and best_video["url"] not in media_urls:
                     media_urls.append(best_video["url"])
+
+    for a_img in article_images:
+        if a_img not in media_urls:
+            media_urls.append(a_img)
 
     urls = []
     for u in legacy.get("entities", {}).get("urls", []):
@@ -702,7 +823,10 @@ class XClient:
             raise ValueError(f"无效的推文 ID 或 URL：'{tweet_id_or_url}'。")
 
         clean_id = match.group(1)
-        target_url = f"https://x.com/i/status/{clean_id}"
+        if "article" in tweet_id_or_url.lower():
+            target_url = f"https://x.com/i/article/{clean_id}"
+        else:
+            target_url = f"https://x.com/i/status/{clean_id}"
         timeout_s = timeout or self.timeout_seconds
         timeout_ms = timeout_s * 1000
         captured_tweets: list[dict[str, Any]] = []
@@ -710,13 +834,43 @@ class XClient:
         async def handle_response(response: Response) -> None:
             url = response.url
             if "/graphql/" in url and response.status == 200:
-                if "TweetDetail" in url or "TweetResult" in url:
+                if "TweetDetail" in url or "TweetResult" in url or "Article" in url:
                     try:
                         data = await response.json()
-                        if "data" in data and "tweetResult" in data["data"]:
-                            t = parse_tweet_result(data["data"]["tweetResult"].get("result", {}))
+                        d = data.get("data", {})
+                        if "tweetResult" in d:
+                            t = parse_tweet_result(d["tweetResult"].get("result", {}))
                             if t and t["tweet_id"]:
                                 captured_tweets.append(t)
+                        if "article_result_by_rest_id" in d:
+                            art_res = d["article_result_by_rest_id"].get("result", {})
+                            if art_res:
+                                art_md, art_imgs = parse_x_article_to_markdown(art_res)
+                                meta = art_res.get("metadata", {})
+                                author_res = meta.get("author_results", {}).get("result", {})
+                                a_user = author_res.get("core", {}).get("screen_name") or author_res.get("legacy", {}).get("screen_name", "")
+                                a_name = author_res.get("core", {}).get("name") or author_res.get("legacy", {}).get("name", "")
+                                art_id = art_res.get("rest_id") or clean_id
+                                captured_tweets.append({
+                                    "tweet_id": str(art_id),
+                                    "author_id": str(author_res.get("rest_id", "")),
+                                    "author_name": a_name,
+                                    "author_username": a_user,
+                                    "text": art_md,
+                                    "created_at": art_res.get("created_at", ""),
+                                    "is_retweet": False,
+                                    "retweeted_author": "",
+                                    "retweeted_text": "",
+                                    "is_quote": False,
+                                    "quoted_author": "",
+                                    "quoted_text": "",
+                                    "like_count": 0,
+                                    "retweet_count": 0,
+                                    "reply_count": 0,
+                                    "view_count": 0,
+                                    "urls": [f"https://x.com/i/article/{clean_id}"],
+                                    "media_urls": art_imgs,
+                                })
                         instructions = extract_timeline_instructions(data)
                         if instructions:
                             inst_tweets = parse_timeline_instructions(instructions)
@@ -730,7 +884,8 @@ class XClient:
             page = await context.new_page()
             page.on("response", handle_response)
 
-            console.print(f"[cyan]🌐 正在打开推文页面 {target_url} 并获取内容（超时阈值: {timeout_s} 秒）...[/cyan]")
+            type_label = "专栏文章" if "article" in tweet_id_or_url.lower() else "推文页面"
+            console.print(f"[cyan]🌐 正在打开 X {type_label} {target_url} 并获取内容（超时阈值: {timeout_s} 秒）...[/cyan]")
             await page.goto(target_url, wait_until="commit", timeout=timeout_ms)
 
             for _ in range(max(30, timeout_s)):

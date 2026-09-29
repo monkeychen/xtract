@@ -121,9 +121,9 @@ class Pipeline:
         console.print(f"[green]✓ 成功从 X 拉取到 {fetched_count} 条相关推文[/green]")
 
         if fetched_count > 0:
-            inserted, skipped = self.storage.save_tweets(tweets)
+            inserted, skipped = self.storage.save_tweets(tweets, update_existing=True)
             console.print(
-                f"[bold green]✓ 本地库更新完毕：新增入库 {inserted} 条，跳过重复 {skipped} 条 (库内总计 {self.storage.get_total_count()} 条)[/bold green]"
+                f"[bold green]✓ 本地库更新完毕：新增入库/更新 {inserted} 条 (库内总计 {self.storage.get_total_count()} 条)[/bold green]"
             )
         return tweets
 

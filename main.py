@@ -113,22 +113,33 @@ async def view_tweet_cmd(
     tweet_id_or_url: str,
     timeout: int | None = None,
     export_md: bool = True,
-    output_path: str | None = None
+    output_path: str | None = None,
+    force: bool = False
 ) -> None:
     storage = Storage()
     match = re.search(r"(\d{5,})", tweet_id_or_url)
     clean_id = match.group(1) if match else tweet_id_or_url.strip()
 
     t = storage.get_tweet_by_id(clean_id)
-    if not t:
-        console.print(f"[cyan]🔍 本地数据库未检索到推文 `{clean_id}`，正在从 X 实时抓取...[/cyan]")
+    should_refetch = (t is None) or force
+    if not should_refetch and t:
+        urls_str = str(t.get("urls") or "")
+        text_str = str(t.get("text") or "")
+        # Detect whether local cache has a stub article without full parsed markdown
+        if "article" in urls_str.lower() and len(text_str) < 500:
+            console.print("[cyan]🔍 检测到本地缓存包含 X 专栏长文 (Article) 且未解析完整内容，正在自动重新抓取...[/cyan]")
+            should_refetch = True
+
+    if should_refetch:
+        console.print(f"[cyan]🔍 正在从 X 实时抓取 `{clean_id}` 完整内容与多媒体资源...[/cyan]")
         pipeline = Pipeline()
         try:
-            await pipeline.fetch_tweet_and_store(clean_id, timeout=timeout)
+            await pipeline.fetch_tweet_and_store(tweet_id_or_url, timeout=timeout)
             t = storage.get_tweet_by_id(clean_id)
         except Exception as e:
             console.print(f"[bold red]❌ 抓取推文失败: {e}[/bold red]")
-            return
+            if not t:
+                return
 
     if not t:
         console.print(f"[bold red]❌ 未能获取到 ID 为 `{clean_id}` 的推文。请确认链接或 ID 是否有效。[/bold red]")
@@ -174,10 +185,11 @@ async def view_tweet_cmd(
                 output_path=output_path,
                 download_images=True
             )
-            console.print(f"[bold green]🎉 推文已导出为 Markdown 文档: {md_file}[/bold green]")
+            console.print(f"[bold green]🎉 推文已归档至独立资产目录: {md_file.parent}[/bold green]")
+            console.print(f"[green]📄 正文文档: {md_file.name}[/green]")
             if dl_count > 0:
-                console.print(f"[green]🖼️ 已同步下载 {dl_count} 张图片至: {md_file.parent / 'images' / clean_id}[/green]")
-            console.print("[dim]可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。[/dim]\n")
+                console.print(f"[green]🖼️ 已同步下载 {dl_count} 张图片至: {md_file.parent / 'images'}[/green]")
+            console.print("[dim]自包含胶囊目录，可在 Markdown 编辑器中直接查阅或整文件夹拷贝至知识库，相对路径永久有效。[/dim]\n")
         except Exception as e:
             console.print(f"[bold red]❌ 导出 Markdown 失败: {e}[/bold red]")
 
@@ -353,7 +365,7 @@ async def main() -> None:
         "-o", "--output",
         type=str,
         metavar="PATH",
-        help="自定义导出 Markdown 文件的路径或目标目录（单篇推文默认为当前目录下的 output 子目录，图片保存在 output/images/）"
+        help="自定义导出 Markdown 文件的路径或目标目录（单篇推文默认存入 output/articles/<X账号ID>/<tweet_id>/ 独立胶囊目录）"
     )
     parser.add_argument(
         "--pages",
@@ -372,6 +384,11 @@ async def main() -> None:
         type=int,
         default=None,
         help="网络请求与页面加载超时时间（秒，默认 60 秒）"
+    )
+    parser.add_argument(
+        "--force", "--refresh",
+        action="store_true",
+        help="强制重新从 X 抓取最新推文与长文内容（忽略本地已有缓存，用于更新文章或刷新互动数据）"
     )
 
     args = parser.parse_args()
@@ -399,7 +416,8 @@ async def main() -> None:
             args.view,
             timeout=args.timeout,
             export_md=args.export_md,
-            output_path=args.output
+            output_path=args.output,
+            force=args.force
         )
         if args.export is not None:
             export_cmd(

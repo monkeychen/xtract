@@ -103,9 +103,14 @@ class Storage:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_fetched_at ON tweets(fetched_at)")
             conn.commit()
 
-    def save_tweets(self, tweets: list[dict[str, Any]]) -> tuple[int, int]:
+    def save_tweets(
+        self,
+        tweets: list[dict[str, Any]],
+        update_existing: bool = False
+    ) -> tuple[int, int]:
         """
         Saves tweets to the database.
+        When update_existing is True, existing tweets will be updated with latest data.
         Returns: (inserted_count, skipped_count)
         """
         inserted = 0
@@ -115,35 +120,85 @@ class Storage:
         with self._get_connection() as conn:
             for item in tweets:
                 try:
-                    conn.execute("""
-                        INSERT INTO tweets (
-                            tweet_id, author_id, author_name, author_username,
-                            text, created_at, is_retweet, retweeted_author, retweeted_text,
-                            is_quote, quoted_author, quoted_text, like_count, retweet_count,
-                            reply_count, view_count, urls, media_urls, fetched_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        item.get("tweet_id"),
-                        item.get("author_id"),
-                        item.get("author_name"),
-                        item.get("author_username"),
-                        item.get("text"),
-                        item.get("created_at"),
-                        1 if item.get("is_retweet") else 0,
-                        item.get("retweeted_author"),
-                        item.get("retweeted_text"),
-                        1 if item.get("is_quote") else 0,
-                        item.get("quoted_author"),
-                        item.get("quoted_text"),
-                        item.get("like_count", 0),
-                        item.get("retweet_count", 0),
-                        item.get("reply_count", 0),
-                        item.get("view_count", 0),
-                        json.dumps(item.get("urls", [])),
-                        json.dumps(item.get("media_urls", [])),
-                        now_iso
-                    ))
-                    inserted += 1
+                    if update_existing:
+                        conn.execute("""
+                            INSERT INTO tweets (
+                                tweet_id, author_id, author_name, author_username,
+                                text, created_at, is_retweet, retweeted_author, retweeted_text,
+                                is_quote, quoted_author, quoted_text, like_count, retweet_count,
+                                reply_count, view_count, urls, media_urls, fetched_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(tweet_id) DO UPDATE SET
+                                author_id = excluded.author_id,
+                                author_name = excluded.author_name,
+                                author_username = excluded.author_username,
+                                text = excluded.text,
+                                created_at = excluded.created_at,
+                                is_retweet = excluded.is_retweet,
+                                retweeted_author = excluded.retweeted_author,
+                                retweeted_text = excluded.retweeted_text,
+                                is_quote = excluded.is_quote,
+                                quoted_author = excluded.quoted_author,
+                                quoted_text = excluded.quoted_text,
+                                like_count = excluded.like_count,
+                                retweet_count = excluded.retweet_count,
+                                reply_count = excluded.reply_count,
+                                view_count = excluded.view_count,
+                                urls = excluded.urls,
+                                media_urls = excluded.media_urls,
+                                fetched_at = excluded.fetched_at
+                        """, (
+                            item.get("tweet_id"),
+                            item.get("author_id"),
+                            item.get("author_name"),
+                            item.get("author_username"),
+                            item.get("text"),
+                            item.get("created_at"),
+                            1 if item.get("is_retweet") else 0,
+                            item.get("retweeted_author"),
+                            item.get("retweeted_text"),
+                            1 if item.get("is_quote") else 0,
+                            item.get("quoted_author"),
+                            item.get("quoted_text"),
+                            item.get("like_count", 0),
+                            item.get("retweet_count", 0),
+                            item.get("reply_count", 0),
+                            item.get("view_count", 0),
+                            json.dumps(item.get("urls", [])),
+                            json.dumps(item.get("media_urls", [])),
+                            now_iso
+                        ))
+                        inserted += 1
+                    else:
+                        conn.execute("""
+                            INSERT INTO tweets (
+                                tweet_id, author_id, author_name, author_username,
+                                text, created_at, is_retweet, retweeted_author, retweeted_text,
+                                is_quote, quoted_author, quoted_text, like_count, retweet_count,
+                                reply_count, view_count, urls, media_urls, fetched_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            item.get("tweet_id"),
+                            item.get("author_id"),
+                            item.get("author_name"),
+                            item.get("author_username"),
+                            item.get("text"),
+                            item.get("created_at"),
+                            1 if item.get("is_retweet") else 0,
+                            item.get("retweeted_author"),
+                            item.get("retweeted_text"),
+                            1 if item.get("is_quote") else 0,
+                            item.get("quoted_author"),
+                            item.get("quoted_text"),
+                            item.get("like_count", 0),
+                            item.get("retweet_count", 0),
+                            item.get("reply_count", 0),
+                            item.get("view_count", 0),
+                            json.dumps(item.get("urls", [])),
+                            json.dumps(item.get("media_urls", [])),
+                            now_iso
+                        ))
+                        inserted += 1
                 except sqlite3.IntegrityError:
                     skipped += 1
             conn.commit()
@@ -330,28 +385,30 @@ class Storage:
         thread_tweets = self.get_thread_tweets(tweet_id)
         all_tweets = thread_tweets if thread_tweets else [primary_tweet]
 
-        author_user = primary_tweet.get("author_username", "unknown")
+        author_user = primary_tweet.get("author_username", "unknown") or "unknown"
+        clean_user = author_user.lstrip("@").strip()
+        primary_id = str(primary_tweet["tweet_id"])
+
         if output_path:
             p = Path(output_path).expanduser().resolve()
             if p.is_dir() or p.suffix.lower() not in (".md", ".markdown"):
-                md_dir = p
-                md_file = md_dir / f"tweet_{primary_tweet['tweet_id']}_{author_user}.md"
+                article_dir = p
+                md_file = article_dir / "article.md"
             else:
                 md_file = p
-                md_dir = md_file.parent
+                article_dir = md_file.parent
         else:
-            md_dir = Config.PROJECT_ROOT / "output"
-            md_file = md_dir / f"tweet_{primary_tweet['tweet_id']}_{author_user}.md"
+            article_dir = Config.PROJECT_ROOT / "output" / "articles" / clean_user / primary_id
+            md_file = article_dir / "article.md"
 
-        md_dir.mkdir(parents=True, exist_ok=True)
-        primary_id = str(primary_tweet["tweet_id"])
-        tweet_images_dir = md_dir / "images" / primary_id
+        article_dir.mkdir(parents=True, exist_ok=True)
+        tweet_images_dir = article_dir / "images"
         if download_images:
             tweet_images_dir.mkdir(parents=True, exist_ok=True)
 
         downloaded_count = 0
 
-        def process_media(t_item: dict[str, Any], client: httpx.Client | None, is_primary: bool = True) -> tuple[list[str], list[str]]:
+        def process_media(t_item: dict[str, Any], client: httpx.Client | None, is_primary: bool = True) -> tuple[list[str], list[str], dict[str, str]]:
             nonlocal downloaded_count
             media_list = []
             try:
@@ -361,6 +418,7 @@ class Storage:
 
             img_md_links = []
             vid_links = []
+            url_map: dict[str, str] = {}
             t_id = str(t_item.get("tweet_id", "media"))
 
             for idx, m_url in enumerate(media_list, 1):
@@ -388,35 +446,19 @@ class Storage:
 
                         if download_image(m_url, local_path, client=client):
                             downloaded_count += 1
-                            img_md_links.append(f"![图片 {idx}](images/{primary_id}/{local_name})")
+                            local_rel = f"images/{local_name}"
+                            url_map[m_url] = local_rel
+                            img_md_links.append(f"![图片 {idx}]({local_rel})")
                         else:
                             img_md_links.append(f"![图片 {idx} (远程)]({m_url})")
                     else:
                         img_md_links.append(f"![图片 {idx}]({m_url})")
 
-            return img_md_links, vid_links
+            return img_md_links, vid_links, url_map
 
         author_name = primary_tweet.get("author_name") or "Unknown"
         t_url = f"https://x.com/{author_user}/status/{primary_tweet['tweet_id']}"
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        doc_lines = [
-            f"# {author_name} (@{author_user}) 的推文",
-            "",
-            f"> 原文发布于: `{primary_tweet.get('created_at', '未知')}` | 推文 ID: `{primary_tweet['tweet_id']}` | [在 X 上查看原文]({t_url})",
-            "",
-            f"- **作者**: [{author_name} (@{author_user})](https://x.com/{author_user})",
-            f"- **发布时间**: `{primary_tweet.get('created_at', '未知')}`",
-            f"- **互动数据**: ❤️ `{primary_tweet.get('like_count', 0)}` 赞 · 🔁 `{primary_tweet.get('retweet_count', 0)}` 转发 · 💬 `{primary_tweet.get('reply_count', 0)}` 回复 · 👁️ `{primary_tweet.get('view_count', 0)}` 浏览",
-            f"- **原文链接**: {t_url}",
-            "",
-            "---",
-            "",
-            "## 📝 正文",
-            "",
-            primary_tweet.get("text", "").strip(),
-            "",
-        ]
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
@@ -424,7 +466,31 @@ class Storage:
         }
 
         with httpx.Client(proxy=Config.HTTP_PROXY or None, headers=headers, timeout=15.0, follow_redirects=True) as client:
-            p_imgs, p_vids = process_media(primary_tweet, client if download_images else None, is_primary=True)
+            p_imgs, p_vids, p_map = process_media(primary_tweet, client if download_images else None, is_primary=True)
+
+            # Replace any remote image URLs embedded in text with local downloaded relative paths
+            primary_text = primary_tweet.get("text", "").strip()
+            for remote_u, local_u in p_map.items():
+                if remote_u in primary_text:
+                    primary_text = primary_text.replace(remote_u, local_u)
+
+            doc_lines = [
+                f"# {author_name} (@{author_user}) 的推文",
+                "",
+                f"> 原文发布于: `{primary_tweet.get('created_at', '未知')}` | 推文 ID: `{primary_tweet['tweet_id']}` | [在 X 上查看原文]({t_url})",
+                "",
+                f"- **作者**: [{author_name} (@{author_user})](https://x.com/{author_user})",
+                f"- **发布时间**: `{primary_tweet.get('created_at', '未知')}`",
+                f"- **互动数据**: ❤️ `{primary_tweet.get('like_count', 0)}` 赞 · 🔁 `{primary_tweet.get('retweet_count', 0)}` 转发 · 💬 `{primary_tweet.get('reply_count', 0)}` 回复 · 👁️ `{primary_tweet.get('view_count', 0)}` 浏览",
+                f"- **原文链接**: {t_url}",
+                "",
+                "---",
+                "",
+                "## 📝 正文",
+                "",
+                primary_text,
+                "",
+            ]
 
             if primary_tweet.get("is_retweet"):
                 doc_lines.extend([
@@ -439,9 +505,20 @@ class Storage:
                     ""
                 ])
 
-            if p_imgs:
+            # Only append standalone images if they weren't already embedded inline in the text
+            standalone_imgs = []
+            for img_line in p_imgs:
+                # check if the image target is already part of the body
+                match = re.search(r"\(([^)]+)\)", img_line)
+                if match:
+                    img_target = match.group(1)
+                    if img_target in primary_text:
+                        continue
+                standalone_imgs.append(img_line)
+
+            if standalone_imgs:
                 doc_lines.append("### 🖼️ 附图")
-                doc_lines.extend(p_imgs)
+                doc_lines.extend(standalone_imgs)
                 doc_lines.append("")
 
             if p_vids:
@@ -470,17 +547,30 @@ class Storage:
                 ])
                 for idx, ot in enumerate(other_tweets, 2):
                     ot_url = f"https://x.com/{author_user}/status/{ot['tweet_id']}"
+                    ot_imgs, ot_vids, ot_map = process_media(ot, client if download_images else None, is_primary=False)
+                    ot_text = ot.get("text", "").strip()
+                    for remote_u, local_u in ot_map.items():
+                        if remote_u in ot_text:
+                            ot_text = ot_text.replace(remote_u, local_u)
+
                     doc_lines.extend([
                         f"### 第 {idx} 条 (ID: `{ot['tweet_id']}`)",
                         f"> 发布时间: `{ot.get('created_at', '未知')}` | ❤️ `{ot.get('like_count', 0)}` · 🔁 `{ot.get('retweet_count', 0)}` | [原帖链接]({ot_url})",
                         "",
-                        ot.get("text", "").strip(),
+                        ot_text,
                         "",
                     ])
-                    ot_imgs, ot_vids = process_media(ot, client if download_images else None, is_primary=False)
-                    if ot_imgs:
+
+                    ot_standalone_imgs = []
+                    for img_line in ot_imgs:
+                        match = re.search(r"\(([^)]+)\)", img_line)
+                        if match and match.group(1) in ot_text:
+                            continue
+                        ot_standalone_imgs.append(img_line)
+
+                    if ot_standalone_imgs:
                         doc_lines.append("#### 🖼️ 附图")
-                        doc_lines.extend(ot_imgs)
+                        doc_lines.extend(ot_standalone_imgs)
                         doc_lines.append("")
                     if ot_vids:
                         doc_lines.append("#### 🎬 视频链接")

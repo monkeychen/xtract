@@ -96,7 +96,12 @@ xtract/                     # 项目根目录
 │   ├── gemini_auth.json    # Gemini 会话凭据
 │   └── raw/                # 原始抓取快照备份（保留 30 天）
 ├── output/                 # 输出结果
-│   └── reports/            # 生成的 Markdown 早报（YYYY-MM-DD.md）
+│   ├── reports/            # 生成的 Markdown 早报（YYYY-MM-DD.md）与趋势研报（trends_YYYY-MM-DD.md）
+│   └── articles/           # 单篇推文/专栏长文作者归档胶囊目录
+│       └── {author_username}/ # 第一层：按博主/作者归档 (如 longhaiqwe123, karpathy)
+│           └── {tweet_id}/    # 第二层：单篇推文/长文独立资产包（自包含）
+│               ├── article.md # 包含正文、互动指标与元数据的完整 Markdown
+│               └── images/    # 该文章专属配图（Markdown 相对路径引用 images/）
 └── main.py                 # CLI 入口
 ```
 
@@ -106,6 +111,7 @@ xtract/                     # 项目根目录
   - `data/tweets.db`：持久化保留推文元数据用于历史去重。
   - `data/raw/`：调试抓取的原始 JSON，按日期命名 `raw_YYYYMMDD_HHMM.json`，清理策略为保留近 30 天。
   - `output/reports/`：早报输出文件命名为 `YYYY-MM-DD.md`，趋势研报命名为 `trends_YYYY-MM-DD.md`。
+  - `output/articles/{author_username}/{tweet_id}/`：单篇推文/长文作者归档独立胶囊目录，包含 `article.md` 及隔离下载的 `images/`，方便按作者整理与独立迁移。
 
 ---
 

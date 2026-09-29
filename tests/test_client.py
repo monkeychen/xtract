@@ -247,3 +247,71 @@ def test_parse_trends_from_graphql():
     assert trends[1]["query"] == "DeepSeek V3"
     assert trends[1]["rank"] == 2
 
+
+def test_parse_tweet_with_x_article():
+    article_tweet_payload = {
+        "rest_id": "9999999999",
+        "core": {
+            "user_results": {
+                "result": {
+                    "core": {"name": "Author", "screen_name": "author"}
+                }
+            }
+        },
+        "legacy": {
+            "full_text": "This is an important article. https://t.co/abc",
+            "created_at": "Sun Sep 27 12:00:00 +0000 2026",
+            "favorite_count": 500,
+            "entities": {"urls": [], "media": []}
+        },
+        "article": {
+            "article_results": {
+                "result": {
+                    "title": "First Principles of Parenting",
+                    "cover_media": {
+                        "media_info": {"original_img_url": "https://pbs.twimg.com/media/cover.jpg"}
+                    },
+                    "media_entities": [
+                        {
+                            "media_id": "8881",
+                            "media_info": {"original_img_url": "https://pbs.twimg.com/media/fig1.jpg"}
+                        }
+                    ],
+                    "content_state": {
+                        "blocks": [
+                            {"type": "header-two", "text": "01 The Root and Branch Model"},
+                            {"type": "unstyled", "text": "Deep insights into human connection."},
+                            {
+                                "type": "atomic",
+                                "text": " ",
+                                "entityRanges": [{"key": 0, "length": 1, "offset": 0}]
+                            }
+                        ],
+                        "entityMap": [
+                            {
+                                "key": "0",
+                                "value": {
+                                    "type": "MEDIA",
+                                    "data": {
+                                        "caption": "Figure 1 Architecture",
+                                        "mediaItems": [{"mediaId": "8881"}]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+
+    parsed = parse_tweet_result(article_tweet_payload)
+    assert parsed is not None
+    assert "First Principles of Parenting" in parsed["text"]
+    assert "## 01 The Root and Branch Model" in parsed["text"]
+    assert "![Figure 1 Architecture](https://pbs.twimg.com/media/fig1.jpg)" in parsed["text"]
+    assert "*Figure 1 Architecture*" in parsed["text"]
+    assert "https://pbs.twimg.com/media/cover.jpg" in parsed["media_urls"]
+    assert "https://pbs.twimg.com/media/fig1.jpg" in parsed["media_urls"]
+
+

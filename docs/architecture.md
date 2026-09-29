@@ -84,7 +84,7 @@ flowchart TD
 | **2. 业务编排层** | `src/pipeline.py` | 串联全生命周期流水线，执行时效性计算（`--hours`）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
 | **3. 数据拦截层** | `src/client.py`<br>`src/auth.py` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应并抽离广告。 |
 | **4. 模型调度层** | `src/llm/*`<br>`src/summarizer.py` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的流式支持，负责 Prompt 组装与研报渲染。 |
-| **5. 本地持久化层** | `src/storage.py` | 基于 SQLite 管理推文唯一索引去重，维护媒体资产的本地持久化与快照文件归档。 |
+| **5. 本地持久化层** | `src/storage.py` | 基于 SQLite 管理推文唯一索引去重，维护每日研报 (`output/reports/`) 及单篇推文/专栏自包含胶囊目录 (`output/articles/{author}/{tweet_id}/`) 的本地资产归档。 |
 
 ---
 
