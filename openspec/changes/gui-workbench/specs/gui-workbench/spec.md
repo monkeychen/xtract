@@ -92,3 +92,20 @@
 #### Scenario: 专属套餐端点自动识别
 - **WHEN** 用户选择阿里通义千问或智谱清言并输入专属套餐密钥（如 sk-sp-）
 - **THEN** 系统自动识别并切换至 Token Plan 或 Coding Plan 专用高吞吐端点
+
+### Requirement: 历史存量推文（Legacy）兼容展示与防死锁晋级机制
+系统 MUST 将旧版本引入 `source_type` 之前入库的历史推文明确标识为 `legacy` 存量状态，在关注流与博主定向查询中平滑向下兼容展示；且在用户新抓取命中时支持首次明确来源认领与晋级，杜绝重抓死锁。
+
+#### Scenario: 历史存量推文向下兼容呈现
+- **GIVEN** 本地数据库存在来源标识为 `legacy` 的存量推文
+- **WHEN** 用户在「关注流」下浏览
+- **THEN** 系统应同时呈现 `following` 与 `legacy` 推文，确保历史时间线连贯
+- **WHEN** 用户在「博主追踪」中输入具体的博主用户名（如 `@karpathy`）
+- **THEN** 系统应同时呈现该作者的 `user` 与 `legacy` 存量推文，立即可见历史入库内容
+
+#### Scenario: 历史存量推文的明确来源认领与晋级 (Legacy Promotion)
+- **GIVEN** 某推文在本地数据库中的 `source_type` 状态为 `legacy`
+- **WHEN** 用户在带有明确数据源的新入口（如「博主追踪」）重新抓取该推文
+- **THEN** 系统检测到其当前为 `legacy` 状态，应将其 `source_type` 晋级更新为当前明确来源（如 `user`），解除历史模糊归属，后续不再作为 `legacy` 泛化展示
+- **THEN** 对于已经拥有正式来源（`following` / `search` / `user` / `list`）的推文，严格保持首次入库来源不变，跳过重复
+

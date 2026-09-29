@@ -18,7 +18,7 @@ export interface Tweet {
   quoted_text?: string;
   urls?: string[];
   media_urls?: string[];
-  source_type?: 'following' | 'search' | 'trends' | 'user' | 'list';
+  source_type?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
   fetched_at?: string;
 }
 
@@ -57,7 +57,7 @@ export interface TweetQueryOptions {
   offset?: number;
   minLikes?: number;
   minRetweets?: number;
-  sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'all';
+  sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' | 'all';
   user?: string;
   query?: string;
 }

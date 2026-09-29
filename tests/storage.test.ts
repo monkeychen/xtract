@@ -423,5 +423,42 @@ describe('Storage Module', () => {
     expect(storage.getTweetById('9003')).not.toBeNull();
     expect(storage.countTweets({})).toBe(1);
   });
+
+  it('test_legacy_data_compatibility_and_promotion_on_recrawl', async () => {
+    // 1. Simulate existing legacy tweet in SQLite database (prior to source_type introduction)
+    const legacyTweet: Partial<Tweet> = {
+      tweet_id: '9901',
+      author_name: 'Andrej Karpathy',
+      author_username: 'karpathy',
+      text: 'Historical LLM research note by Karpathy',
+      created_at: '2026-09-15T08:00:00Z',
+      like_count: 500,
+    };
+    storage.saveTweets([legacyTweet], 'legacy');
+
+    const loaded1 = storage.getTweetById('9901');
+    expect(loaded1?.source_type).toBe('legacy');
+
+    // 2. Compatibility check: should be visible in 'following' feed
+    const followingFeed = storage.queryTweets({ sourceType: 'following' });
+    expect(followingFeed.some((t) => t.tweet_id === '9901')).toBe(true);
+
+    // 3. Compatibility check: should be visible in 'user' feed when specifying user='karpathy'
+    const karpathyFeed = storage.queryTweets({ sourceType: 'user', user: 'karpathy' });
+    expect(karpathyFeed.some((t) => t.tweet_id === '9901')).toBe(true);
+    expect(storage.countTweets({ sourceType: 'user', user: 'karpathy' })).toBe(1);
+
+    // 4. When user re-crawls karpathy from 'user' data source -> should promote source_type to 'user'
+    const crawlRes = storage.saveTweets([legacyTweet], 'user');
+    expect(crawlRes.skipped).toBe(1);
+
+    const loaded2 = storage.getTweetById('9901');
+    expect(loaded2?.source_type).toBe('user'); // Promoted from legacy to user!
+
+    // 5. Subsequent crawl from another source (e.g. 'search') must NOT overwrite 'user'
+    storage.saveTweets([legacyTweet], 'search');
+    const loaded3 = storage.getTweetById('9901');
+    expect(loaded3?.source_type).toBe('user'); // Invariance preserved after promotion!
+  });
 });
 

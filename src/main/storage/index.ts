@@ -117,7 +117,7 @@ export class Storage {
         view_count INTEGER DEFAULT 0,
         urls TEXT,
         media_urls TEXT,
-        source_type TEXT DEFAULT 'following',
+        source_type TEXT DEFAULT 'legacy',
         fetched_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
@@ -134,7 +134,7 @@ export class Storage {
       const columns = this.db.pragma('table_info(tweets)') as { name: string }[];
       const hasSourceType = columns.some((c) => c.name === 'source_type');
       if (!hasSourceType) {
-        this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'following'`);
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'legacy'`);
       }
       this.db.exec(`CREATE INDEX IF NOT EXISTS idx_source_type ON tweets(source_type)`);
     } catch {
@@ -144,7 +144,7 @@ export class Storage {
 
   public saveTweets(
     tweets: Partial<Tweet>[],
-    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' = 'following'
+    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' = 'following'
   ): { inserted: number; skipped: number } {
     let inserted = 0;
     let skipped = 0;
@@ -193,21 +193,29 @@ export class Storage {
           inserted++;
         } catch (err: unknown) {
           if (err && typeof err === 'object' && 'code' in err && err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
-            // Check if incoming tweet has richer content (e.g. full X Article or more media)
             const existing = this.getTweetById(item.tweet_id!);
-            if (
-              existing &&
-              item.text &&
-              (item.text.length > (existing.text || '').length ||
-                (item.media_urls?.length || 0) > (existing.media_urls?.length || 0))
-            ) {
+            if (existing) {
+              // 1. 防死锁与历史认领晋级 (Legacy Promotion)：
+              // 若该推文在库中当前为 'legacy' 状态，而本次抓取来自明确数据源 (defaultSourceType !== 'legacy')
+              // 则将其 source_type 晋级更新为明确的正式来源，彻底解开历史数据死锁！
+              const shouldPromoteSource =
+                existing.source_type === 'legacy' && defaultSourceType && defaultSourceType !== 'legacy';
+              const targetSourceType = shouldPromoteSource ? defaultSourceType : existing.source_type;
+
+              // 2. 富文本与媒体补齐
+              const hasRicherContent =
+                item.text &&
+                (item.text.length > (existing.text || '').length ||
+                  (item.media_urls?.length || 0) > (existing.media_urls?.length || 0));
+
               this.db
                 .prepare(
                   `
                 UPDATE tweets SET
-                  text = ?,
-                  media_urls = ?,
-                  urls = ?,
+                  text = CASE WHEN ? THEN ? ELSE text END,
+                  media_urls = CASE WHEN ? THEN ? ELSE media_urls END,
+                  urls = CASE WHEN ? THEN ? ELSE urls END,
+                  source_type = ?,
                   like_count = ?,
                   retweet_count = ?,
                   reply_count = ?,
@@ -217,9 +225,13 @@ export class Storage {
               `
                 )
                 .run(
-                  item.text,
-                  JSON.stringify(item.media_urls || []),
-                  JSON.stringify(item.urls || []),
+                  hasRicherContent ? 1 : 0,
+                  item.text || existing.text,
+                  hasRicherContent ? 1 : 0,
+                  JSON.stringify(item.media_urls || existing.media_urls || []),
+                  hasRicherContent ? 1 : 0,
+                  JSON.stringify(item.urls || existing.urls || []),
+                  targetSourceType,
                   item.like_count ?? existing.like_count,
                   item.retweet_count ?? existing.retweet_count,
                   item.reply_count ?? existing.reply_count,
@@ -279,8 +291,24 @@ export class Storage {
     const params: (string | number)[] = [minLikes, minRetweets];
 
     if (options.sourceType && options.sourceType !== 'all') {
-      whereClauses.push('source_type = ?');
-      params.push(options.sourceType);
+      if (options.sourceType === 'following') {
+        whereClauses.push(`source_type IN ('following', 'legacy')`);
+      } else if (options.sourceType === 'user') {
+        if (options.user) {
+          whereClauses.push(`(source_type = 'user' OR source_type = 'legacy')`);
+        } else {
+          whereClauses.push(`source_type = 'user'`);
+        }
+      } else if (options.sourceType === 'search') {
+        if (options.query) {
+          whereClauses.push(`(source_type = 'search' OR source_type = 'legacy')`);
+        } else {
+          whereClauses.push(`source_type = 'search'`);
+        }
+      } else {
+        whereClauses.push('source_type = ?');
+        params.push(options.sourceType);
+      }
     }
 
     if (options.user) {
@@ -313,8 +341,24 @@ export class Storage {
     const params: (string | number)[] = [minLikes, minRetweets];
 
     if (options.sourceType && options.sourceType !== 'all') {
-      whereClauses.push('source_type = ?');
-      params.push(options.sourceType);
+      if (options.sourceType === 'following') {
+        whereClauses.push(`source_type IN ('following', 'legacy')`);
+      } else if (options.sourceType === 'user') {
+        if (options.user) {
+          whereClauses.push(`(source_type = 'user' OR source_type = 'legacy')`);
+        } else {
+          whereClauses.push(`source_type = 'user'`);
+        }
+      } else if (options.sourceType === 'search') {
+        if (options.query) {
+          whereClauses.push(`(source_type = 'search' OR source_type = 'legacy')`);
+        } else {
+          whereClauses.push(`source_type = 'search'`);
+        }
+      } else {
+        whereClauses.push('source_type = ?');
+        params.push(options.sourceType);
+      }
     }
 
     if (options.user) {
