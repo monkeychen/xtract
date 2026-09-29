@@ -194,6 +194,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Active Tweet Ref to guard against asynchronous detail race conditions (§3)
+  const activeTweetIdRef = useRef<string | null>(null);
+
   // Live Crawl Progress State
   const [crawlProgress, setCrawlProgress] = useState<{
     active: boolean;
@@ -429,6 +432,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
   // Select tweet and asynchronously fetch enriched details / Page Bundle
   const handleSelectTweet = async (tweet: Tweet) => {
+    activeTweetIdRef.current = tweet.tweet_id;
     setSelectedTweet(tweet);
     const defaultExportPath = `output/${tweet.author_username || 'tweet'}/${tweet.tweet_id}/index.md`;
     setExportPath(defaultExportPath);
@@ -436,19 +440,28 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
     try {
       const res = await api.viewTweet(tweet.tweet_id);
+      // 防范异步竞态 (Race Condition)：只有当前聚焦依然是这篇推文时，才更新详情面板
+      if (activeTweetIdRef.current === tweet.tweet_id) {
+        if (res?.tweet) {
+          setSelectedTweet(res.tweet);
+        }
+        if (res?.exportPath) {
+          setExportPath(res.exportPath);
+        }
+      }
+      // 列表缓存始终可用最新数据更新
       if (res?.tweet) {
-        setSelectedTweet(res.tweet);
         setTweets((prev) =>
           prev.map((t) => (t.tweet_id === res.tweet.tweet_id ? res.tweet : t))
         );
       }
-      if (res?.exportPath) {
-        setExportPath(res.exportPath);
-      }
     } catch {
       // offline/mock fallback
     } finally {
-      setIsDetailLoading(false);
+      // 仅当依然是当前选中的推文时，才关闭详情加载动画
+      if (activeTweetIdRef.current === tweet.tweet_id) {
+        setIsDetailLoading(false);
+      }
     }
   };
 
@@ -693,24 +706,34 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
   const handleForceRefreshTweet = async () => {
     if (!selectedTweet) return;
+    const currentId = selectedTweet.tweet_id;
+    activeTweetIdRef.current = currentId;
     setIsDetailLoading(true);
     showToast('正在从 X 官方实时同步该推文完整全文与高清多媒体...');
     try {
-      const res = await api.viewTweet(selectedTweet.tweet_id, { forceRefresh: true, exportMd: true });
+      const res = await api.viewTweet(currentId, { forceRefresh: true, exportMd: true });
+      if (activeTweetIdRef.current === currentId) {
+        if (res?.tweet) {
+          setSelectedTweet(res.tweet);
+          showToast('✓ 已成功同步 X 线上完整全文与多媒体！');
+        }
+        if (res?.exportPath) {
+          setExportPath(res.exportPath);
+        }
+      }
       if (res?.tweet) {
-        setSelectedTweet(res.tweet);
         setTweets((prev) =>
           prev.map((t) => (t.tweet_id === res.tweet.tweet_id ? res.tweet : t))
         );
-        showToast('✓ 已成功同步 X 线上完整全文与多媒体！');
-      }
-      if (res?.exportPath) {
-        setExportPath(res.exportPath);
       }
     } catch (err: any) {
-      showToast(`同步失败: ${err?.message || String(err)}`);
+      if (activeTweetIdRef.current === currentId) {
+        showToast(`同步失败: ${err?.message || String(err)}`);
+      }
     } finally {
-      setIsDetailLoading(false);
+      if (activeTweetIdRef.current === currentId) {
+        setIsDetailLoading(false);
+      }
     }
   };
 
@@ -1270,6 +1293,21 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
                   {/* 第 2 行：推文单行精炼标题/第一行文字 (§1 单行溢出省略，杜绝冗余次级摘要) */}
                   <div className="feed-item-title-row">
+                    {Boolean(
+                      tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
+                        (tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text))
+                    ) && (
+                      <span
+                        className="feed-tag"
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          color: 'var(--accent, #10b981)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        📰 深度长文
+                      </span>
+                    )}
                     {tweet.media_urls && tweet.media_urls.length > 0 && (
                       <span className="feed-tag">📷 图文</span>
                     )}
@@ -1364,14 +1402,38 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                       <h3 id="tweet-detail-name" className="serif-title" style={{ fontSize: '17px' }}>
                         {selectedTweet.author_name || selectedTweet.author_username}
                       </h3>
+                      {Boolean(
+                        selectedTweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
+                          (selectedTweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(selectedTweet.text))
+                      ) && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: 'var(--accent, #10b981)',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          📰 X Article 深度长文
+                        </span>
+                      )}
                       {isDetailLoading && (
                         <span style={{ fontSize: '11px', color: 'var(--cinnabar)', background: 'var(--cinnabar-wash)', padding: '1px 6px', borderRadius: '4px' }}>
-                          ⚡ 同步详情中...
+                          ⚡ 正在自动同步全文与高清媒体...
                         </span>
                       )}
                     </div>
                     <div id="tweet-detail-handle" style={{ fontSize: '12.5px', color: 'var(--ink-faint)' }}>
-                      @{selectedTweet.author_username} · {selectedTweet.created_at}
+                      @{selectedTweet.author_username} · {(() => {
+                        try {
+                          const d = new Date(selectedTweet.created_at);
+                          return isNaN(d.getTime()) ? selectedTweet.created_at : d.toLocaleString('zh-CN', { hour12: false });
+                        } catch {
+                          return selectedTweet.created_at;
+                        }
+                      })()}
                     </div>
                   </div>
                 </div>

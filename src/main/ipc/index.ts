@@ -7,6 +7,7 @@ import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
 import { Pipeline } from '../pipeline/index.js';
+import { isTweetContentIncomplete } from '../client/parser.js';
 import type { Tweet, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../types.js';
 
 let isRegistered = false;
@@ -429,15 +430,10 @@ export function registerIpcHandlers(
       const cleanId = args.tweetIdOrUrl.match(/\d{5,}/)?.[0] || args.tweetIdOrUrl.trim();
       let tweet = storage.getTweetById(cleanId);
 
-      // Check if text ends with truncated ellipsis and t.co link, or is explicitly requested to refresh
-      const isTruncated = Boolean(
-        tweet?.text &&
-          (/…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-            /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-            (tweet.text.length < 120 && tweet.text.includes('https://t.co/')))
-      );
+      // Check if text is truncated Note Tweet or incomplete X Article, or is explicitly requested to refresh
+      const isIncomplete = tweet ? isTweetContentIncomplete(tweet) : true;
 
-      if (!tweet || isTruncated || args.forceRefresh) {
+      if (!tweet || isIncomplete || args.forceRefresh) {
         try {
           await pipeline.fetchTweetAndStore(cleanId);
           tweet = storage.getTweetById(cleanId);

@@ -188,7 +188,7 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     author_name: authorName,
     author_username: authorUsername,
     text: fullText,
-    created_at: legacy.created_at || '',
+    created_at: normalizeTweetDate(legacy.created_at),
     is_retweet: isRetweet,
     retweeted_author: retweetedAuthor,
     retweeted_text: retweetedText,
@@ -411,4 +411,64 @@ export function extractListsFromGraphQL(payload: any): XListInfo[] {
 
   walk(payload);
   return lists;
+}
+
+/**
+ * Normalizes any date string (especially X/Twitter legacy RFC2822 "Wed Aug 26 07:02:04 +0000 2026")
+ * into a standard ISO-8601 string ("2026-08-26T07:02:04.000Z") so SQLite string sorting
+ * (ORDER BY created_at DESC) strictly matches true chronological order.
+ */
+export function normalizeTweetDate(rawDate?: string): string {
+  if (!rawDate) return new Date().toISOString();
+  const d = new Date(rawDate);
+  if (isNaN(d.getTime())) {
+    return rawDate;
+  }
+  return d.toISOString();
+}
+
+/**
+ * Determines whether a tweet contains or represents an X Article (Twitter Article / Long-form).
+ */
+export function isArticleTweet(tweet: Partial<Tweet>): boolean {
+  if (!tweet) return false;
+  // 1. Check if urls contains an official article link
+  const hasArticleUrl = Boolean(
+    tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u))
+  );
+  // 2. Check if text explicitly contains an article link
+  const hasArticleInText = Boolean(
+    tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text)
+  );
+  return hasArticleUrl || hasArticleInText;
+}
+
+/**
+ * Checks whether a tweet's content is truncated or incomplete and requires on-demand full sync.
+ * Covers:
+ * 1. Note Tweets truncated with ellipsis and t.co link
+ * 2. X Articles where timeline only provided title/cover image instead of full multi-thousand-word body
+ */
+export function isTweetContentIncomplete(tweet: Partial<Tweet>): boolean {
+  if (!tweet || !tweet.text) return true;
+
+  // 1. Truncated Note Tweet check (ends with … https://t.co/... or ... https://t.co/...)
+  const isTruncatedNote = Boolean(
+    /…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+      /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
+      (tweet.text.length < 120 && tweet.text.includes('https://t.co/'))
+  );
+  if (isTruncatedNote) return true;
+
+  // 2. X Article incomplete check:
+  // If it's an Article, but the body only contains the title and cover image without actual long-form blocks
+  if (isArticleTweet(tweet)) {
+    const textWithoutMedia = tweet.text.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+    // In timeline view, Article preview text without cover image is typically under 300 characters
+    if (textWithoutMedia.length < 400) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
+import { normalizeTweetDate } from '../client/parser.js';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
@@ -137,6 +138,27 @@ export class Storage {
         this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'legacy'`);
       }
       this.db.exec(`CREATE INDEX IF NOT EXISTS idx_source_type ON tweets(source_type)`);
+
+      // 自动清洗并规范化存量非 ISO-8601 格式的推文时间 (如推特原生 "Wed Aug 26 ...")
+      // 确保 SQLite 中字符串排序 ORDER BY created_at DESC 与物理真实时间完全一致
+      const nonIsoRows = this.db.prepare(`
+        SELECT tweet_id, created_at FROM tweets 
+        WHERE created_at NOT LIKE '____-__-__T__:__:__.___Z' 
+          AND created_at NOT LIKE '____-__-__T__:__:__Z'
+      `).all() as { tweet_id: string; created_at: string }[];
+
+      if (nonIsoRows.length > 0) {
+        const updateStmt = this.db.prepare('UPDATE tweets SET created_at = ? WHERE tweet_id = ?');
+        const migrateTx = this.db.transaction(() => {
+          for (const row of nonIsoRows) {
+            const normalized = normalizeTweetDate(row.created_at);
+            if (normalized !== row.created_at) {
+              updateStmt.run(normalized, row.tweet_id);
+            }
+          }
+        });
+        migrateTx();
+      }
     } catch {
       // 忽略迁移警告
     }
@@ -174,7 +196,7 @@ export class Storage {
             author_name: item.author_name || 'Unknown',
             author_username: item.author_username || 'unknown',
             text: item.text,
-            created_at: item.created_at || '',
+            created_at: normalizeTweetDate(item.created_at),
             is_retweet: item.is_retweet ? 1 : 0,
             retweeted_author: item.retweeted_author || null,
             retweeted_text: item.retweeted_text || null,
@@ -268,7 +290,7 @@ export class Storage {
     const stmt = this.db.prepare(`
       SELECT * FROM tweets
       WHERE fetched_at >= ? AND like_count >= ? AND retweet_count >= ?
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, tweet_id DESC
       LIMIT ?
     `);
 
@@ -325,7 +347,7 @@ export class Storage {
     const sql = `
       SELECT * FROM tweets
       WHERE ${whereClauses.join(' AND ')}
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, tweet_id DESC
       LIMIT ? OFFSET ?
     `;
 

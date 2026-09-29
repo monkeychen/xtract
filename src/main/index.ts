@@ -8,6 +8,7 @@ import {
   formatTrendsTable,
   formatTweetDetail,
 } from './cli/format.js';
+import { isTweetContentIncomplete } from './client/parser.js';
 
 // Dual-mode dispatcher: determine CLI vs GUI
 const rawArgs = process.argv.slice(2);
@@ -130,16 +131,11 @@ if (isCLI) {
       if (options.view) {
         const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
-        const isTruncated = Boolean(
-          tweet?.text &&
-            (/…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-              /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-              (tweet.text.length < 120 && tweet.text.includes('https://t.co/')))
-        );
-        if (!tweet || isTruncated) {
+        const isIncomplete = tweet ? isTweetContentIncomplete(tweet) : true;
+        if (!tweet || isIncomplete) {
           const msg = !tweet
             ? `本地数据库未检索到推文 ${tweetId}`
-            : `本地数据库推文 ${tweetId} 仅包含短链接`;
+            : `本地推文 ${tweetId} 包含未展开长文或万字 Article`;
           process.stderr.write(`🔍 ${msg}，正在从 X 实时抓取完整内容...\n`);
           try {
             await pipeline.fetchTweetAndStore(tweetId, timeout);

@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { Storage } from '../src/main/storage/index.js';
+import { normalizeTweetDate, isArticleTweet, isTweetContentIncomplete } from '../src/main/client/parser.js';
 import type { Tweet } from '../src/main/types.js';
 
 describe('Storage Module', () => {
@@ -460,5 +461,86 @@ describe('Storage Module', () => {
     const loaded3 = storage.getTweetById('9901');
     expect(loaded3?.source_type).toBe('user'); // Invariance preserved after promotion!
   });
+
+  it('test_date_normalization_and_chronological_ordering', () => {
+    // 1. Raw Twitter RFC2822 dates:
+    // Notice 'Wed Aug 26' vs 'Tue Sep 29' vs 'Wed May 17 2017'
+    const tweetAug = {
+      tweet_id: '2092507856914600018',
+      author_username: 'XBusiness',
+      text: 'August promotion',
+      created_at: 'Wed Aug 26 07:02:04 +0000 2026',
+    };
+    const tweetSep = {
+      tweet_id: '2104859974845501896',
+      author_username: 'AndyL5cc',
+      text: 'September recent tweet',
+      created_at: 'Tue Sep 29 09:04:59 +0000 2026',
+    };
+    const tweetOld = {
+      tweet_id: '864773165104246784',
+      author_username: 'cza55007',
+      text: 'Old 2017 tweet',
+      created_at: 'Wed May 17 09:22:43 +0000 2017',
+    };
+
+    storage.saveTweets([tweetAug, tweetSep, tweetOld], 'following');
+
+    // Dates should be strictly normalized to ISO strings
+    const loadedSep = storage.getTweetById('2104859974845501896');
+    expect(loadedSep?.created_at).toBe('2026-09-29T09:04:59.000Z');
+
+    const loadedAug = storage.getTweetById('2092507856914600018');
+    expect(loadedAug?.created_at).toBe('2026-08-26T07:02:04.000Z');
+
+    const loadedOld = storage.getTweetById('864773165104246784');
+    expect(loadedOld?.created_at).toBe('2017-05-17T09:22:43.000Z');
+
+    // Query must return in true chronological DESC order: Sep 29 -> Aug 26 -> 2017
+    const list = storage.queryTweets();
+    expect(list.length).toBe(3);
+    expect(list[0].author_username).toBe('AndyL5cc'); // Sep 29 must be FIRST
+    expect(list[1].author_username).toBe('XBusiness'); // Aug 26 must be SECOND
+    expect(list[2].author_username).toBe('cza55007'); // 2017 must be LAST
+  });
+
+  it('test_article_and_incomplete_detection', () => {
+    // 1. Article tweet with only title and cover image in timeline
+    const articlePreview: Partial<Tweet> = {
+      tweet_id: '2104416896070320549',
+      text: '# GPT-6 使用手册\n\n![封面图](https://pbs.twimg.com/media/HTPITRQa8AAKSFJ.jpg)',
+      urls: ['https://x.com/i/article/2104245126881230849'],
+    };
+    expect(isArticleTweet(articlePreview)).toBe(true);
+    expect(isTweetContentIncomplete(articlePreview)).toBe(true); // Must require sync!
+
+    // 2. Full Article tweet already synchronized (11k characters)
+    const fullArticle: Partial<Tweet> = {
+      tweet_id: '2104416896070320549',
+      text: '# GPT-6 使用手册\n\n> 核心摘要: Astra适合高风险任务...\n\n' + '详细章节内容...'.repeat(200),
+      urls: ['https://x.com/i/article/2104245126881230849'],
+    };
+    expect(isArticleTweet(fullArticle)).toBe(true);
+    expect(isTweetContentIncomplete(fullArticle)).toBe(false); // Already complete!
+
+    // 3. Normal short tweet
+    const normalTweet: Partial<Tweet> = {
+      tweet_id: '12345',
+      text: '今天天气真好，去公园散步！',
+      urls: [],
+    };
+    expect(isArticleTweet(normalTweet)).toBe(false);
+    expect(isTweetContentIncomplete(normalTweet)).toBe(false);
+
+    // 4. Truncated Note tweet
+    const truncatedNote: Partial<Tweet> = {
+      tweet_id: '67890',
+      text: '今天发布了重大更新，支持多种新模型… https://t.co/abcdef',
+      urls: ['https://t.co/abcdef'],
+    };
+    expect(isArticleTweet(truncatedNote)).toBe(false);
+    expect(isTweetContentIncomplete(truncatedNote)).toBe(true);
+  });
 });
+
 
