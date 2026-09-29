@@ -149,7 +149,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         searchTweets: async () => ({ count: 1, tweets: [mockDbTweets[1]] }),
         fetchListTimeline: async () => ({ count: 2, tweets: mockDbTweets }),
         getUserLists: async () => [
-          { id: '1827364512938', name: 'AI 核心圈', memberCount: 42, isOwner: true },
+          { id: '1682802314011197441', name: 'AI & Tech Creators', memberCount: 710, isOwner: true },
         ],
         checkAuth: async () => ({ status: 'authenticated', name: 'Developer', screen_name: 'dev' }),
         openLoginWindow: async () => ({ status: 'authenticated' }),

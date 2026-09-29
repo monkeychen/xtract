@@ -173,7 +173,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       : 'karpathy'
   );
   const [userLists, setUserLists] = useState<XListInfo[]>([]);
-  const [selectedList, setSelectedList] = useState('1827364512938');
+  const [selectedList, setSelectedList] = useState('1682802314011197441');
   const [customListId, setCustomListId] = useState('');
   const [isSyncingLists, setIsSyncingLists] = useState(false);
   const [streamFilter, setStreamFilter] = useState('');
@@ -216,7 +216,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     try {
       const lists = await api.getUserLists();
       setUserLists(lists);
-      if (lists.length > 0 && (!selectedList || selectedList === 'ai')) {
+      if (lists.length > 0 && (!selectedList || !lists.some((l) => l.id === selectedList))) {
         setSelectedList(lists[0].id);
       }
     } catch {
@@ -531,16 +531,18 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         insertedCount = res.inserted;
         skippedCount = res.skipped;
 
-        // Auto-save custom list to local list store
-        if (!userLists.some((l) => l.id === cleanId)) {
+        // Auto-save and sync list info
+        await loadUserLists();
+        const updatedLists = await api.getUserLists();
+        if (!updatedLists.some((l) => l.id === cleanId)) {
           const newList: XListInfo = {
             id: cleanId,
             name: `X 列表 #${cleanId.slice(-4)}`,
           };
           await api.saveUserList(newList);
           await loadUserLists();
-          setSelectedList(cleanId);
         }
+        setSelectedList(cleanId);
       }
 
       clearTimeout(progressTimer);

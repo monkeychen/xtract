@@ -258,4 +258,55 @@ describe('Client Parser Module', () => {
     expect(trends[1].query).toBe('DeepSeek V3');
     expect(trends[1].rank).toBe(2);
   });
+
+  it('test_extract_lists_from_graphql', async () => {
+    const { extractListsFromGraphQL } = await import('../src/main/client/parser.js');
+    const mockListPayload = {
+      data: {
+        viewer: {
+          list_memberships: {
+            timeline: {
+              instructions: [
+                {
+                  type: 'TimelineAddEntries',
+                  entries: [
+                    {
+                      entryId: 'list-1682802314011197441',
+                      content: {
+                        itemContent: {
+                          list: {
+                            id_str: '1682802314011197441',
+                            name: 'AI & Tech Creators',
+                            description: 'Verified Creators',
+                            member_count: 710,
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+
+    const lists = extractListsFromGraphQL(mockListPayload);
+    expect(lists.length).toBe(1);
+    expect(lists[0].id).toBe('1682802314011197441');
+    expect(lists[0].name).toBe('AI & Tech Creators');
+    expect(lists[0].member_count).toBe(710);
+  });
+
+  it('test_clean_user_lists_filters_out_legacy_mock_ids', async () => {
+    const { Config } = await import('../src/main/config.js');
+    const lists = Config.getUserLists();
+    expect(lists.length).toBeGreaterThan(0);
+    // Legacy mock fake IDs must be completely filtered out
+    expect(lists.some((l) => l.id === '1827364512938')).toBe(false);
+    expect(lists.some((l) => l.id === '1827364512939')).toBe(false);
+    // Default verified list must be present
+    expect(lists.some((l) => l.id === '1682802314011197441')).toBe(true);
+  });
 });

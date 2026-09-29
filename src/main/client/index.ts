@@ -355,8 +355,8 @@ export class XClient {
     }
 
     const cachedLists = Config.getUserLists();
-    const handle = username || Config.getCachedUser()?.screen_name || 'cza55008';
-    const targetUrl = `https://x.com/${handle}/lists`;
+    const handle = username || Config.getCachedUser()?.screen_name;
+    const targetUrl = handle ? `https://x.com/${handle}/lists` : 'https://x.com/i/lists';
 
     const capturedLists: XListInfo[] = [];
     const browser = await this.launchBrowser(true);
@@ -388,9 +388,17 @@ export class XClient {
 
       try {
         await page.goto(targetUrl, { waitUntil: 'commit', timeout: 15000 });
-        await new Promise((r) => setTimeout(r, 2500));
+        await new Promise((r) => setTimeout(r, 3000));
       } catch {
         // ignore navigation timeout
+      }
+
+      // Also try /i/lists if user specific route yielded nothing
+      if (capturedLists.length === 0 && targetUrl !== 'https://x.com/i/lists') {
+        try {
+          await page.goto('https://x.com/i/lists', { waitUntil: 'commit', timeout: 15000 });
+          await new Promise((r) => setTimeout(r, 3000));
+        } catch {}
       }
 
       const domLists = await page.evaluate(() => {
@@ -398,9 +406,11 @@ export class XClient {
         const links = Array.from(document.querySelectorAll('a[href*="/i/lists/"]'));
         for (const a of links) {
           const href = a.getAttribute('href') || '';
-          const match = href.match(/\/i\/lists\/(\d+)/);
+          const match = href.match(/\/i\/lists\/(\d{5,})/);
           if (match) {
             const id = match[1];
+            // Skip utility links like /i/lists/create or members
+            if (href.includes('/members') || href.includes('/followers')) continue;
             const text = a.textContent?.trim() || '';
             if (id && text && !items.some((it) => it.id === id)) {
               items.push({ id, name: text });
@@ -419,17 +429,22 @@ export class XClient {
       await browser.close();
     }
 
-    // Merge captured lists with local saved lists
+    // Merge captured lists with local saved lists (excluding legacy mock IDs)
     const mergedMap = new Map<string, XListInfo>();
     for (const l of cachedLists) {
-      mergedMap.set(l.id, l);
+      if (l.id !== '1827364512938' && l.id !== '1827364512939') {
+        mergedMap.set(l.id, l);
+      }
     }
     for (const l of capturedLists) {
-      mergedMap.set(l.id, { ...mergedMap.get(l.id), ...l });
-      Config.saveUserList(l);
+      if (l.id !== '1827364512938' && l.id !== '1827364512939') {
+        mergedMap.set(l.id, { ...mergedMap.get(l.id), ...l });
+        Config.saveUserList(l);
+      }
     }
 
-    return Array.from(mergedMap.values());
+    const finalLists = Array.from(mergedMap.values());
+    return finalLists.length > 0 ? finalLists : Config.getUserLists();
   }
 
   async fetchFollowingTimeline(options?: FetchTimelineOptions): Promise<Tweet[]> {
@@ -685,6 +700,8 @@ export class XClient {
     const timeoutMs = timeout * 1000;
 
     const capturedInstructions: any[][] = [];
+    let listNotFound = false;
+    let notFoundReason = '';
     const browser = await this.launchBrowser(true);
 
     try {
@@ -693,21 +710,48 @@ export class XClient {
 
       page.on('response', async (res: Response) => {
         const url = res.url();
-        if (
-          url.includes('/graphql/') &&
-          (url.includes('ListLatestTweetsTimeline') ||
-            url.includes('ListTweetsTimeline') ||
-            url.includes('List')) &&
-          res.status() === 200
-        ) {
-          try {
-            const data = await res.json();
-            const inst = extractTimelineInstructions(data);
-            if (inst.length > 0) {
-              capturedInstructions.push(inst);
+        if (url.includes('/graphql/') && res.status() === 200) {
+          if (url.includes('ListByRestId')) {
+            try {
+              const data = await res.json();
+              const l = data.data?.list;
+              if (l) {
+                // If it returns only id_str and empty timeline without name or description, list is deleted/nonexistent
+                if (!l.name && !l.description && (!l.tweets_timeline || Object.keys(l.tweets_timeline).length === 0)) {
+                  listNotFound = true;
+                  notFoundReason = '该 X 列表在服务器上不存在或已失效';
+                } else if (l.name) {
+                  // Auto-save discovered list metadata
+                  Config.saveUserList({
+                    id: listId,
+                    name: l.name,
+                    member_count: l.member_count,
+                    description: l.description,
+                  });
+                }
+              } else {
+                listNotFound = true;
+                notFoundReason = '该 X 列表不存在';
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
+          }
+
+          if (
+            url.includes('ListLatestTweetsTimeline') ||
+            url.includes('ListTweetsTimeline') ||
+            url.includes('List')
+          ) {
+            try {
+              const data = await res.json();
+              const inst = extractTimelineInstructions(data);
+              if (inst.length > 0) {
+                capturedInstructions.push(inst);
+              }
+            } catch {
+              // ignore
+            }
           }
         }
       });
@@ -715,9 +759,42 @@ export class XClient {
       process.stderr.write(`🌐 正在打开 X 列表主页 ${targetUrl} 并监听推文流...\n`);
       await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
 
-      for (let i = 0; i < Math.max(30, timeout); i++) {
+      // Intelligent polling: proceed immediately upon receiving timeline data or detecting 404
+      for (let i = 0; i < Math.max(15, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
+        if (listNotFound) break;
         if (capturedInstructions.length > 0) break;
+
+        if (i >= 3) {
+          const domCheck = await page
+            .evaluate(() => {
+              const text = document.body?.innerText || '';
+              const isNotExist =
+                text.includes('doesn’t exist') ||
+                text.includes('does not exist') ||
+                text.includes('This List does not exist') ||
+                text.includes('Hmm...this page');
+              const hasTweets = document.querySelectorAll('[data-testid="tweet"]').length > 0;
+              return { isNotExist, hasTweets };
+            })
+            .catch(() => ({ isNotExist: false, hasTweets: false }));
+
+          if (domCheck.isNotExist) {
+            listNotFound = true;
+            notFoundReason = '页面提示该列表不存在或已被作者设为私密';
+            break;
+          }
+          if (domCheck.hasTweets) {
+            await new Promise((r) => setTimeout(r, 1000));
+            break;
+          }
+        }
+      }
+
+      if (listNotFound) {
+        throw new Error(
+          `X 列表（ID: ${listId}）抓取失败：${notFoundReason || '列表不存在或为私密列表'}，请检查列表 ID 或粘贴正确的公开列表链接。`
+        );
       }
 
       const pagesNeeded = Math.max(1, Math.ceil(limit / 20));
@@ -727,7 +804,7 @@ export class XClient {
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
       }
 
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1500));
     } finally {
       await browser.close();
     }

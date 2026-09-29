@@ -38,3 +38,11 @@
 - [x] 6.2 Trends 抓取器导航韧性：路由对齐 X Explore 最新规范（trending / news / sports / entertainment / tech），切换为 `commit` 加载并智能轮询趋势渲染
 - [x] 6.3 GraphQL + DOM 双轨抽取与数据增强：当 GraphQL 拦截未命中或字段缺失时，由 DOM `[data-testid="trend"]` 自动兜底抽取话题名、精准帖子数与分类，实现 100% 抓取率
 - [x] 6.4 运行全套自动化测试并进行端到端验证，确保所有既有用例与趋势抓取完全通过
+
+## 7. X Lists Crawling Overhaul & Genuine Verified Public Lists
+
+- [x] 7.1 清除无效假 ID：清除 `1827364512938` 等 404 伪造列表，替换为真实活跃且实测验证的公开精选列表（如 `1682802314011197441` AI & Tech Creators）
+- [x] 7.2 列表有效性主动检测与明确报错：识别 X 404 / 不存在 / 私密页面状态，遇到无效列表即时抛出清晰可操作的错误引导，杜绝静默返回 0 篇
+- [x] 7.3 `fetchListTimeline` 智能轮询与双轨抽取：拦截命中或推文渲染即刻提前结束，耗时从 30s 缩减至 4s；自动提取 `ListByRestId` 真实名称并持久化
+- [x] 7.4 `fetchUserLists` 统一升级为官方 `/i/lists` 路由，账号无自建列表时优雅降级并引导输入公开链接
+- [x] 7.5 全量自动化测试与真实抓取验证：确保所有既有 10 套测试及新增 List 校验测试 100% 通过，生产构建 0 错误

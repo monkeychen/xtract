@@ -93,8 +93,8 @@ class ApiService {
       return window.xtractAPI.getUserLists();
     }
     return [
-      { id: '1827364512938', name: 'AI 核心圈', member_count: 42 },
-      { id: '1827364512939', name: '独立开发者', member_count: 128 },
+      { id: '1682802314011197441', name: 'AI & Tech Creators', member_count: 710 },
+      { id: '1953536336675365173', name: 'Tech & Venture Insider', member_count: 50 },
     ];
   }
 

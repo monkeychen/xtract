@@ -113,17 +113,21 @@ export class Config {
       if (fs.existsSync(this.USER_LISTS_PATH)) {
         const raw = fs.readFileSync(this.USER_LISTS_PATH, 'utf-8');
         const lists = JSON.parse(raw);
-        if (Array.isArray(lists) && lists.length > 0) {
-          return lists;
+        if (Array.isArray(lists)) {
+          // Filter out known legacy fake mock list IDs
+          const valid = lists.filter((l) => l.id !== '1827364512938' && l.id !== '1827364512939');
+          if (valid.length > 0) {
+            return valid;
+          }
         }
       }
     } catch {
       // ignore
     }
-    // Default initial lists for clean out-of-the-box experience
+    // Default initial lists verified and active on X
     return [
-      { id: '1827364512938', name: 'AI 核心圈', member_count: 42 },
-      { id: '1827364512939', name: '独立开发者', member_count: 128 },
+      { id: '1682802314011197441', name: 'AI & Tech Creators', member_count: 710 },
+      { id: '1953536336675365173', name: 'Tech & Venture Insider', member_count: 50 },
     ];
   }
 
