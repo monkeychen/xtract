@@ -201,32 +201,22 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     }
   });
 
-  it('Flow 1: Masthead Navigation & View Tab Switching', async () => {
+  it('Flow 1: Masthead Header & Direct StudioView Rendering', async () => {
     // Title verification
     const title = await page.title();
     expect(title).toContain('Xtract');
 
-    // Default view: Reports View
-    const mainHeading = await page.locator('h1.serif-title').first().textContent();
-    expect(mainHeading).toContain('智能研报');
+    // Default view: Direct StudioView (Intelligence Workbench)
+    const workbenchTitle = await page.locator('.masthead span', { hasText: '情报工作台' }).first().textContent();
+    expect(workbenchTitle).toContain('情报工作台');
 
-    // Switch to Trends View
-    await page.locator('.nav-item', { hasText: '趋势雷达' }).click();
-    await page.waitForTimeout(300);
-    const trendsHeading = await page.locator('h1.serif-title').first().textContent();
-    expect(trendsHeading).toContain('全网趋势');
-
-    // Switch to Studio View
-    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
-    await page.waitForTimeout(300);
-    // In Studio, toolbar should have data source chips
+    // In Studio, toolbar should have data source chips with '关注流' active
     const activeChipText = await page.locator('#studio-source-chips .fmt-chip.active').first().textContent();
     expect(activeChipText?.trim()).toBe('关注流');
   });
 
   it('Flow 2: Studio Data Source Switching & Real Local Query Triggers (§2.1)', async () => {
-    // Ensure we are in Studio view
-    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
+    // Already in Studio view, verify source switching directly
     await page.waitForTimeout(200);
 
     // 1. In '关注流' mode: should display stream-filter-input and source badge
@@ -369,45 +359,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     expect(await page.locator('#delete-dialog').isVisible()).toBe(false);
   });
 
-  it('Flow 7: Trends Radar Interaction & Studio Cross-linking', async () => {
-    await page.locator('.nav-item', { hasText: '趋势雷达' }).click();
-    await page.waitForTimeout(300);
 
-    expect(await page.locator('.fmt-chip', { hasText: '科技' }).isVisible()).toBe(true);
-    expect(await page.locator('.fmt-chip', { hasText: '商业' }).isVisible()).toBe(true);
-
-    await page.locator('.fmt-chip', { hasText: '商业' }).click();
-    await page.waitForTimeout(200);
-
-    const viewTweetsBtn = page.locator('button', { hasText: '查看推文' }).first();
-    await viewTweetsBtn.click();
-    await page.waitForTimeout(300);
-
-    // Jump to Studio in search mode
-    expect(await page.locator('#chip-source-search.active').isVisible()).toBe(true);
-    const searchInputVal = await page.locator('#search-query-input').inputValue();
-    expect(searchInputVal.length).toBeGreaterThan(0);
-  });
-
-  it('Flow 8: Reports View Actionable Insights & Citation Click-to-Jump', async () => {
-    await page.locator('.nav-item', { hasText: '智能研报' }).click();
-    await page.waitForTimeout(300);
-
-    const insightsCard = page.locator('span', { hasText: '💡 选题与培训便签' });
-    expect(await insightsCard.isVisible()).toBe(true);
-    expect(await page.locator('button', { hasText: '📋 复制大纲' }).isVisible()).toBe(true);
-
-    await page.locator('button', { hasText: '📋 复制大纲' }).click();
-    await page.waitForTimeout(200);
-    expect(await page.locator('button', { hasText: '✓ 已复制大纲' }).isVisible()).toBe(true);
-
-    const jumpBtn = page.locator('button', { hasText: '定位原推 ↗' }).first();
-    expect(await jumpBtn.isVisible()).toBe(true);
-    await jumpBtn.click();
-    await page.waitForTimeout(300);
-
-    expect(await page.locator('#view-studio').isVisible()).toBe(true);
-  });
 
   it('Flow 9: Preferences Settings Drawer & Deep Reasoning Effort Config', async () => {
     await page.locator('button', { hasText: '⚙️ 设置' }).click();
@@ -433,10 +385,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
   });
 
   it('Flow 10: Multi-select, Batch Real Cascade Deletion Dialog & True Count (§7.7)', async () => {
-    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
-    await page.waitForTimeout(200);
-
-    // Switch back to 关注流 where mockDbTweets exist
+    // Switch to 关注流 where mockDbTweets exist
     await page.locator('#chip-source-following').click();
     await page.waitForTimeout(300);
 

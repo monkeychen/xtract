@@ -2,16 +2,14 @@ import React from 'react';
 import type { ActiveTab } from '../types.js';
 
 interface MastheadProps {
-  activeTab: ActiveTab;
-  onSelectTab: (tab: ActiveTab) => void;
+  activeTab?: ActiveTab;
+  onSelectTab?: (tab: ActiveTab) => void;
   onOpenSettings: () => void;
   xAuthStatus: { isValid: boolean; info?: string; screenName?: string };
   proxyStatus?: string;
 }
 
 export const Masthead: React.FC<MastheadProps> = ({
-  activeTab,
-  onSelectTab,
   onOpenSettings,
   xAuthStatus,
   proxyStatus,
@@ -25,41 +23,14 @@ export const Masthead: React.FC<MastheadProps> = ({
   return (
     <header className="masthead">
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        <div
-          style={{ display: 'flex', alignItems: 'baseline', gap: '8px', cursor: 'pointer' }}
-          onClick={() => onSelectTab('reports')}
-        >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
           <span className="serif-title" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>
             XTRACT
           </span>
-          <span style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 500 }}>
-            情报雷达
+          <span style={{ fontSize: '13px', color: 'var(--ink-soft)', fontWeight: 600 }}>
+            情报工作台
           </span>
         </div>
-
-        <div style={{ width: '1px', height: '28px', background: 'var(--line)', margin: '0 10px' }} />
-
-        {/* 横向主导航 (§6.1) */}
-        <nav style={{ display: 'flex', gap: '4px' }}>
-          <div
-            className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
-            onClick={() => onSelectTab('reports')}
-          >
-            <span>📰 智能研报</span>
-          </div>
-          <div
-            className={`nav-item ${activeTab === 'trends' ? 'active' : ''}`}
-            onClick={() => onSelectTab('trends')}
-          >
-            <span>🔥 趋势雷达</span>
-          </div>
-          <div
-            className={`nav-item ${activeTab === 'studio' ? 'active' : ''}`}
-            onClick={() => onSelectTab('studio')}
-          >
-            <span>📦 情报工作台</span>
-          </div>
-        </nav>
       </div>
 
       {/* 右侧状态指示胶囊与设置触发器 */}
