@@ -163,19 +163,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  // Source-specific inputs
+  // Source-specific inputs (默认均为空，不添加任何关键词/博主过滤)
   const [searchQuery, setSearchQuery] = useState(
-    initialSearchQuery && !initialSearchQuery.startsWith('@') ? initialSearchQuery : 'AI'
+    initialSearchQuery && !initialSearchQuery.startsWith('@') ? initialSearchQuery : ''
   );
   const [userHandle, setUserHandle] = useState(() => {
     if (initialSearchQuery && initialSearchQuery.startsWith('@')) {
       return initialSearchQuery.replace(/^@/, '');
     }
-    try {
-      return localStorage.getItem('xtract_last_user_handle') || 'karpathy';
-    } catch {
-      return 'karpathy';
-    }
+    return '';
   });
   const [userLists, setUserLists] = useState<XListInfo[]>([]);
   const [selectedList, setSelectedList] = useState('2100985900734062922');
@@ -347,7 +343,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         sourceType = 'user';
         u = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '') || undefined;
       } else if (source === 'search') {
-        sourceType = 'search';
+        sourceType = 'all'; // 全网搜索工作台：检索本地推文库，为空时不添加任何关键词过滤（查全库），有词时全库模糊搜索
         q = (queryParam !== undefined ? queryParam : searchQuery).trim() || undefined;
       } else if (source === 'lists') {
         sourceType = 'list';
@@ -499,10 +495,20 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
     let title = '正在从 X 官方流实时抓取关注流';
     if (source === 'search') {
-      const q = searchQuery.trim() || 'AI';
+      const q = searchQuery.trim();
+      if (!q) {
+        showToast('请输入要搜索的关键词');
+        setIsLoading(false);
+        return;
+      }
       title = `正在全网实时搜索关键词「${q}」`;
     } else if (source === 'user') {
-      const u = userHandle.trim() || 'karpathy';
+      const u = userHandle.trim().replace(/^@/, '');
+      if (!u) {
+        showToast('请输入要追踪的博主用户名（如 @username）');
+        setIsLoading(false);
+        return;
+      }
       title = `正在抓取博主 @${u} 的推文包`;
     } else if (source === 'lists') {
       title = '正在从 X 列表实时抓取推文';
@@ -542,12 +548,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         insertedCount = res.inserted;
         skippedCount = res.skipped;
       } else if (source === 'search') {
-        const query = searchQuery.trim() || 'AI';
+        const query = searchQuery.trim();
         const res = await api.searchTweets(query, { limit: crawlLimit, minLikes });
         fetchedCount = res.count;
         insertedCount = res.count;
       } else if (source === 'user') {
-        const handle = userHandle.trim() || 'karpathy';
+        const handle = userHandle.trim().replace(/^@/, '');
         const res = await api.fetchUser(handle, { limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
@@ -1024,14 +1030,22 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 onChange={(e) => handleUserChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    loadLocalTweets(50, 'user', false, undefined, e.currentTarget.value);
+                    const clean = e.currentTarget.value.trim().replace(/^@/, '');
+                    loadLocalTweets(50, 'user', false, undefined, clean);
                   }
                 }}
               />
               <button
                 className="secondary-button"
                 style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                onClick={() => loadLocalTweets(50, 'user', false, undefined, userHandle)}
+                onClick={() => {
+                  const u = userHandle.trim().replace(/^@/, '');
+                  if (!u) {
+                    showToast('请输入要检索的博主用户名（如 @username）');
+                    return;
+                  }
+                  loadLocalTweets(50, 'user', false, undefined, u);
+                }}
                 title="在本地 SQLite 数据库中检索该博主的推文"
               >
                 <span>🔍 查本地</span>
@@ -1251,8 +1265,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)' }}>
                 {dataSource === 'following' && '📡 关注流'}
-                {dataSource === 'search' && `🔍 搜: ${searchQuery}`}
-                {dataSource === 'user' && `👤 @${userHandle.replace(/^@/, '')}`}
+                {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
+                {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
                 {dataSource === 'lists' && '📋 X 列表'}
               </span>
               <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
@@ -1384,24 +1398,26 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
               <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--ink-soft)' }}>
                 <div style={{ fontSize: '28px', marginBottom: '10px' }}>📭</div>
                 <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
-                  {dataSource === 'user' && `本地数据库暂无 @${userHandle.trim()} 的推文`}
-                  {dataSource === 'search' && `本地数据库暂无与「${searchQuery.trim()}」相关的推文`}
+                  {dataSource === 'user' && (userHandle.trim() ? `本地数据库暂无 @${userHandle.trim().replace(/^@/, '')} 的推文` : '请输入博主用户名查看其推文')}
+                  {dataSource === 'search' && (searchQuery.trim() ? `本地数据库暂无与「${searchQuery.trim()}」相关的推文` : '本地数据库暂无推文')}
                   {dataSource === 'following' && '本地暂无关注流推文'}
                   {dataSource === 'lists' && '本地暂无该列表推文'}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
-                  {dataSource === 'user' && '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库'}
-                  {dataSource === 'search' && '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库'}
+                  {dataSource === 'user' && (userHandle.trim() ? '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库' : '在上方输入框中输入博主用户名（如 @username），可检索本地或抓取线上最新推文')}
+                  {dataSource === 'search' && (searchQuery.trim() ? '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库' : '在上方输入关键词检索本地推文，或输入后点击「搜索抓取」从 X 官方全网获取')}
                   {dataSource === 'following' && '点击右上角「抓取最新」，一键拉取关注流最新推文'}
                   {dataSource === 'lists' && '点击右上角「抓取最新」，从指定列表拉取最新推文'}
                 </div>
-                <button
-                  className="cta-button"
-                  style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
-                  onClick={() => handleCrawl(dataSource)}
-                >
-                  <span>立即从 X 抓取 ⚡</span>
-                </button>
+                {(dataSource === 'following' || dataSource === 'lists' || (dataSource === 'search' && searchQuery.trim()) || (dataSource === 'user' && userHandle.trim())) && (
+                  <button
+                    className="cta-button"
+                    style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
+                    onClick={() => handleCrawl(dataSource)}
+                  >
+                    <span>立即从 X 抓取 ⚡</span>
+                  </button>
+                )}
               </div>
             )}
 

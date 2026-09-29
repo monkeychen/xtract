@@ -237,12 +237,19 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.locator('#chip-source-search').click();
     await page.waitForTimeout(300);
     expect(await page.locator('#search-query-input').isVisible()).toBe(true);
-    expect(await page.locator('#feed-source-badge').textContent()).toContain('搜:');
+    expect(await page.locator('#search-query-input').inputValue()).toBe('');
+    expect(await page.locator('#feed-source-badge').textContent()).toContain('全库推文');
 
     // 3. Switch to '博主追踪'
     await page.locator('#chip-source-user').click();
     await page.waitForTimeout(300);
     expect(await page.locator('#user-handle-input').isVisible()).toBe(true);
+    expect(await page.locator('#user-handle-input').inputValue()).toBe('');
+    expect(await page.locator('#feed-source-badge').textContent()).toContain('全部博主');
+
+    // 填入博主名后，验证联动查询与 badge 变化
+    await page.locator('#user-handle-input').fill('karpathy');
+    await page.waitForTimeout(350);
     expect(await page.locator('#feed-source-badge').textContent()).toContain('@karpathy');
 
     // Check recorded IPC listCalls in browser
