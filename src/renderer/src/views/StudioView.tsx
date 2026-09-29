@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Tweet, XListInfo } from '../types.js';
+import type { Tweet, XListInfo, TweetQueryOptions } from '../types.js';
 import { api } from '../services/api.js';
 
 interface StudioViewProps {
@@ -181,7 +181,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   // Filtering & Pagination
   const [minLikes, setMinLikes] = useState<number>(0);
   const [limit, setLimit] = useState<number>(50);
-  const [totalDbCount, setTotalDbCount] = useState<number>(88);
+  const [totalDbCount, setTotalDbCount] = useState<number>(0);
 
   // Tweet States
   const [tweets, setTweets] = useState<Tweet[]>([]);
@@ -191,6 +191,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Live Crawl Progress State
@@ -307,44 +308,80 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         const handle = initialSearchQuery.replace(/^@/, '');
         setDataSource('user');
         setUserHandle(handle);
-        loadLocalTweets(limit, 'user', undefined, handle);
+        loadLocalTweets(50, 'user', false, undefined, handle);
       } else {
         setDataSource('search');
         setSearchQuery(initialSearchQuery);
-        loadLocalTweets(limit, 'search', initialSearchQuery);
+        loadLocalTweets(50, 'search', false, initialSearchQuery);
       }
+    } else {
+      loadLocalTweets(50, dataSource, false);
     }
   }, [initialSearchQuery]);
 
   // Load tweets from local DB filtered by active data source
   const loadLocalTweets = async (
-    customLimit = limit,
+    customLimit = 50,
     source = dataSource,
+    isAppend = false,
     queryParam?: string,
     userParam?: string
   ) => {
     setIsLoading(true);
     try {
-      let data: Tweet[] = [];
+      let sourceType: TweetQueryOptions['sourceType'] = 'following';
+      let q: string | undefined = undefined;
+      let u: string | undefined = undefined;
+
       if (source === 'user') {
-        const handle = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '');
-        data = await api.listTweets({ limit: customLimit, minLikes, user: handle });
+        sourceType = 'user';
+        u = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '');
       } else if (source === 'search') {
-        const q = (queryParam !== undefined ? queryParam : searchQuery).trim();
-        data = await api.listTweets({ limit: customLimit, minLikes, query: q });
+        sourceType = 'search';
+        q = (queryParam !== undefined ? queryParam : searchQuery).trim();
+      } else if (source === 'lists') {
+        sourceType = 'list';
       } else {
-        data = await api.listTweets({ limit: customLimit, minLikes });
+        sourceType = 'following';
       }
-      setTweets(data);
-      setTotalDbCount(Math.max(data.length, totalDbCount || 88));
-      if (data.length > 0) {
-        if (!selectedTweet || !data.some((t) => t.tweet_id === selectedTweet.tweet_id)) {
-          handleSelectTweet(data[0]);
+
+      const offset = isAppend ? tweets.length : 0;
+      const [data, totalCount] = await Promise.all([
+        api.listTweets({
+          limit: customLimit,
+          offset,
+          minLikes,
+          sourceType,
+          query: q,
+          user: u,
+        }),
+        api.countTweets({
+          minLikes,
+          sourceType,
+          query: q,
+          user: u,
+        }),
+      ]);
+
+      setTotalDbCount(totalCount);
+
+      if (isAppend) {
+        setTweets((prev) => [...prev, ...data]);
+      } else {
+        setTweets(data);
+        if (data.length > 0) {
+          if (!selectedTweet || !data.some((t) => t.tweet_id === selectedTweet.tweet_id)) {
+            handleSelectTweet(data[0]);
+          }
+        } else {
+          setSelectedTweet(null);
+          setExportPath(null);
         }
-      } else {
-        setSelectedTweet(null);
-        setExportPath(null);
       }
+      return data;
+    } catch (err: any) {
+      console.error('Failed to load local tweets:', err);
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -354,14 +391,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const handleSwitchDataSource = (newSource: DataSource) => {
     setDataSource(newSource);
     setStreamFilter('');
+    setCheckedIds(new Set());
     if (newSource === 'user') {
-      loadLocalTweets(limit, 'user', undefined, userHandle);
+      loadLocalTweets(50, 'user', false, undefined, userHandle);
     } else if (newSource === 'search') {
-      loadLocalTweets(limit, 'search', searchQuery);
+      loadLocalTweets(50, 'search', false, searchQuery);
     } else if (newSource === 'following') {
-      loadLocalTweets(limit, 'following');
+      loadLocalTweets(50, 'following', false);
     } else {
-      loadLocalTweets(limit, 'lists');
+      loadLocalTweets(50, 'lists', false);
     }
   };
 
@@ -371,7 +409,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     setSearchQuery(val);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
-      loadLocalTweets(limit, 'search', val);
+      loadLocalTweets(50, 'search', false, val);
     }, 250);
   };
 
@@ -381,12 +419,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     setUserHandle(val);
     if (userDebounceRef.current) clearTimeout(userDebounceRef.current);
     userDebounceRef.current = setTimeout(() => {
-      loadLocalTweets(limit, 'user', undefined, val);
+      loadLocalTweets(50, 'user', false, undefined, val);
     }, 250);
   };
 
   useEffect(() => {
-    loadLocalTweets(limit, dataSource);
+    loadLocalTweets(50, dataSource, false);
   }, [minLikes]);
 
   // Select tweet and asynchronously fetch enriched details / Page Bundle
@@ -521,7 +559,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       );
 
       // Reload local tweets for current data source
-      await loadLocalTweets(limit, source);
+      await loadLocalTweets(50, source, false);
 
       setTimeout(() => {
         setCrawlProgress(null);
@@ -547,10 +585,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   const handleLoadMore = async () => {
-    const nextLimit = limit + 50;
-    setLimit(nextLimit);
-    await loadLocalTweets(nextLimit);
-    showToast('已加载本地数据库更多历史推文');
+    if (isLoading || (totalDbCount > 0 && tweets.length >= totalDbCount)) return;
+    const newData = await loadLocalTweets(50, dataSource, true);
+    if (newData && newData.length > 0) {
+      showToast(`已加载更早的 ${newData.length} 条历史推文`);
+    } else {
+      showToast('已加载全部推文');
+    }
   };
 
   // Selection & Delete
@@ -574,9 +615,10 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     if (!selectedTweet) return;
     try {
       await api.deleteTweets({ tweetId: selectedTweet.tweet_id });
-      showToast(`已删除推文 ${selectedTweet.tweet_id}`);
+      showToast(`✓ 已彻底删除推文 ${selectedTweet.tweet_id}`);
       const nextList = tweets.filter((t) => t.tweet_id !== selectedTweet.tweet_id);
       setTweets(nextList);
+      setTotalDbCount((prev) => Math.max(0, prev - 1));
       if (nextList.length > 0) {
         handleSelectTweet(nextList[0]);
       } else {
@@ -590,18 +632,24 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   const handleBatchDelete = async () => {
-    for (const id of Array.from(checkedIds)) {
-      await api.deleteTweets({ tweetId: id });
-    }
-    showToast(`已删除所选 ${checkedIds.size} 篇推文`);
-    const nextList = tweets.filter((t) => !checkedIds.has(t.tweet_id));
-    setTweets(nextList);
-    setCheckedIds(new Set());
-    if (nextList.length > 0) {
-      handleSelectTweet(nextList[0]);
-    } else {
-      setSelectedTweet(null);
-      setExportPath(null);
+    const ids = Array.from(checkedIds);
+    if (ids.length === 0) return;
+    try {
+      await api.deleteTweets({ tweetIds: ids });
+      showToast(`✓ 已彻底级联删除所选 ${ids.length} 篇推文及磁盘文件`);
+      const nextList = tweets.filter((t) => !checkedIds.has(t.tweet_id));
+      setTweets(nextList);
+      setTotalDbCount((prev) => Math.max(0, prev - ids.length));
+      setCheckedIds(new Set());
+      setBatchDeleteConfirmOpen(false);
+      if (nextList.length > 0) {
+        handleSelectTweet(nextList[0]);
+      } else {
+        setSelectedTweet(null);
+        setExportPath(null);
+      }
+    } catch (err: any) {
+      showToast(`批量删除失败: ${err?.message || String(err)}`);
     }
   };
 
@@ -832,14 +880,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    loadLocalTweets(limit, 'search', e.currentTarget.value);
+                    loadLocalTweets(50, 'search', false, e.currentTarget.value);
                   }
                 }}
               />
               <button
                 className="secondary-button"
                 style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                onClick={() => loadLocalTweets(limit, 'search', searchQuery)}
+                onClick={() => loadLocalTweets(50, 'search', false, searchQuery)}
                 title="在本地 SQLite 数据库中检索该关键词"
               >
                 <span>🔍 搜本地</span>
@@ -914,14 +962,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 onChange={(e) => handleUserChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    loadLocalTweets(limit, 'user', undefined, e.currentTarget.value);
+                    loadLocalTweets(50, 'user', false, undefined, e.currentTarget.value);
                   }
                 }}
               />
               <button
                 className="secondary-button"
                 style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                onClick={() => loadLocalTweets(limit, 'user', undefined, userHandle)}
+                onClick={() => loadLocalTweets(50, 'user', false, undefined, userHandle)}
                 title="在本地 SQLite 数据库中检索该博主的推文"
               >
                 <span>🔍 查本地</span>
@@ -1262,17 +1310,30 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
 
             {/* 触底加载更多状态卡片 */}
             <div id="feed-more-box" style={{ padding: '14px', textAlign: 'center', borderTop: '1px dashed var(--line)', background: 'var(--paper-sunken)', margin: '12px 10px 16px 10px', borderRadius: 'var(--radius-sm)' }}>
-              <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: '8px' }} id="feed-count-summary">
-                已显示 {filteredTweets.length} 条 · 本地数据库共 {totalDbCount} 条
+              <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginBottom: totalDbCount > 0 ? '8px' : '0' }} id="feed-count-summary">
+                {totalDbCount === 0
+                  ? '本地数据库暂无符合条件的推文'
+                  : tweets.length >= totalDbCount
+                  ? `✓ 已加载全部 ${totalDbCount} 条推文`
+                  : `已显示 ${filteredTweets.length} 条 · 本地数据库共 ${totalDbCount} 条`}
               </div>
-              <button
-                className="secondary-button"
-                style={{ width: '100%', fontSize: '12px', padding: '6px 0', justifyContent: 'center' }}
-                onClick={handleLoadMore}
-                disabled={isLoading}
-              >
-                <span>⬇️ 加载更早的 50 条历史推文</span>
-              </button>
+              {totalDbCount > 0 && (
+                <button
+                  id="btn-load-more"
+                  className="secondary-button"
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 0', justifyContent: 'center' }}
+                  onClick={handleLoadMore}
+                  disabled={isLoading || tweets.length >= totalDbCount}
+                >
+                  <span>
+                    {isLoading
+                      ? '⏳ 正在加载...'
+                      : tweets.length >= totalDbCount
+                      ? '✓ 已是全部推文'
+                      : '⬇️ 加载更早的 50 条历史推文'}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1552,7 +1613,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           <button className="secondary-button" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={handleBatchExport}>
             <span>导出 Markdown</span>
           </button>
-          <button className="cta-button" style={{ padding: '4px 14px', fontSize: '12px' }} onClick={handleBatchDelete}>
+          <button id="btn-batch-delete" className="cta-button" style={{ padding: '4px 14px', fontSize: '12px' }} onClick={() => setBatchDeleteConfirmOpen(true)}>
             <span>删除所选</span>
           </button>
           <button
@@ -1562,6 +1623,32 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           >
             <span>取消</span>
           </button>
+        </div>
+      )}
+
+      {/* 批量删除确认对话框 */}
+      {batchDeleteConfirmOpen && (
+        <div id="batch-delete-dialog" className="drawer-backdrop" onClick={() => setBatchDeleteConfirmOpen(false)}>
+          <div
+            className="surface"
+            style={{ width: '420px', padding: '24px', margin: 'auto', background: 'var(--paper-raised)', border: '1px solid var(--line-strong)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="serif-title" style={{ fontSize: '17px', color: 'var(--cinnabar)', marginBottom: '10px' }}>
+              确认批量删除推文？
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', lineHeight: '1.6', marginBottom: '20px' }}>
+              将从本地 SQLite 数据库与磁盘归档目录中彻底物理删除选中的 <strong>{checkedIds.size}</strong> 篇推文及其配图文件，此操作不可恢复。
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="secondary-button" onClick={() => setBatchDeleteConfirmOpen(false)}>
+                取消
+              </button>
+              <button id="btn-confirm-batch-delete" className="cta-button" onClick={handleBatchDelete}>
+                确认删除 ({checkedIds.size})
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

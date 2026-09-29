@@ -81,7 +81,7 @@ export class Pipeline {
       const rawPath = path.join(Config.RAW_DIR, `raw_${nowStr}.json`);
       fs.writeFileSync(rawPath, JSON.stringify(tweets, null, 2), 'utf-8');
 
-      const { inserted, skipped } = this.storage.saveTweets(tweets);
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'following');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -105,7 +105,7 @@ export class Pipeline {
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条 @${cleanUser} 的推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets);
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'user');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -133,7 +133,7 @@ export class Pipeline {
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets);
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'list');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -152,7 +152,7 @@ export class Pipeline {
     process.stderr.write(`✓ 成功从 X 拉取到 ${fetchedCount} 条相关推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets);
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'search');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -198,7 +198,7 @@ export class Pipeline {
     }
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets);
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'search');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );

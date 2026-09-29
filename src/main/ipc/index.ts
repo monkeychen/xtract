@@ -7,7 +7,7 @@ import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
 import { Pipeline } from '../pipeline/index.js';
-import type { Tweet, DeleteFilter, DeleteResult, XListInfo } from '../types.js';
+import type { Tweet, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../types.js';
 
 let isRegistered = false;
 
@@ -399,33 +399,19 @@ export function registerIpcHandlers(
     IPC_CHANNELS.TWEETS_LIST,
     async (
       _event,
-      options?: {
-        limit?: number;
-        minLikes?: number;
-        minRetweets?: number;
-        user?: string;
-        query?: string;
-      }
+      options?: TweetQueryOptions
     ): Promise<Tweet[]> => {
-      if (options?.user) {
-        return storage.getTweetsByUser(options.user, {
-          limit: options.limit || 50,
-          minLikes: options.minLikes || 0,
-          minRetweets: options.minRetweets || 0,
-        });
-      }
-      if (options?.query) {
-        return storage.searchLocalTweets(options.query, {
-          limit: options.limit || 50,
-          minLikes: options.minLikes || 0,
-          minRetweets: options.minRetweets || 0,
-        });
-      }
-      return storage.getRecentTweets({
-        limit: options?.limit || 50,
-        minLikes: options?.minLikes || 0,
-        minRetweets: options?.minRetweets || 0,
-      });
+      return storage.queryTweets(options);
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.TWEETS_COUNT,
+    async (
+      _event,
+      options?: TweetQueryOptions
+    ): Promise<number> => {
+      return storage.countTweets(options);
     }
   );
 

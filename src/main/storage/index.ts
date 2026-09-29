@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../types.js';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
   const lower = url.toLowerCase();
@@ -117,6 +117,7 @@ export class Storage {
         view_count INTEGER DEFAULT 0,
         urls TEXT,
         media_urls TEXT,
+        source_type TEXT DEFAULT 'following',
         fetched_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
@@ -127,9 +128,24 @@ export class Storage {
         updated_at TEXT NOT NULL
       );
     `);
+
+    // 自动平滑迁移已有历史数据库表结构
+    try {
+      const columns = this.db.pragma('table_info(tweets)') as { name: string }[];
+      const hasSourceType = columns.some((c) => c.name === 'source_type');
+      if (!hasSourceType) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'following'`);
+      }
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_source_type ON tweets(source_type)`);
+    } catch {
+      // 忽略迁移警告
+    }
   }
 
-  public saveTweets(tweets: Partial<Tweet>[]): { inserted: number; skipped: number } {
+  public saveTweets(
+    tweets: Partial<Tweet>[],
+    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' = 'following'
+  ): { inserted: number; skipped: number } {
     let inserted = 0;
     let skipped = 0;
     const nowIso = new Date().toISOString();
@@ -139,12 +155,12 @@ export class Storage {
         tweet_id, author_id, author_name, author_username,
         text, created_at, is_retweet, retweeted_author, retweeted_text,
         is_quote, quoted_author, quoted_text, like_count, retweet_count,
-        reply_count, view_count, urls, media_urls, fetched_at
+        reply_count, view_count, urls, media_urls, source_type, fetched_at
       ) VALUES (
         @tweet_id, @author_id, @author_name, @author_username,
         @text, @created_at, @is_retweet, @retweeted_author, @retweeted_text,
         @is_quote, @quoted_author, @quoted_text, @like_count, @retweet_count,
-        @reply_count, @view_count, @urls, @media_urls, @fetched_at
+        @reply_count, @view_count, @urls, @media_urls, @source_type, @fetched_at
       )
     `);
 
@@ -171,6 +187,7 @@ export class Storage {
             view_count: item.view_count || 0,
             urls: JSON.stringify(item.urls || []),
             media_urls: JSON.stringify(item.media_urls || []),
+            source_type: item.source_type || defaultSourceType || 'following',
             fetched_at: item.fetched_at || nowIso,
           });
           inserted++;
@@ -252,26 +269,78 @@ export class Storage {
     return row ? row.count : 0;
   }
 
-  public getRecentTweets(options: {
-    limit?: number;
-    offset?: number;
-    minLikes?: number;
-    minRetweets?: number;
-  } = {}): Tweet[] {
+  public queryTweets(options: TweetQueryOptions = {}): Tweet[] {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
     const minLikes = options.minLikes ?? 0;
     const minRetweets = options.minRetweets ?? 0;
 
-    const stmt = this.db.prepare(`
+    const whereClauses: string[] = ['like_count >= ?', 'retweet_count >= ?'];
+    const params: (string | number)[] = [minLikes, minRetweets];
+
+    if (options.sourceType && options.sourceType !== 'all') {
+      whereClauses.push('source_type = ?');
+      params.push(options.sourceType);
+    }
+
+    if (options.user) {
+      whereClauses.push('LOWER(author_username) = LOWER(?)');
+      params.push(options.user.replace(/^@/, '').trim());
+    }
+
+    if (options.query) {
+      const q = `%${options.query.trim().toLowerCase()}%`;
+      whereClauses.push('(LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
+      params.push(q, q, q);
+    }
+
+    const sql = `
       SELECT * FROM tweets
-      WHERE like_count >= ? AND retweet_count >= ?
+      WHERE ${whereClauses.join(' AND ')}
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
-    `);
+    `;
 
-    const rows = stmt.all(minLikes, minRetweets, limit, offset) as Record<string, unknown>[];
+    const rows = this.db.prepare(sql).all(...params, limit, offset) as Record<string, unknown>[];
     return rows.map(this.mapRowToTweet);
+  }
+
+  public countTweets(options: TweetQueryOptions = {}): number {
+    const minLikes = options.minLikes ?? 0;
+    const minRetweets = options.minRetweets ?? 0;
+
+    const whereClauses: string[] = ['like_count >= ?', 'retweet_count >= ?'];
+    const params: (string | number)[] = [minLikes, minRetweets];
+
+    if (options.sourceType && options.sourceType !== 'all') {
+      whereClauses.push('source_type = ?');
+      params.push(options.sourceType);
+    }
+
+    if (options.user) {
+      whereClauses.push('LOWER(author_username) = LOWER(?)');
+      params.push(options.user.replace(/^@/, '').trim());
+    }
+
+    if (options.query) {
+      const q = `%${options.query.trim().toLowerCase()}%`;
+      whereClauses.push('(LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
+      params.push(q, q, q);
+    }
+
+    const sql = `SELECT COUNT(*) as total FROM tweets WHERE ${whereClauses.join(' AND ')}`;
+    const row = this.db.prepare(sql).get(...params) as { total: number } | undefined;
+    return row?.total ?? 0;
+  }
+
+  public getRecentTweets(options: {
+    limit?: number;
+    offset?: number;
+    minLikes?: number;
+    minRetweets?: number;
+    sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'all';
+  } = {}): Tweet[] {
+    return this.queryTweets(options);
   }
 
   public getTweetById(tweetId: string): Tweet | null {
@@ -283,43 +352,16 @@ export class Storage {
 
   public getTweetsByUser(
     username: string,
-    options: { limit?: number; minLikes?: number; minRetweets?: number } = {}
+    options: { limit?: number; offset?: number; minLikes?: number; minRetweets?: number } = {}
   ): Tweet[] {
-    const cleanName = username.replace(/^@/, '').trim();
-    const limit = options.limit ?? 50;
-    const minLikes = options.minLikes ?? 0;
-    const minRetweets = options.minRetweets ?? 0;
-
-    const stmt = this.db.prepare(`
-      SELECT * FROM tweets
-      WHERE LOWER(author_username) = LOWER(?) AND like_count >= ? AND retweet_count >= ?
-      ORDER BY created_at DESC
-      LIMIT ?
-    `);
-
-    const rows = stmt.all(cleanName, minLikes, minRetweets, limit) as Record<string, unknown>[];
-    return rows.map(this.mapRowToTweet);
+    return this.queryTweets({ ...options, user: username });
   }
 
   public searchLocalTweets(
     query: string,
-    options: { limit?: number; minLikes?: number; minRetweets?: number } = {}
+    options: { limit?: number; offset?: number; minLikes?: number; minRetweets?: number } = {}
   ): Tweet[] {
-    const limit = options.limit ?? 50;
-    const minLikes = options.minLikes ?? 0;
-    const minRetweets = options.minRetweets ?? 0;
-    const q = `%${query.trim().toLowerCase()}%`;
-
-    const stmt = this.db.prepare(`
-      SELECT * FROM tweets
-      WHERE (LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)
-        AND like_count >= ? AND retweet_count >= ?
-      ORDER BY created_at DESC
-      LIMIT ?
-    `);
-
-    const rows = stmt.all(q, q, q, minLikes, minRetweets, limit) as Record<string, unknown>[];
-    return rows.map(this.mapRowToTweet);
+    return this.queryTweets({ ...options, query });
   }
 
   public getCachedTrends(category: string): { trends: TrendTopic[]; updatedAt: string } | null {
@@ -557,11 +599,11 @@ export class Storage {
   }
 
   public async deleteTweets(filter: DeleteFilter): Promise<DeleteResult> {
-    const { tweetId, username, since, until, olderThan, dryRun } = filter;
+    const { tweetId, tweetIds, username, since, until, olderThan, dryRun } = filter;
 
-    if (!tweetId && !username && !since && !until && !olderThan) {
+    if (!tweetId && (!tweetIds || tweetIds.length === 0) && !username && !since && !until && !olderThan) {
       throw new Error(
-        '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until 或 --older-than）。'
+        '删除操作必须指定至少一个筛选条件（推文ID/URL、tweetIds、--user、--since、--until 或 --older-than）。'
       );
     }
 
@@ -572,6 +614,12 @@ export class Storage {
       const match = tweetId.match(/\d{5,}/)?.[0] || tweetId.trim();
       sql += ' AND tweet_id = ?';
       params.push(match);
+    }
+
+    if (tweetIds && tweetIds.length > 0) {
+      const placeholders = tweetIds.map(() => '?').join(',');
+      sql += ` AND tweet_id IN (${placeholders})`;
+      params.push(...tweetIds);
     }
 
     if (username) {
@@ -764,6 +812,7 @@ export class Storage {
       view_count: Number(row.view_count || 0),
       urls,
       media_urls: mediaUrls,
+      source_type: (row.source_type as any) || 'following',
       fetched_at: String(row.fetched_at || ''),
     };
   }

@@ -21,3 +21,11 @@
 
 - [x] 4.1 运行全套自动化测试 `pnpm test`，确保原有 31 个测试用例及新增 IPC 契约测试 100% 通过
 - [x] 4.2 执行生产构建 `npx tsc --noEmit && npx vite build`，确保无类型错误且打包耗时与体积达标
+
+## 5. Data Invariants, Real Counting & Cascade Cleanup Enforcement
+
+- [ ] 5.1 数据库 `source_type` 首次入库永久固定规约：保证 `saveTweets` 使用 `INSERT OR IGNORE`，同一推文再次被抓取时直接去重跳过，绝不覆盖首次落库的 `source_type`
+- [ ] 5.2 Storage 与 IPC 查询增强：`listTweets` 支持按 `source_type` 隔离过滤并按 `created_at DESC` 严格倒序，新增精准 `countTweets` 统计接口与 `offset` 分页支持
+- [ ] 5.3 工作台前端渲染重构：彻底删除 88 硬编码，接入真实动态总数统计；底部「加载更多」严格按当前过滤条件带 offset 分页，到底部精准显示「已加载全部 X 篇」
+- [ ] 5.4 彻查并打通多选批量真实物理级联删除：浮动操作条点击批量删除经二次确认后，真实调用 `deleteTweets` 级联删除 SQLite 记录与磁盘 Page Bundle 文件并即时刷新
+- [ ] 5.5 编写并通过完整自动化测试（单元测试、真实浏览器端到端测试与全量构建），验证每个功能的真实性与可靠性

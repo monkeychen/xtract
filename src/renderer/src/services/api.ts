@@ -1,5 +1,5 @@
 import type { XtractAPI, StreamEvent, AppConfigView, XListInfo } from '../types';
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult } from '../types';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
 
 class ApiService {
@@ -132,20 +132,15 @@ class ApiService {
     return list;
   }
 
-  async listTweets(
-    options: {
-      limit?: number;
-      minLikes?: number;
-      minRetweets?: number;
-      user?: string;
-      query?: string;
-    } = {}
-  ): Promise<Tweet[]> {
+  async listTweets(options: TweetQueryOptions = {}): Promise<Tweet[]> {
     if (this.hasNativeApi()) {
       return window.xtractAPI.listTweets(options);
     }
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     let result = [...MOCK_TWEETS];
+    if (options.sourceType && options.sourceType !== 'all') {
+      result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
+    }
     if (options.minLikes) {
       result = result.filter((t) => t.like_count >= (options.minLikes || 0));
     }
@@ -163,7 +158,39 @@ class ApiService {
           t.author_name.toLowerCase().includes(q)
       );
     }
-    return result;
+    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const offset = options.offset || 0;
+    const limit = options.limit || 50;
+    return result.slice(offset, offset + limit);
+  }
+
+  async countTweets(options: TweetQueryOptions = {}): Promise<number> {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.countTweets(options);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    let result = [...MOCK_TWEETS];
+    if (options.sourceType && options.sourceType !== 'all') {
+      result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
+    }
+    if (options.minLikes) {
+      result = result.filter((t) => t.like_count >= (options.minLikes || 0));
+    }
+    if (options.user) {
+      result = result.filter(
+        (t) => t.author_username.toLowerCase() === options.user?.toLowerCase()
+      );
+    }
+    if (options.query) {
+      const q = options.query.toLowerCase().trim();
+      result = result.filter(
+        (t) =>
+          t.text.toLowerCase().includes(q) ||
+          t.author_username.toLowerCase().includes(q) ||
+          t.author_name.toLowerCase().includes(q)
+      );
+    }
+    return result.length;
   }
 
   async viewTweet(

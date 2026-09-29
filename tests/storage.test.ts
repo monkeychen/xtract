@@ -346,5 +346,82 @@ describe('Storage Module', () => {
       fs.rmSync(delTmpDir, { recursive: true, force: true });
     }
   });
+
+  it('test_source_type_first_crawl_invariance_and_multi_source_queries', async () => {
+    // 1. First crawl via 'following'
+    const tweet1: Partial<Tweet> = {
+      tweet_id: '9001',
+      author_name: 'Alpha',
+      author_username: 'alpha',
+      text: 'Alpha tweet about AI',
+      created_at: '2026-09-20T10:00:00Z',
+      like_count: 100,
+    };
+    const res1 = storage.saveTweets([tweet1], 'following');
+    expect(res1.inserted).toBe(1);
+    expect(res1.skipped).toBe(0);
+
+    const saved1 = storage.getTweetById('9001');
+    expect(saved1?.source_type).toBe('following');
+
+    // 2. Second crawl for the same tweet via 'search' -> must be ignored / skipped without tampering source_type
+    const res2 = storage.saveTweets([tweet1], 'search');
+    expect(res2.inserted).toBe(0);
+    expect(res2.skipped).toBe(1);
+
+    const saved2 = storage.getTweetById('9001');
+    expect(saved2?.source_type).toBe('following'); // Invariance preserved!
+
+    // 3. Insert other tweets with different source_types and timestamps
+    const tweet2: Partial<Tweet> = {
+      tweet_id: '9002',
+      author_name: 'Beta',
+      author_username: 'beta',
+      text: 'Beta search result tweet',
+      created_at: '2026-09-21T12:00:00Z',
+      like_count: 50,
+    };
+    const tweet3: Partial<Tweet> = {
+      tweet_id: '9003',
+      author_name: 'Charlie',
+      author_username: 'charlie',
+      text: 'Charlie blogger tweet',
+      created_at: '2026-09-22T14:00:00Z',
+      like_count: 250,
+    };
+    storage.saveTweets([tweet2], 'search');
+    storage.saveTweets([tweet3], 'user');
+
+    // 4. Test multi-source isolated querying & reverse-chronological order (created_at DESC)
+    const followingList = storage.queryTweets({ sourceType: 'following' });
+    expect(followingList.length).toBe(1);
+    expect(followingList[0].tweet_id).toBe('9001');
+
+    const searchList = storage.queryTweets({ sourceType: 'search' });
+    expect(searchList.length).toBe(1);
+    expect(searchList[0].tweet_id).toBe('9002');
+
+    const userList = storage.queryTweets({ sourceType: 'user' });
+    expect(userList.length).toBe(1);
+    expect(userList[0].tweet_id).toBe('9003');
+
+    // 5. Test countTweets across filters
+    expect(storage.countTweets({ sourceType: 'following' })).toBe(1);
+    expect(storage.countTweets({ sourceType: 'search' })).toBe(1);
+    expect(storage.countTweets({ sourceType: 'user' })).toBe(1);
+    expect(storage.countTweets({ minLikes: 200 })).toBe(1);
+    expect(storage.countTweets({})).toBe(3);
+
+    // 6. Test batch cascade deletion by tweetIds
+    await storage.exportSingleTweetMarkdown('9001', { downloadImages: false });
+    await storage.exportSingleTweetMarkdown('9002', { downloadImages: false });
+
+    const batchDelRes = await storage.deleteTweets({ tweetIds: ['9001', '9002'] });
+    expect(batchDelRes.deletedCount).toBe(2);
+    expect(storage.getTweetById('9001')).toBeNull();
+    expect(storage.getTweetById('9002')).toBeNull();
+    expect(storage.getTweetById('9003')).not.toBeNull();
+    expect(storage.countTweets({})).toBe(1);
+  });
 });
 

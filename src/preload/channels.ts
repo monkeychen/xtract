@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
   TWEETS_FETCH_LIST: 'tweets:fetch-list',
   TWEETS_SEARCH: 'tweets:search',
   TWEETS_LIST: 'tweets:list',
+  TWEETS_COUNT: 'tweets:count',
   TWEETS_VIEW: 'tweets:view',
   TWEETS_DELETE: 'tweets:delete',
   TWEETS_EXPORT: 'tweets:export',

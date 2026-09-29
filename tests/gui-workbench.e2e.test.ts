@@ -51,6 +51,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           reply_count: 320,
           view_count: 240000,
           urls: ['https://github.com/karpathy/nanoGPT'],
+          source_type: 'following',
         },
         {
           tweet_id: '2002',
@@ -64,6 +65,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           reply_count: 670,
           view_count: 890000,
           urls: ['https://openai.com/index/gpt-5-6'],
+          source_type: 'following',
         },
       ];
 
@@ -104,6 +106,25 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
             result = result.filter((t) => t.like_count >= opts.minLikes);
           }
           return result;
+        },
+        countTweets: async (opts: any) => {
+          (window as any).__recordedCalls.countCalls = (window as any).__recordedCalls.countCalls || [];
+          (window as any).__recordedCalls.countCalls.push(opts);
+          let result = [...mockDbTweets];
+          if (opts?.user) {
+            result = result.filter(
+              (t) => t.author_username.toLowerCase() === opts.user.toLowerCase()
+            );
+          }
+          if (opts?.query) {
+            result = result.filter((t) =>
+              t.text.toLowerCase().includes(opts.query.toLowerCase())
+            );
+          }
+          if (opts?.minLikes) {
+            result = result.filter((t) => t.like_count >= opts.minLikes);
+          }
+          return result.length;
         },
         getTrends: async (cat: string) => {
           return [
@@ -402,5 +423,43 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(800);
 
     expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
+  });
+
+  it('Flow 10: Multi-select, Batch Real Cascade Deletion Dialog & True Count (§7.7)', async () => {
+    await page.locator('.nav-item', { hasText: '情报工作台' }).click();
+    await page.waitForTimeout(200);
+
+    // Switch back to 关注流 where mockDbTweets exist
+    await page.locator('#chip-source-following').click();
+    await page.waitForTimeout(300);
+
+    // 1. Verify feed count summary does NOT display hardcoded 88
+    const countSummary = await page.locator('#feed-count-summary').textContent();
+    expect(countSummary).not.toContain('88');
+
+    // 2. Click tweet check
+    const tweetChecks = page.locator('.tweet-check');
+    expect(await tweetChecks.count()).toBeGreaterThan(0);
+    await tweetChecks.first().click();
+    await page.waitForTimeout(200);
+
+    // Floating selbar should be visible
+    const selbar = page.locator('#selbar');
+    expect(await selbar.isVisible()).toBe(true);
+    expect(await page.locator('#selbar-count').textContent()).toContain('已选 1 篇');
+
+    // 3. Click '删除所选' -> should pop up batch-delete-dialog confirmation
+    await page.locator('#btn-batch-delete').click();
+    await page.waitForTimeout(200);
+
+    const batchDialog = page.locator('#batch-delete-dialog');
+    expect(await batchDialog.isVisible()).toBe(true);
+    expect(await batchDialog.textContent()).toContain('确认批量删除推文？');
+
+    // 4. Click confirm button -> triggers batch delete
+    await page.locator('#btn-confirm-batch-delete').click();
+    await page.waitForTimeout(300);
+
+    expect(await page.locator('#batch-delete-dialog').isVisible()).toBe(false);
   });
 });

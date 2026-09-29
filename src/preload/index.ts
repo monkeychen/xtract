@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './channels.js';
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, XListInfo } from '../main/types.js';
+import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../main/types.js';
 
 export interface StreamEvent {
   taskId: string;
@@ -67,13 +67,8 @@ export interface XtractAPI {
     query: string,
     options?: { searchType?: 'live' | 'top'; limit?: number; minLikes?: number; minRetweets?: number }
   ) => Promise<{ count: number; tweets: Tweet[] }>;
-  listTweets: (options?: {
-    limit?: number;
-    minLikes?: number;
-    minRetweets?: number;
-    user?: string;
-    query?: string;
-  }) => Promise<Tweet[]>;
+  listTweets: (options?: TweetQueryOptions) => Promise<Tweet[]>;
+  countTweets: (options?: TweetQueryOptions) => Promise<number>;
   viewTweet: (
     tweetIdOrUrl: string,
     options?: { exportMd?: boolean; outputPath?: string; forceRefresh?: boolean }
@@ -126,6 +121,7 @@ export const xtractApiImplementation: XtractAPI = {
   searchTweets: (query, options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_SEARCH, { query, ...options }),
   listTweets: (options) => ipcRenderer.invoke(IPC_CHANNELS.TWEETS_LIST, options),
+  countTweets: (options) => ipcRenderer.invoke(IPC_CHANNELS.TWEETS_COUNT, options),
   viewTweet: (tweetIdOrUrl, options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_VIEW, { tweetIdOrUrl, ...options }),
   deleteTweets: (filter) => ipcRenderer.invoke(IPC_CHANNELS.TWEETS_DELETE, filter),

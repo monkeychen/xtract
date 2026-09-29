@@ -44,11 +44,22 @@ export interface StreamChunk {
 
 export interface DeleteFilter {
   tweetId?: string;
+  tweetIds?: string[];
   username?: string;
   since?: string;
   until?: string;
   olderThan?: string;
   dryRun?: boolean;
+}
+
+export interface TweetQueryOptions {
+  limit?: number;
+  offset?: number;
+  minLikes?: number;
+  minRetweets?: number;
+  sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'all';
+  user?: string;
+  query?: string;
 }
 
 export interface DeleteResult {
