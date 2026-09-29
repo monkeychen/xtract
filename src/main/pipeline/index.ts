@@ -66,13 +66,32 @@ export class Pipeline {
   }
 
   async fetchAndStore(
-    maxPages?: number,
+    optionsOrPages?: { maxPages?: number; limit?: number; timeout?: number } | number,
     timeout?: number
   ): Promise<[number, number, number]> {
-    const pages = maxPages || Config.FETCH_MAX_PAGES;
-    process.stderr.write(`⏳ 开始从 X (Following 时间线) 抓取推文，计划拉取 ${pages} 页...\n`);
+    let pages: number | undefined;
+    let limit: number | undefined;
+    let actualTimeout: number | undefined = timeout;
 
-    const tweets = await this.client.fetchFollowingTimeline({ maxPages: pages, timeout });
+    if (typeof optionsOrPages === 'number') {
+      pages = optionsOrPages;
+    } else if (optionsOrPages && typeof optionsOrPages === 'object') {
+      pages = optionsOrPages.maxPages;
+      limit = optionsOrPages.limit;
+      if (optionsOrPages.timeout !== undefined) {
+        actualTimeout = optionsOrPages.timeout;
+      }
+    }
+
+    const effectivePages = pages || (limit ? Math.max(1, Math.ceil(limit / 20)) : Config.FETCH_MAX_PAGES);
+    const targetDesc = limit ? `目标 ${limit} 条 (至多 ${effectivePages} 页)` : `计划拉取 ${effectivePages} 页`;
+    process.stderr.write(`⏳ 开始从 X (Following 时间线) 抓取推文，${targetDesc}...\n`);
+
+    const tweets = await this.client.fetchFollowingTimeline({
+      maxPages: effectivePages,
+      limit,
+      timeout: actualTimeout,
+    });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条推文\n`);
 

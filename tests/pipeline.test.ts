@@ -136,4 +136,37 @@ describe('Pipeline and Summarizer Modules', () => {
     storage.close();
     if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
   });
+
+  it('Pipeline fetchAndStore passes limit correctly to client', async () => {
+    const tmpDb = path.join(os.tmpdir(), `test_pipe_limit_${Date.now()}.db`);
+    const storage = new Storage(tmpDb);
+
+    const mockTweets: Tweet[] = Array.from({ length: 20 }, (_, i) => ({
+      tweet_id: `f_${i}`,
+      author_name: `User ${i}`,
+      author_username: `user_${i}`,
+      text: `Tweet content ${i}`,
+      created_at: new Date().toISOString(),
+      like_count: 10,
+      retweet_count: 1,
+    }));
+
+    const mockClient: any = {
+      fetchFollowingTimeline: vi.fn().mockResolvedValue(mockTweets),
+    };
+
+    const pipeline = new Pipeline(storage, mockClient);
+    const [fetched, inserted, skipped] = await pipeline.fetchAndStore({ limit: 20, maxPages: 1 });
+
+    expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
+      maxPages: 1,
+      limit: 20,
+      timeout: undefined,
+    });
+    expect(fetched).toBe(20);
+    expect(inserted).toBe(20);
+
+    storage.close();
+    if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+  });
 });

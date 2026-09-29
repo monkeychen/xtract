@@ -281,7 +281,7 @@ export function registerIpcHandlers(
   // 4. Tweets & Timeline
   ipcMain.handle(
     IPC_CHANNELS.TWEETS_FETCH_FOLLOWING,
-    async (event, options?: { pages?: number }) => {
+    async (event, options?: { pages?: number; limit?: number }) => {
       const taskId = `following_${Date.now()}`;
       const sendEv = (stage: string, text: string, progress: number) => {
         const streamEv: StreamEvent = {
@@ -299,7 +299,10 @@ export function registerIpcHandlers(
       sendEv('fetch', '🌐 正在启动真实 Chrome 浏览器并建立安全会话...', 20);
       try {
         sendEv('fetch', '⏳ 正在从 X (关注流) 拦截推文数据包...', 45);
-        const [fetched, inserted, skipped] = await pipeline.fetchAndStore(options?.pages);
+        const [fetched, inserted, skipped] = await pipeline.fetchAndStore({
+          maxPages: options?.pages,
+          limit: options?.limit,
+        });
         sendEv('done', `✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条`, 100);
         return { fetched, inserted, skipped };
       } catch (err: any) {

@@ -891,7 +891,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
 
       if (source === 'following') {
         const pages = Math.max(1, Math.ceil(crawlLimit / 20));
-        const res = await api.fetchFollowing({ pages });
+        const res = await api.fetchFollowing({ pages, limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
         skippedCount = res.skipped;

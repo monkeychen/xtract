@@ -380,9 +380,15 @@ if (isCLI) {
 
       // 11. Fetch only
       if (options.fetchOnly) {
-        const [fetched, inserted, skipped] = await pipeline.fetchAndStore(pages, timeout);
+        const [fetched, inserted, skipped] = await pipeline.fetchAndStore({
+          maxPages: pages,
+          limit: options.limit ? limit : undefined,
+          timeout,
+        });
         if (isJson) {
           process.stdout.write(JSON.stringify({ fetched, inserted, skipped }) + '\n');
+        } else {
+          process.stdout.write(`✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条\n`);
         }
         process.exit(0);
       }

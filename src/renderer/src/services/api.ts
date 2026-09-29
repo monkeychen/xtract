@@ -64,12 +64,13 @@ class ApiService {
     };
   }
 
-  async fetchFollowing(options: { pages?: number } = {}) {
+  async fetchFollowing(options: { pages?: number; limit?: number } = {}) {
     if (this.hasNativeApi()) {
       return window.xtractAPI.fetchFollowing(options);
     }
     await new Promise((resolve) => setTimeout(resolve, 800));
-    return { fetched: 20, inserted: 5, skipped: 15 };
+    const target = options.limit || 20;
+    return { fetched: target, inserted: Math.min(5, target), skipped: Math.max(0, target - 5) };
   }
 
   async fetchUser(username: string, options: { limit?: number } = {}) {

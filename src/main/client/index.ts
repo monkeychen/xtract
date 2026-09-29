@@ -19,6 +19,7 @@ export {
 };
 
 export interface FetchTimelineOptions {
+  limit?: number;
   maxPages?: number;
   pageDelay?: number;
   timeout?: number;
@@ -514,7 +515,8 @@ export class XClient {
       );
     }
 
-    const maxPages = options?.maxPages || Config.FETCH_MAX_PAGES;
+    const limit = options?.limit;
+    const maxPages = options?.maxPages || (limit ? Math.max(1, Math.ceil(limit / 20)) : Config.FETCH_MAX_PAGES);
     const pageDelay = options?.pageDelay || 2.5;
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
@@ -598,8 +600,17 @@ export class XClient {
         }
       }
 
-      // Paginate by scrolling if user requested more
+      // Paginate by scrolling if user requested more and we haven't reached limit
       for (let pIdx = 1; pIdx < maxPages; pIdx++) {
+        if (limit) {
+          let countSoFar = 0;
+          for (const instList of capturedInstructions) {
+            countSoFar += parseTimelineInstructions(instList).length;
+          }
+          if (countSoFar >= limit) {
+            break;
+          }
+        }
         process.stderr.write(`📜 正在向下滚动加载第 ${pIdx + 1} 页推文...\n`);
         await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => {});
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
@@ -622,7 +633,7 @@ export class XClient {
       }
     }
 
-    return allTweets;
+    return limit ? allTweets.slice(0, limit) : allTweets;
   }
 
   async fetchUserTimeline(username: string, options?: FetchUserOptions): Promise<Tweet[]> {

@@ -58,7 +58,7 @@ export interface XtractAPI {
   }) => Promise<{ success: boolean; reportPath?: string; content?: string; error?: string }>;
 
   // Tweets & Timeline
-  fetchFollowing: (options?: { pages?: number }) => Promise<{ fetched: number; inserted: number; skipped: number }>;
+  fetchFollowing: (options?: { pages?: number; limit?: number }) => Promise<{ fetched: number; inserted: number; skipped: number }>;
   fetchUser: (
     username: string,
     options?: { limit?: number }
