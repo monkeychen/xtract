@@ -402,7 +402,24 @@ export class XClient {
           if (match) {
             const id = match[1];
             // Skip utility links like /i/lists/create or members
-            if (href.includes('/members') || href.includes('/followers')) continue;
+            if (href.includes('/members') || href.includes('/followers') || href.includes('/create')) continue;
+
+            // 过滤推特官方推荐发现的第三方列表区域 (Discover new Lists)
+            let isDiscover = false;
+            let cur: Element | null = a;
+            while (cur && cur !== document.body) {
+              const text = (cur.getAttribute('aria-label') || cur.textContent || '').toLowerCase();
+              if (
+                cur.matches?.('[data-testid*="discover"], [data-testid*="suggest"]') ||
+                cur.querySelector?.('h2')?.textContent?.match(/(?:discover|发现|推荐|suggested)/i)
+              ) {
+                isDiscover = true;
+                break;
+              }
+              cur = cur.parentElement;
+            }
+            if (isDiscover) continue;
+
             const text = a.textContent?.trim() || '';
             if (id && text && !items.some((it) => it.id === id)) {
               items.push({ id, name: text });

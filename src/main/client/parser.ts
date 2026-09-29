@@ -391,8 +391,16 @@ export function extractListsFromGraphQL(payload: any): XListInfo[] {
     }
   }
 
-  function walk(d: any): void {
+  function walk(d: any, parentKey?: string): void {
     if (!d || typeof d !== 'object') return;
+
+    // 过滤推特官方推荐发现的第三方列表 (Discover / Suggested Lists)
+    if (parentKey && /(?:suggested|discover|recommend|recommendation)/i.test(parentKey)) {
+      return;
+    }
+    if (typeof d.entryId === 'string' && /(?:suggested|discover|recommend)/i.test(d.entryId)) {
+      return;
+    }
 
     if (d.__typename === 'TimelineList' || d.__typename === 'List') {
       processListObject(d);
@@ -404,8 +412,8 @@ export function extractListsFromGraphQL(payload: any): XListInfo[] {
       processListObject(d.timelineList);
     }
 
-    for (const v of Object.values(d)) {
-      walk(v);
+    for (const [k, v] of Object.entries(d)) {
+      walk(v, k);
     }
   }
 

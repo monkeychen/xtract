@@ -46,3 +46,24 @@
 - [x] 7.3 `fetchListTimeline` 智能轮询与双轨抽取：拦截命中或推文渲染即刻提前结束，耗时从 30s 缩减至 4s；自动提取 `ListByRestId` 真实名称并持久化
 - [x] 7.4 `fetchUserLists` 统一升级为官方 `/i/lists` 路由，账号无自建列表时优雅降级并引导输入公开链接
 - [x] 7.5 全量自动化测试与真实抓取验证：确保所有既有 10 套测试及新增 List 校验测试 100% 通过，生产构建 0 错误
+
+## 8. Multi-Source Search Intent Relaxation & List ID Isolation
+
+- [x] 8.1 SQLite 数据库表迁移：新增 `list_id TEXT` 字段并在迁移完成后创建 `idx_list_id` 物理索引，支持列表物理分区
+- [x] 8.2 存储层 `buildWhereClauses` 重构：全网搜索在前端无关键词时查全库、有关键词时全库模糊检索；博主追踪指定作者时放开来源壁垒全库聚合；关注流支持本地全文过滤；列表精准按 `list_id` 过滤
+- [x] 8.3 前端 `StudioView.tsx` 交互重构：全网搜索与博主追踪输入框默认绝对为空，彻底消除硬编码与假数据 fallback；列表下拉选单与底层物理 `list_id` 强联动
+- [x] 8.4 真实 E2E 验证：在真实系统 Chrome 环境下验证切换到全网搜索与博主追踪时输入框默认为空，输入关键词或博主名实时联动查询通过
+
+## 9. RFC2822 Date Normalization & Strict Chronological Ordering
+
+- [x] 9.1 全链路推特日期规范化：在入库管道与 Storage 引入 `normalizeTweetDate`，将推特 RFC2822 格式（如 `Wed Aug 26`）解析并标准化为国际标准 ISO-8601 字符串
+- [x] 9.2 历史存量数据清洗：执行增量迁移脚本清洗数据库存量推文，消除因英文星期首字母 ASCII 码导致的排序倒置问题
+- [x] 9.3 验证排序单调性：确保工作台列表按 `created_at DESC` 在物理时间上严格单调倒序，通过全套测试验证
+
+## 10. X Article Long-Form Synchronization & Async Race Guard
+
+- [x] 10.1 X Article 原生万字长文嗅探：识别正文及链接中的 `x.com/i/article/...` 深度文章，工作台推文项打上「📰 深度长文」专属标签
+- [x] 10.2 长文自动/手动同步拉取：在详情页支持一键同步或自动拉取上万字完整长文与高清配图并导出 Page Bundle
+- [x] 10.3 前端异步请求防竞态守卫：在 `handleSelectTweet` 中引入 `activeTweetIdRef` 守卫，丢弃快速切换推文时的过期请求回调，杜绝详情覆盖跳变
+- [x] 10.4 全量验收门禁：运行全套 10 套单测 72 个用例全部 PASS，tsc 0 错误，vite 生产构建 0 错误
+
