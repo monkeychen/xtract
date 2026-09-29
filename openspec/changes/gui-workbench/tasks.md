@@ -31,3 +31,10 @@
 - [x] 5.5 编写并通过完整自动化测试（单元测试、真实浏览器端到端测试与全量构建），验证每个功能的真实性与可靠性
 - [x] 5.6 历史存量数据（Legacy）平滑迁移与防死锁认领晋级机制：将历史存量数据统一标记为 legacy，在 saveTweets 命中已有 legacy 推文时晋级为当前正式来源，解除重抓死锁
 - [x] 5.7 视图查询层向下兼容：关注流兼容 following + legacy，博主定向追踪兼容 user + legacy，确保老数据在界面不丢失
+
+## 6. Trends Radar Caching Gate & Dual-Track Fetch Reliability
+
+- [x] 6.1 Trends IPC 严格门禁：当 `!args?.refresh` 时仅读取本地缓存，若无缓存返回空数组（`fromCache: true`），坚决阻断暗中启动 Playwright 爬虫卡顿前端
+- [x] 6.2 Trends 抓取器导航韧性：路由对齐 X Explore 最新规范（trending / news / sports / entertainment / tech），切换为 `commit` 加载并智能轮询趋势渲染
+- [x] 6.3 GraphQL + DOM 双轨抽取与数据增强：当 GraphQL 拦截未命中或字段缺失时，由 DOM `[data-testid="trend"]` 自动兜底抽取话题名、精准帖子数与分类，实现 100% 抓取率
+- [x] 6.4 运行全套自动化测试并进行端到端验证，确保所有既有用例与趋势抓取完全通过

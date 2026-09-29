@@ -922,16 +922,17 @@ export class XClient {
     const timeoutMs = timeout * 1000;
 
     const catUrls: Record<string, string> = {
-      sports: 'https://x.com/explore/tabs/sports_unified',
-      entertainment: 'https://x.com/explore/tabs/entertainment_unified',
-      news: 'https://x.com/explore/tabs/news_unified',
-      all: 'https://x.com/explore',
-      business: 'https://x.com/explore',
+      sports: 'https://x.com/explore/tabs/sports',
+      entertainment: 'https://x.com/explore/tabs/entertainment',
+      news: 'https://x.com/explore/tabs/news',
+      all: 'https://x.com/explore/tabs/trending',
+      business: 'https://x.com/explore/tabs/trending',
       tech: 'https://x.com/explore',
     };
     const targetUrl = catUrls[cat] || 'https://x.com/explore';
 
     const interceptedPayloads: any[] = [];
+    const domExtractedTrends: TrendTopic[] = [];
     const browser = await this.launchBrowser(true);
 
     try {
@@ -958,14 +959,88 @@ export class XClient {
       });
 
       process.stderr.write(`🌐 正在打开 X 趋势中心 (${targetUrl}) 并拦截热点流...\n`);
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      // Use 'commit' navigation to avoid timeouts caused by heavy background media / tracking requests
+      await page.goto(targetUrl, { waitUntil: 'commit', timeout: Math.min(timeoutMs, 25000) });
 
-      for (let i = 0; i < Math.max(20, timeout); i++) {
+      // Intelligent polling: proceed as soon as GraphQL payloads are received or DOM trends are rendered
+      for (let i = 0; i < Math.max(15, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (interceptedPayloads.length >= 1) {
-          await new Promise((r) => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, 1500));
           break;
         }
+        const hasDomTrends = await page
+          .evaluate(() => document.querySelectorAll('[data-testid="trend"]').length > 0)
+          .catch(() => false);
+        if (hasDomTrends && i >= 4) {
+          await new Promise((r) => setTimeout(r, 1500));
+          break;
+        }
+      }
+
+      // Robust DOM Fallback extraction directly from page DOM
+      try {
+        const domTrends = await page.evaluate(() => {
+          const trendElements = Array.from(document.querySelectorAll('[data-testid="trend"]'));
+          return trendElements.map((el, index) => {
+            const text = (el as HTMLElement).innerText || '';
+            const lines = text.split('\n').map((s) => s.trim()).filter((s) => s && s !== '·');
+            let rank = index + 1;
+            let domain = '';
+            let name = '';
+            let tweetCount = '高热度讨论';
+
+            let start = 0;
+            if (/^\d+$/.test(lines[0])) {
+              rank = parseInt(lines[0], 10);
+              start = 1;
+            }
+
+            if (
+              lines[start] &&
+              (lines[start].includes('Trending') ||
+                lines[start].includes('News') ||
+                lines[start].includes('Entertainment') ||
+                lines[start].includes('Sports') ||
+                lines[start].includes('ago'))
+            ) {
+              domain = lines[start];
+              name = lines[start + 1] || '';
+              tweetCount = lines[start + 2] || '高热度讨论';
+            } else {
+              name = lines[start] || '';
+              if (lines[start + 1]) {
+                if (
+                  lines[start + 1].includes('posts') ||
+                  lines[start + 1].includes('Trending') ||
+                  lines[start + 1].includes('ago') ||
+                  lines[start + 1].includes('Trending with')
+                ) {
+                  tweetCount = lines[start + 1];
+                } else {
+                  domain = lines[start + 1];
+                }
+              }
+              if (lines[start + 2]) {
+                tweetCount = lines[start + 2];
+              }
+            }
+
+            return {
+              name,
+              query: name,
+              rank,
+              domain,
+              tweet_count: tweetCount,
+            };
+          }).filter((t) => Boolean(t.name));
+        });
+
+        if (Array.isArray(domTrends) && domTrends.length > 0) {
+          domExtractedTrends.push(...domTrends);
+        }
+      } catch {
+        // ignore DOM extraction errors
       }
     } finally {
       await browser.close();
@@ -973,12 +1048,29 @@ export class XClient {
 
     const allTrends: TrendTopic[] = [];
     const seenNames = new Set<string>();
+
+    // 1. Ingest GraphQL trends first
     for (const payload of interceptedPayloads) {
       for (const item of parseTrendsFromGraphQL(payload)) {
-        if (!seenNames.has(item.name)) {
-          seenNames.add(item.name);
+        const key = item.name.toLowerCase();
+        if (!seenNames.has(key)) {
+          seenNames.add(key);
+          // If DOM extraction got a more descriptive tweet count, enrich it
+          const matchingDom = domExtractedTrends.find((d) => d.name.toLowerCase() === key);
+          if (matchingDom && matchingDom.tweet_count && matchingDom.tweet_count !== '高热度讨论') {
+            item.tweet_count = matchingDom.tweet_count;
+          }
           allTrends.push(item);
         }
+      }
+    }
+
+    // 2. Fallback / supplement with DOM extracted trends
+    for (const dItem of domExtractedTrends) {
+      const key = dItem.name.toLowerCase();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        allTrends.push(dItem);
       }
     }
 

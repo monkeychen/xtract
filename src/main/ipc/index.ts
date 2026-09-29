@@ -137,6 +137,11 @@ export function registerIpcHandlers(
           list.fromCache = true;
           return list;
         }
+        // Cache miss: return empty list immediately without hitting network/launching browser
+        const emptyList: any = [];
+        emptyList.updatedAt = null;
+        emptyList.fromCache = true;
+        return emptyList;
       }
 
       // 2. Fetch fresh trends from X

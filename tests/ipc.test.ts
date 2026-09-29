@@ -154,4 +154,15 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof unsubscribe).toBe('function');
     unsubscribe();
   });
+
+  it('Preload getTrends without refresh should return empty list fromCache when cache misses without hitting network', async () => {
+    registerIpcHandlers();
+
+    // Use a unique category to ensure cache miss
+    const res = await xtractApiImplementation.getTrends('nonexistent_category_test', 10, false);
+    expect(Array.isArray(res)).toBe(true);
+    expect(res.length).toBe(0);
+    expect(res.fromCache).toBe(true);
+    expect(res.updatedAt).toBeNull();
+  });
 });

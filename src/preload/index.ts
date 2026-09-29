@@ -33,7 +33,11 @@ export interface XtractAPI {
   updateConfig: (updates: Record<string, string>) => Promise<{ success: boolean; config: AppConfigView }>;
 
   // Trends & Digest
-  getTrends: (category?: string, top?: number, refresh?: boolean) => Promise<TrendTopic[]>;
+  getTrends: (
+    category?: string,
+    top?: number,
+    refresh?: boolean
+  ) => Promise<TrendTopic[] & { updatedAt?: string | null; fromCache?: boolean }>;
   generateTrendsDigest: (options?: {
     category?: string;
     top?: number;
