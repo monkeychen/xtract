@@ -105,6 +105,19 @@ export function registerIpcHandlers(
 
       fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
 
+      if (updates.HTTP_PROXY !== undefined) {
+        try {
+          const { session } = await import('electron');
+          if (session?.defaultSession) {
+            await session.defaultSession.setProxy({
+              proxyRules: updates.HTTP_PROXY.trim(),
+            });
+          }
+        } catch {
+          // ignore in tests or non-gui mode
+        }
+      }
+
       return {
         success: true,
         config: {

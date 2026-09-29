@@ -437,7 +437,7 @@ if (isCLI) {
   });
 } else {
   // Lazy import electron only when launching GUI
-  import('electron').then(async ({ app, BrowserWindow }) => {
+  import('electron').then(async ({ app, BrowserWindow, session }) => {
     const { registerIpcHandlers } = await import('./ipc/index.js');
     const path = await import('node:path');
     const { fileURLToPath } = await import('node:url');
@@ -499,7 +499,27 @@ if (isCLI) {
 
     app.whenReady().then(async () => {
       // 启动前极速探活本机常见科学上网代理 (8118/7890/7897 等)，彻底解决直连 ERR_CONNECTION_CLOSED
-      await Config.detectLocalProxy();
+      const proxyUrl = await Config.detectLocalProxy();
+      if (proxyUrl && session.defaultSession) {
+        await session.defaultSession.setProxy({
+          proxyRules: proxyUrl,
+        });
+        process.stderr.write(`🌐 Electron 会话已成功挂载本地代理通道: ${proxyUrl}\n`);
+      }
+
+      // 为推特多媒体与视频流注入官方 Referer 和 Origin，彻底杜绝防盗链 403 导致媒体控制条禁用
+      if (session.defaultSession) {
+        session.defaultSession.webRequest.onBeforeSendHeaders(
+          { urls: ['*://*.twimg.com/*', '*://video.twimg.com/*'] },
+          (details, callback) => {
+            const headers = { ...details.requestHeaders };
+            headers['Referer'] = 'https://x.com/';
+            headers['Origin'] = 'https://x.com';
+            callback({ cancel: false, requestHeaders: headers });
+          }
+        );
+      }
+
       createWindow();
     });
 

@@ -67,6 +67,25 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           urls: ['https://openai.com/index/gpt-5-6'],
           source_type: 'following',
         },
+        {
+          tweet_id: '2003',
+          author_id: '123458',
+          author_name: 'Demo Creator',
+          author_username: 'democreator',
+          text: '🎥 体验全新视频推文流式在线播放效果！',
+          created_at: new Date().toISOString(),
+          like_count: 8800,
+          retweet_count: 1200,
+          reply_count: 150,
+          view_count: 150000,
+          media_urls: [
+            'https://pbs.twimg.com/amplify_video_thumb/2003/img/thumb.jpg',
+            'https://video.twimg.com/amplify_video/2003/vid/avc1/1920x1080/demo.mp4',
+          ],
+          video_url: 'https://video.twimg.com/amplify_video/2003/vid/avc1/1920x1080/demo.mp4',
+          video_poster: 'https://pbs.twimg.com/amplify_video_thumb/2003/img/thumb.jpg',
+          source_type: 'following',
+        },
       ];
 
       (window as any).xtractAPI = {
@@ -357,6 +376,42 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await modal.locator('button', { hasText: '取消' }).click();
     await page.waitForTimeout(200);
     expect(await page.locator('#delete-dialog').isVisible()).toBe(false);
+  });
+
+  it('Flow 7: Video Tweet Online Player Interaction & Browser Playback Direct Link', async () => {
+    // 1. Click on the video tweet in the list
+    const videoItem = page.locator('.feed-item', { hasText: '体验全新视频推文' }).first();
+    expect(await videoItem.isVisible()).toBe(true);
+    await videoItem.click();
+    await page.waitForTimeout(300);
+
+    // 2. Video Player container should be rendered
+    const videoContainer = page.locator('#tweet-detail-video');
+    expect(await videoContainer.isVisible()).toBe(true);
+
+    // 3. Native video element should have src matching the MP4 URL
+    const videoElement = videoContainer.locator('video');
+    expect(await videoElement.getAttribute('src')).toBe('https://video.twimg.com/amplify_video/2003/vid/avc1/1920x1080/demo.mp4');
+
+    // 4. Big play overlay button should exist
+    const bigPlayBtn = page.locator('#video-big-play-btn');
+    expect(await bigPlayBtn.isVisible()).toBe(true);
+
+    // 5. Test clicking '🌐 在系统浏览器播放 ↗'
+    const openBrowserBtn = videoContainer.locator('button', { hasText: '在系统浏览器播放 ↗' });
+    expect(await openBrowserBtn.isVisible()).toBe(true);
+    await openBrowserBtn.click();
+    await page.waitForTimeout(200);
+
+    const openedUrls = await page.evaluate(() => (window as any).__recordedCalls.openedUrls);
+    expect(openedUrls).toContain('https://video.twimg.com/amplify_video/2003/vid/avc1/1920x1080/demo.mp4');
+
+    // 6. Test copy video direct link
+    const copyBtn = videoContainer.locator('button', { hasText: '复制直链' });
+    expect(await copyBtn.isVisible()).toBe(true);
+    await copyBtn.click();
+    await page.waitForTimeout(200);
+    expect(await videoContainer.locator('button', { hasText: '已复制直链' }).isVisible()).toBe(true);
   });
 
 

@@ -176,6 +176,35 @@ export class Storage {
         });
         migrateTx();
       }
+
+      // 自动回填历史存量推文的视频链接 (video_url) 与封面图 (video_poster)
+      const unpopulatedVideos = this.db.prepare(`
+        SELECT tweet_id, media_urls FROM tweets 
+        WHERE (video_url IS NULL OR video_url = '') 
+          AND media_urls IS NOT NULL 
+          AND (media_urls LIKE '%.mp4%' OR media_urls LIKE '%video%')
+      `).all() as { tweet_id: string; media_urls: string }[];
+
+      if (unpopulatedVideos.length > 0) {
+        const updateVideoStmt = this.db.prepare(
+          'UPDATE tweets SET video_url = ?, video_poster = ? WHERE tweet_id = ?'
+        );
+        const backfillTx = this.db.transaction(() => {
+          for (const item of unpopulatedVideos) {
+            try {
+              const urls = JSON.parse(item.media_urls || '[]') as string[];
+              const videoUrl = urls.find((u) => typeof u === 'string' && (u.includes('.mp4') || u.includes('video.twimg.com')));
+              const posterUrl = urls.find((u) => typeof u === 'string' && (u.includes('video_thumb') || u.includes('ext_tw_video_thumb')));
+              if (videoUrl) {
+                updateVideoStmt.run(videoUrl, posterUrl || null, item.tweet_id);
+              }
+            } catch {
+              // ignore malformed json
+            }
+          }
+        });
+        backfillTx();
+      }
     } catch {
       // 忽略迁移警告
     }
