@@ -432,7 +432,9 @@ if (isCLI) {
     }
   });
 
-  program.parse(cleanArgs);
+  Config.detectLocalProxy().then(() => {
+    program.parse(cleanArgs);
+  });
 } else {
   // Lazy import electron only when launching GUI
   import('electron').then(async ({ app, BrowserWindow }) => {
@@ -447,7 +449,10 @@ if (isCLI) {
       preloadPath = path.resolve(__dirname, '../preload/index.js');
     }
 
-    app.whenReady().then(() => {
+    app.whenReady().then(async () => {
+      // 启动前极速探活本机常见科学上网代理 (8118/7890/7897 等)，彻底解决直连 ERR_CONNECTION_CLOSED
+      await Config.detectLocalProxy();
+
       const win = new BrowserWindow({
         width: 1280,
         height: 850,

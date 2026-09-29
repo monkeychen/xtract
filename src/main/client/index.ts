@@ -110,6 +110,57 @@ export class XClient {
     return context;
   }
 
+  /**
+   * 弹性安全页面导航：具备指数退避重试与网络中断友好诊断
+   */
+  private async safeNavigate(
+    page: Page,
+    url: string,
+    options: {
+      waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit';
+      timeout?: number;
+      retries?: number;
+    } = {}
+  ): Promise<void> {
+    const maxRetries = options.retries ?? 2;
+    const waitUntil = options.waitUntil ?? 'commit';
+    const timeout = options.timeout ?? 25000;
+
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      try {
+        await page.goto(url, { waitUntil, timeout });
+        return;
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || err);
+        const isNetworkErr =
+          msg.includes('net::ERR_CONNECTION_CLOSED') ||
+          msg.includes('net::ERR_CONNECTION_RESET') ||
+          msg.includes('net::ERR_TIMED_OUT') ||
+          msg.includes('net::ERR_PROXY_CONNECTION_FAILED') ||
+          msg.includes('net::ERR_NAME_NOT_RESOLVED');
+
+        if (isNetworkErr && attempt <= maxRetries) {
+          process.stderr.write(
+            `⚠️ [网络波动] 访问 ${url} 连接异常，正在尝试第 ${attempt} 次重试...\n`
+          );
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          continue;
+        }
+
+        if (isNetworkErr) {
+          const currentProxy = Config.HTTP_PROXY || '未检测到代理';
+          throw new Error(
+            `无法连接 X 官方服务器 (${msg.includes('CLOSED') ? 'ERR_CONNECTION_CLOSED' : '网络连接中断'})。当前代理: [${currentProxy}]。请检查 Clash/Surge 客户端是否运行正常并接管 X 流量。`
+          );
+        }
+        throw err;
+      }
+    }
+    throw lastError;
+  }
+
   private async createSession(
     headless = true,
     timeoutMs?: number
@@ -498,7 +549,7 @@ export class XClient {
       });
 
       process.stderr.write(`🌐 正在打开 x.com/home 并挂载网络监听器...\n`);
-      await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
+      await this.safeNavigate(page, 'https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
 
       // Wait for navigation tabs or hydration
       try {
@@ -766,7 +817,7 @@ export class XClient {
       });
 
       process.stderr.write(`🌐 正在打开 X 列表主页 ${targetUrl} 并监听推文流...\n`);
-      await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
+      await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
 
       // Intelligent polling: proceed immediately upon receiving timeline data or detecting 404
       for (let i = 0; i < Math.max(15, timeout); i++) {

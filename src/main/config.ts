@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import net from 'node:net';
 import dotenv from 'dotenv';
 import type { XListInfo } from './types.js';
 
@@ -18,25 +19,79 @@ export class Config {
   static readonly USER_LISTS_PATH = path.join(projectRoot, 'data', 'user_lists.json');
   static readonly BROWSER_PROFILE_DIR = path.join(projectRoot, 'data', 'browser_profile');
 
-  // X Credentials
-  static readonly X_AUTH_TOKEN = (process.env.X_AUTH_TOKEN || '').trim();
-  static readonly X_CT0 = (process.env.X_CT0 || '').trim();
+  // X Credentials (动态 getter，响应会话更新与热重载)
+  static get X_AUTH_TOKEN(): string {
+    return (process.env.X_AUTH_TOKEN || '').trim();
+  }
+  static get X_CT0(): string {
+    return (process.env.X_CT0 || '').trim();
+  }
 
-  // Network / Proxy Settings
-  static readonly HTTP_PROXY = (
-    process.env.HTTP_PROXY ||
-    process.env.http_proxy ||
-    process.env.HTTPS_PROXY ||
-    process.env.https_proxy ||
-    process.env.ALL_PROXY ||
-    process.env.all_proxy ||
-    ''
-  ).trim();
+  // Network / Proxy Settings (动态探测与智能回退)
+  private static _detectedProxy: string | null = null;
 
-  // LLM Settings
-  static readonly LLM_PROVIDER = (process.env.LLM_PROVIDER || 'gemini').toLowerCase().trim();
-  static readonly LLM_AUTH_MODE = (process.env.LLM_AUTH_MODE || 'account').toLowerCase().trim();
-  static readonly LLM_MODEL = (process.env.LLM_MODEL || '').trim();
+  static get HTTP_PROXY(): string {
+    return (
+      process.env.HTTP_PROXY ||
+      process.env.http_proxy ||
+      process.env.HTTPS_PROXY ||
+      process.env.https_proxy ||
+      process.env.ALL_PROXY ||
+      process.env.all_proxy ||
+      this._detectedProxy ||
+      ''
+    ).trim();
+  }
+
+  static async detectLocalProxy(): Promise<string> {
+    if (this.HTTP_PROXY) return this.HTTP_PROXY;
+
+    // 常见科学上网客户端本地默认端口：Clash Verge (8118/7890/7897), Surge (6152), V2Ray/Qv2ray (10808/10809/1087)
+    const candidates = [8118, 7890, 7897, 1087, 6152, 10808, 10809];
+    for (const port of candidates) {
+      const alive = await this.probePort(port, '127.0.0.1', 80);
+      if (alive) {
+        const proxyUrl = `http://127.0.0.1:${port}`;
+        this._detectedProxy = proxyUrl;
+        process.env.HTTP_PROXY = proxyUrl;
+        process.env.http_proxy = proxyUrl;
+        process.stderr.write(`ℹ️ 自动识别并接通本机正在运行的代理服务: ${proxyUrl}\n`);
+        return proxyUrl;
+      }
+    }
+    return '';
+  }
+
+  private static probePort(port: number, host = '127.0.0.1', timeout = 80): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      socket.setTimeout(timeout);
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.connect(port, host);
+    });
+  }
+
+  // LLM Settings (动态 getter)
+  static get LLM_PROVIDER(): string {
+    return (process.env.LLM_PROVIDER || 'gemini').toLowerCase().trim();
+  }
+  static get LLM_AUTH_MODE(): string {
+    return (process.env.LLM_AUTH_MODE || 'account').toLowerCase().trim();
+  }
+  static get LLM_MODEL(): string {
+    return (process.env.LLM_MODEL || '').trim();
+  }
 
   // Reasoning Settings
   static get LLM_REASONING_ENABLED(): boolean {
@@ -51,25 +106,29 @@ export class Config {
     return 'high';
   }
 
-  // API Keys Pool
-  static readonly GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
-  static readonly GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
-  static readonly OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
-  static readonly OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || '').trim();
-  static readonly DEEPSEEK_API_KEY = (process.env.DEEPSEEK_API_KEY || '').trim();
-  static readonly DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || '').trim();
-  static readonly DASHSCOPE_API_KEY = (process.env.DASHSCOPE_API_KEY || '').trim();
-  static readonly DASHSCOPE_BASE_URL = (process.env.DASHSCOPE_BASE_URL || '').trim();
-  static readonly ZHIPUAI_API_KEY = (process.env.ZHIPUAI_API_KEY || '').trim();
-  static readonly ZHIPUAI_BASE_URL = (process.env.ZHIPUAI_BASE_URL || '').trim();
-  static readonly MINIMAX_API_KEY = (process.env.MINIMAX_API_KEY || '').trim();
-  static readonly MINIMAX_BASE_URL = (process.env.MINIMAX_BASE_URL || '').trim();
-  static readonly MOONSHOT_API_KEY = (process.env.MOONSHOT_API_KEY || '').trim();
-  static readonly MOONSHOT_BASE_URL = (process.env.MOONSHOT_BASE_URL || '').trim();
+  // API Keys Pool (动态 getter)
+  static get GEMINI_API_KEY(): string { return (process.env.GEMINI_API_KEY || '').trim(); }
+  static get GEMINI_MODEL(): string { return (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim(); }
+  static get OPENAI_API_KEY(): string { return (process.env.OPENAI_API_KEY || '').trim(); }
+  static get OPENAI_BASE_URL(): string { return (process.env.OPENAI_BASE_URL || '').trim(); }
+  static get DEEPSEEK_API_KEY(): string { return (process.env.DEEPSEEK_API_KEY || '').trim(); }
+  static get DEEPSEEK_BASE_URL(): string { return (process.env.DEEPSEEK_BASE_URL || '').trim(); }
+  static get DASHSCOPE_API_KEY(): string { return (process.env.DASHSCOPE_API_KEY || '').trim(); }
+  static get DASHSCOPE_BASE_URL(): string { return (process.env.DASHSCOPE_BASE_URL || '').trim(); }
+  static get ZHIPUAI_API_KEY(): string { return (process.env.ZHIPUAI_API_KEY || '').trim(); }
+  static get ZHIPUAI_BASE_URL(): string { return (process.env.ZHIPUAI_BASE_URL || '').trim(); }
+  static get MINIMAX_API_KEY(): string { return (process.env.MINIMAX_API_KEY || '').trim(); }
+  static get MINIMAX_BASE_URL(): string { return (process.env.MINIMAX_BASE_URL || '').trim(); }
+  static get MOONSHOT_API_KEY(): string { return (process.env.MOONSHOT_API_KEY || '').trim(); }
+  static get MOONSHOT_BASE_URL(): string { return (process.env.MOONSHOT_BASE_URL || '').trim(); }
 
   // Fetch Settings
-  static readonly FETCH_MAX_PAGES = parseInt(process.env.FETCH_MAX_PAGES || '3', 10);
-  static readonly FETCH_TIMEOUT = parseInt(process.env.FETCH_TIMEOUT || '60', 10);
+  static get FETCH_MAX_PAGES(): number {
+    return parseInt(process.env.FETCH_MAX_PAGES || '3', 10);
+  }
+  static get FETCH_TIMEOUT(): number {
+    return parseInt(process.env.FETCH_TIMEOUT || '60', 10);
+  }
 
   static ensureDirs(): void {
     for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR, this.BROWSER_PROFILE_DIR]) {
