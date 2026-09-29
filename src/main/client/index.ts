@@ -355,8 +355,8 @@ export class XClient {
     }
 
     const cachedLists = Config.getUserLists();
-    const handle = username || Config.getCachedUser()?.screen_name;
-    const targetUrl = handle ? `https://x.com/${handle}/lists` : 'https://x.com/i/lists';
+    const handle = username || Config.getCachedUser()?.screen_name || 'cza55008';
+    const targetUrl = `https://x.com/${handle}/lists`;
 
     const capturedLists: XListInfo[] = [];
     const browser = await this.launchBrowser(true);
@@ -388,17 +388,9 @@ export class XClient {
 
       try {
         await page.goto(targetUrl, { waitUntil: 'commit', timeout: 15000 });
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 4000));
       } catch {
         // ignore navigation timeout
-      }
-
-      // Also try /i/lists if user specific route yielded nothing
-      if (capturedLists.length === 0 && targetUrl !== 'https://x.com/i/lists') {
-        try {
-          await page.goto('https://x.com/i/lists', { waitUntil: 'commit', timeout: 15000 });
-          await new Promise((r) => setTimeout(r, 3000));
-        } catch {}
       }
 
       const domLists = await page.evaluate(() => {

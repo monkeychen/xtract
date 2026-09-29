@@ -124,10 +124,12 @@ export class Config {
     } catch {
       // ignore
     }
-    // Default initial lists verified and active on X
+    // Default initial lists for user cza55008
     return [
-      { id: '1682802314011197441', name: 'AI & Tech Creators', member_count: 710 },
-      { id: '1953536336675365173', name: 'Tech & Venture Insider', member_count: 50 },
+      { id: '2100985900734062922', name: 'AI与自媒体', member_count: 6 },
+      { id: '1903106960452620743', name: '独立开发者', member_count: 9 },
+      { id: '2099841674906333692', name: '素材库', member_count: 51 },
+      { id: '1603383227531800576', name: '文学', member_count: 1 },
     ];
   }
 

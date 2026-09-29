@@ -306,7 +306,7 @@ describe('Client Parser Module', () => {
     // Legacy mock fake IDs must be completely filtered out
     expect(lists.some((l) => l.id === '1827364512938')).toBe(false);
     expect(lists.some((l) => l.id === '1827364512939')).toBe(false);
-    // Default verified list must be present
-    expect(lists.some((l) => l.id === '1682802314011197441')).toBe(true);
+    // User authentic list must be present
+    expect(lists.some((l) => l.id === '2100985900734062922')).toBe(true);
   });
 });

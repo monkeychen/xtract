@@ -173,7 +173,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       : 'karpathy'
   );
   const [userLists, setUserLists] = useState<XListInfo[]>([]);
-  const [selectedList, setSelectedList] = useState('1682802314011197441');
+  const [selectedList, setSelectedList] = useState('2100985900734062922');
   const [customListId, setCustomListId] = useState('');
   const [isSyncingLists, setIsSyncingLists] = useState(false);
   const [streamFilter, setStreamFilter] = useState('');

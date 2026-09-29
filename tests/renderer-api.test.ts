@@ -35,7 +35,7 @@ describe('Renderer API Service (Dual-Mode: Standalone Browser & Electron Bridge)
     const user = await api.fetchUser('karpathy', { limit: 50 });
     expect(user.fetched).toBe(50);
 
-    const list = await api.fetchList('1682802314011197441', { limit: 20 });
+    const list = await api.fetchList('2100985900734062922', { limit: 20 });
     expect(list.fetched).toBe(20);
   });
 
