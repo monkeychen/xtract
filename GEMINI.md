@@ -135,5 +135,34 @@ xtract/
   - 仅生成今日早报：`pnpm dev:cli -- --report-only [--hours 24]`
   - 检索本地推文：`pnpm dev:cli -- --list [数量]`
 - 运行自动化测试：`pnpm test`
+- 类型合规校验：`npx tsc --noEmit`
+- 生产构建验证：`npx vite build`
 - 构建全平台桌面安装包（DMG / EXE）：`pnpm build`
+
+---
+
+## 5. 开发流程与质量规约（Vibe-Coding 工作流）
+详细工程落地规约参见根目录：[dev-workflow.md](file:///Users/chenzhian/workspace/ai/xtract/dev-workflow.md)
+
+### 核心研发哲学
+1. **第一性原理与决策透明**：所有决策从问题本质出发，不因「惯例如此」照搬；向用户讲清技术决策的「为什么」与「对用户体验的影响」。
+2. **用户体验是最高准则**：系统承担复杂性；绝不允许无反馈白屏、无上限卡顿死等；绝不允许静默吞没错误（如 404/无权限错误必须在 3 秒内主动抛出并提示修复指引）。
+3. **约束先行与真实探针**：修改已有规范先改文档再改代码；涉及复杂网络嗅探与第三方协议逆向时，**探针先行（Probing First）**，挂真实代理与真实凭据验证真实 DOM/GraphQL 结构，严禁脱离实际凭空假设。
+4. **防御性编码与零假数据准则**：严禁硬编码不存在的假用户、假推文、假列表 ID；预置数据必须经过真实连通性测试。网络流嗅探必须配备 DOM 提取双轨兜底。
+
+### 标准五步研发闭环 (Vibe-Coding 5-Step Loop)
+```
+[1. 探针先行] -> [2. 规范先行] -> [3. 坚固实现] -> [4. 全量验证] -> [5. 安全归档]
+ (Probing)        (Spec/Doc)       (Coding)         (E2E Tests)      (Git Commit)
+```
+
+### 三大质量验收门禁 (交付必须 100% 通过)
+每一次功能迭代或 Bug 修复交付前，必须主动运行并全量通过以下三大门禁：
+1. **测试套件门禁**：`pnpm test`（覆盖存储去重、网络嗅探、大模型调度等核心单测与集成测试，0 Failed）；
+2. **静态类型门禁**：`npx tsc --noEmit`（强类型校验，0 TypeScript Error）；
+3. **构建打包门禁**：`npx vite build`（生产环境打包验证，0 Error / 0 Warning）。
+
+### Git 提交规范
+- Commit Message 统一采用英文动词开头的前缀规约（`feat:`, `fix:`, `refactor:`, `docs:`, `test:`）；
+- **严禁自动执行 `git push`**：push 仅用于跨设备同步，必须等待用户明确指令后方可执行。
 
