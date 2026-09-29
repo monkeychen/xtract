@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_REPORTS } from '../types.js';
-import type { ReportItem, StreamEvent } from '../types.js';
+import type { ReportItem, StreamEvent, ReportJumpAction, TrendTopic } from '../types.js';
 import { api } from '../services/api.js';
 
 interface ReportsViewProps {
   onJumpToTweet?: (tweetIdOrHandle: string) => void;
+  initialAction?: ReportJumpAction | null;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet, initialAction }) => {
   const [reports, setReports] = useState<ReportItem[]>(MOCK_REPORTS);
   const [selectedReport, setSelectedReport] = useState<ReportItem>(MOCK_REPORTS[0]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -19,10 +20,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
   const [copiedFull, setCopiedFull] = useState(false);
   const [copiedOutline, setCopiedOutline] = useState(false);
 
-  const handleGenerate = async (type: 'daily' | 'trends') => {
+  const handleGenerate = async (type: 'daily' | 'trends', targetTopic?: TrendTopic) => {
     setIsGenerating(true);
-    setThinkingText('正在聚类推特全网长推...\n- 议题 1: Claude 3.7 混合推理对全行业开发模式的冲击 (权重 0.88)\n- 议题 2: 端侧多模态模型在 Mac Studio 上的性能测试\n- 剔除无实质信息的闲聊灌水 32 篇，保留核心讨论 142 篇\n- 正在按照「核心论点 - 关键分歧 - 精选推文」结构生成研报...');
-    setCurrentStageText(type === 'daily' ? '正在过滤本地 24h 高信噪比推文...' : '正在抓取全网热度趋势并提炼核心议题...');
+    const topicLabel = targetTopic ? `【${targetTopic.name}】` : '';
+    setThinkingText(`正在聚类分析全网推文${topicLabel}...\n- 筛选高互动、高信噪比技术讨论\n- 剔除无实质信息的营销与水帖\n- 提取核心论点、分歧见解与精选推文\n- 正在由多模型长思维链编排生成深度研报...`);
+    setCurrentStageText(type === 'daily' ? '正在过滤本地 24h 高信噪比推文...' : `正在挖掘全网热度趋势${topicLabel}并提炼核心议题...`);
     setProgress(15);
 
     const onProgress = (evt: StreamEvent) => {
@@ -40,15 +42,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
       if (type === 'daily') {
         const res = await api.generateDailyDigest({ hours, minLikes: 50 }, onProgress);
         if (res.success && res.content) {
+          const titleMatch = res.content.match(/^#+\s*(.+)$/m);
+          const dynamicTitle = titleMatch ? titleMatch[1].trim() : `X 关注流每日早报 (${new Date().toLocaleDateString()})`;
           const newReport: ReportItem = {
             id: 'rep-' + Date.now(),
-            title: `X 关注流每日早报：轻量化架构与高信噪比阅读工具`,
+            title: dynamicTitle,
             category: 'following',
             date: new Date().toLocaleDateString(),
             timeSpan: `过去 ${hours} 小时`,
             tweetCount: 88,
             provider: 'gemini-3.8-flash',
-            summary: '关注博主集中讨论了嵌入式 SQLite 与纯 Node.js/Electron 单进程在个人生产力工具中的卓越体验。',
+            summary: '汇聚关注博主在过去 24 小时的核心讨论与高价值见解。',
             markdownContent: res.content,
             filePath: res.reportPath,
           };
@@ -56,17 +60,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
           setSelectedReport(newReport);
         }
       } else {
-        const res = await api.generateTrendsDigest({ category: 'tech', hours, top: 10, minLikes: 50 }, onProgress);
+        const targetCategory = targetTopic?.category || 'tech';
+        const res = await api.generateTrendsDigest({ category: targetCategory, hours, top: 10, minLikes: 50 }, onProgress);
         if (res.success && res.content) {
+          const titleMatch = res.content.match(/^#+\s*(.+)$/m);
+          const dynamicTitle = titleMatch ? titleMatch[1].trim() : targetTopic ? `全网趋势深度研报：${targetTopic.name}` : `全网趋势深度研报 (${new Date().toLocaleDateString()})`;
           const newReport: ReportItem = {
             id: 'rep-trend-' + Date.now(),
-            title: `技术趋势研报：Claude 3.7 混合推理与开源生态大洗牌`,
-            category: 'tech',
+            title: dynamicTitle,
+            category: targetCategory,
             date: new Date().toLocaleDateString(),
             timeSpan: `过去 ${hours} 小时`,
             tweetCount: 142,
             provider: 'qwen3.8-flash',
-            summary: '全网核心讨论围绕测试时计算（Test-time compute）与长思维链自检展开，多位一线核心开发者参与讨论。',
+            summary: targetTopic ? `全网核心围绕趋势「${targetTopic.name}」展开深度研讨与多方观点碰撞。` : '全网热搜与前沿趋势深度聚类研判。',
             markdownContent: res.content,
             filePath: res.reportPath,
           };
@@ -78,6 +85,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onJumpToTweet }) => {
       setIsGenerating(false);
     }
   };
+
+  // 响应来自趋势雷达的自动研报生成动作
+  useEffect(() => {
+    if (!initialAction) return;
+    if (initialAction.type === 'trends') {
+      handleGenerate('trends', initialAction.topic);
+    }
+  }, [initialAction?.timestamp]);
 
   const handleCopyFull = () => {
     if (selectedReport) {

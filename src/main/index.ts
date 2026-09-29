@@ -449,10 +449,10 @@ if (isCLI) {
       preloadPath = path.resolve(__dirname, '../preload/index.js');
     }
 
-    app.whenReady().then(async () => {
-      // 启动前极速探活本机常见科学上网代理 (8118/7890/7897 等)，彻底解决直连 ERR_CONNECTION_CLOSED
-      await Config.detectLocalProxy();
+    let mainWindow: InstanceType<typeof BrowserWindow> | null = null;
+    let isQuitting = false;
 
+    const createWindow = () => {
       const win = new BrowserWindow({
         width: 1280,
         height: 850,
@@ -467,6 +467,7 @@ if (isCLI) {
         },
       });
 
+      mainWindow = win;
       registerIpcHandlers(win);
 
       const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -474,13 +475,45 @@ if (isCLI) {
         win.loadURL(devServerUrl);
       } else {
         const prodIndexPath = path.resolve(__dirname, '../../dist/renderer/index.html');
-        import('node:fs').then(({ default: fs }) => {
-          if (fs.existsSync(prodIndexPath)) {
-            win.loadFile(prodIndexPath);
-          } else {
-            win.loadURL('http://localhost:5173');
-          }
-        });
+        if (fs.existsSync(prodIndexPath)) {
+          win.loadFile(prodIndexPath);
+        } else {
+          win.loadURL('http://localhost:5173');
+        }
+      }
+
+      // macOS 原生交互标准：用户点左上角 X 时隐藏而非销毁，点 Dock 图标无感毫秒级唤起
+      win.on('close', (e) => {
+        if (process.platform === 'darwin' && !isQuitting) {
+          e.preventDefault();
+          win.hide();
+        }
+      });
+
+      win.on('closed', () => {
+        mainWindow = null;
+      });
+
+      return win;
+    };
+
+    app.whenReady().then(async () => {
+      // 启动前极速探活本机常见科学上网代理 (8118/7890/7897 等)，彻底解决直连 ERR_CONNECTION_CLOSED
+      await Config.detectLocalProxy();
+      createWindow();
+    });
+
+    app.on('before-quit', () => {
+      isQuitting = true;
+    });
+
+    app.on('activate', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      } else {
+        createWindow();
       }
     });
 

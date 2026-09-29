@@ -157,19 +157,52 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     quotedAuthor = qUser.core?.screen_name || qUser.legacy?.screen_name || '';
     quotedText = qLegacy.full_text || '';
   }
-  const mediaItems = legacy.extended_entities?.media || legacy.entities?.media || [];
-  for (const m of mediaItems) {
-    if (m.media_url_https && !mediaUrls.includes(m.media_url_https)) {
-      mediaUrls.push(m.media_url_https);
+  // Media items extraction (including videos and GIFs)
+  let videoUrl: string | undefined = undefined;
+  let videoPoster: string | undefined = undefined;
+
+  const allMediaContainers = [
+    legacy.extended_entities?.media,
+    legacy.entities?.media,
+  ];
+  if (isRetweet && legacy.retweeted_status_result) {
+    let rt = legacy.retweeted_status_result?.result || {};
+    if (rt.__typename === 'TweetWithVisibilityResults') rt = rt.tweet || {};
+    if (rt.legacy) {
+      allMediaContainers.push(rt.legacy.extended_entities?.media);
+      allMediaContainers.push(rt.legacy.entities?.media);
     }
-    if (m.type === 'video' || m.type === 'animated_gif') {
-      const variants = m.video_info?.variants || [];
-      const mp4s = variants.filter((v: any) => v.content_type === 'video/mp4');
-      if (mp4s.length > 0) {
-        mp4s.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-        const bestUrl = mp4s[0].url;
-        if (bestUrl && !mediaUrls.includes(bestUrl)) {
-          mediaUrls.push(bestUrl);
+  }
+  if (isQuote && tweetResult.quoted_status_result) {
+    let qt = tweetResult.quoted_status_result?.result || {};
+    if (qt.__typename === 'TweetWithVisibilityResults') qt = qt.tweet || {};
+    if (qt.legacy) {
+      allMediaContainers.push(qt.legacy.extended_entities?.media);
+      allMediaContainers.push(qt.legacy.entities?.media);
+    }
+  }
+
+  for (const container of allMediaContainers) {
+    if (!Array.isArray(container)) continue;
+    for (const m of container) {
+      if (m.media_url_https && !mediaUrls.includes(m.media_url_https)) {
+        mediaUrls.push(m.media_url_https);
+      }
+      if (m.type === 'video' || m.type === 'animated_gif') {
+        if (!videoPoster && m.media_url_https) {
+          videoPoster = m.media_url_https;
+        }
+        const variants = m.video_info?.variants || [];
+        const mp4s = variants.filter((v: any) => v.content_type === 'video/mp4');
+        if (mp4s.length > 0) {
+          mp4s.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+          const bestUrl = mp4s[0].url;
+          if (bestUrl) {
+            if (!videoUrl) videoUrl = bestUrl;
+            if (!mediaUrls.includes(bestUrl)) {
+              mediaUrls.push(bestUrl);
+            }
+          }
         }
       }
     }
@@ -201,6 +234,8 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     view_count: Number(tweetResult.views?.count || 0),
     urls,
     media_urls: mediaUrls,
+    video_url: videoUrl,
+    video_poster: videoPoster,
   };
 }
 

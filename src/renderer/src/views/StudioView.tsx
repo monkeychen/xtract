@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Tweet, XListInfo, TweetQueryOptions } from '../types.js';
+import type { Tweet, XListInfo, TweetQueryOptions, StudioJumpAction } from '../types.js';
 import { api } from '../services/api.js';
 
 interface StudioViewProps {
   initialSearchQuery?: string;
+  jumpAction?: StudioJumpAction | null;
 }
 
 type DataSource = 'following' | 'search' | 'user' | 'lists';
+
+export function isVideoUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('.mp4') || lower.includes('.m3u8') || lower.includes('video.twimg.com');
+}
+
+export function isTweetVideo(tweet: Partial<Tweet>): boolean {
+  if (tweet.video_url) return true;
+  return Boolean(tweet.media_urls && tweet.media_urls.some((m) => isVideoUrl(m)));
+}
 
 /**
  * 提取推文的标题与摘要（紧凑列表扫读体验）
@@ -153,9 +165,9 @@ export function formatCount(num?: number): string {
   return String(num);
 }
 
-export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' }) => {
-  const initialSource: DataSource = initialSearchQuery
-    ? initialSearchQuery.startsWith('@')
+export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '', jumpAction }) => {
+  const initialSource: DataSource = (jumpAction?.query || initialSearchQuery)
+    ? (jumpAction?.query || initialSearchQuery).startsWith('@')
       ? 'user'
       : 'search'
     : 'following';
@@ -305,8 +317,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     };
   }, [dataSource]);
 
-  // Sync initial query
+  // Sync initial query on mount (if no explicit jumpAction)
   useEffect(() => {
+    if (jumpAction) return;
     if (initialSearchQuery) {
       if (initialSearchQuery.startsWith('@')) {
         const handle = initialSearchQuery.replace(/^@/, '');
@@ -490,20 +503,21 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   };
 
   // Crawl Action Handlers with Real-time Progress Tracking (§2.3)
-  const handleCrawl = async (source: DataSource) => {
+  const handleCrawl = async (source: DataSource, overrideTarget?: string) => {
     setIsLoading(true);
 
     let title = '正在从 X 官方流实时抓取关注流';
+    const effectiveQuery = (overrideTarget !== undefined ? overrideTarget : searchQuery).trim();
+
     if (source === 'search') {
-      const q = searchQuery.trim();
-      if (!q) {
+      if (!effectiveQuery) {
         showToast('请输入要搜索的关键词');
         setIsLoading(false);
         return;
       }
-      title = `正在全网实时搜索关键词「${q}」`;
+      title = `正在全网实时搜索关键词「${effectiveQuery}」`;
     } else if (source === 'user') {
-      const u = userHandle.trim().replace(/^@/, '');
+      const u = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
       if (!u) {
         showToast('请输入要追踪的博主用户名（如 @username）');
         setIsLoading(false);
@@ -548,12 +562,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         insertedCount = res.inserted;
         skippedCount = res.skipped;
       } else if (source === 'search') {
-        const query = searchQuery.trim();
-        const res = await api.searchTweets(query, { limit: crawlLimit, minLikes });
+        const res = await api.searchTweets(effectiveQuery, { limit: crawlLimit, minLikes });
         fetchedCount = res.count;
         insertedCount = res.count;
       } else if (source === 'user') {
-        const handle = userHandle.trim().replace(/^@/, '');
+        const handle = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
         const res = await api.fetchUser(handle, { limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
@@ -607,16 +620,22 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
         `抓取完成：新增入库 ${insertedCount} 条推文 (跳过去重 ${skippedCount} 条)`
       );
 
-      // Reload local tweets for current data source
+      // Reload local tweets for current data source and automatically select the first tweet
+      let refreshedTweets: Tweet[] = [];
       if (source === 'lists') {
         const cleanListId = selectedList === 'custom' ? customListId.match(/(\d{5,})/)?.[1] || customListId.trim() : selectedList;
-        await loadLocalTweets(50, 'lists', false, undefined, undefined, cleanListId);
+        refreshedTweets = await loadLocalTweets(50, 'lists', false, undefined, undefined, cleanListId);
       } else if (source === 'user') {
-        await loadLocalTweets(50, 'user', false, undefined, userHandle);
+        const h = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
+        refreshedTweets = await loadLocalTweets(50, 'user', false, undefined, h);
       } else if (source === 'search') {
-        await loadLocalTweets(50, 'search', false, searchQuery);
+        refreshedTweets = await loadLocalTweets(50, 'search', false, effectiveQuery);
       } else {
-        await loadLocalTweets(50, 'following', false);
+        refreshedTweets = await loadLocalTweets(50, 'following', false);
+      }
+
+      if (refreshedTweets && refreshedTweets.length > 0) {
+        handleSelectTweet(refreshedTweets[0]);
       }
 
       setTimeout(() => {
@@ -641,6 +660,35 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       setIsLoading(false);
     }
   };
+
+  // 响应来自全网趋势雷达或其他外部页面的推文跳转下钻动作
+  useEffect(() => {
+    if (!jumpAction || !jumpAction.query) return;
+
+    const targetQuery = jumpAction.query.trim();
+    if (!targetQuery) return;
+
+    if (targetQuery.startsWith('@')) {
+      const handle = targetQuery.replace(/^@/, '');
+      setDataSource('user');
+      setUserHandle(handle);
+      (async () => {
+        const local = await loadLocalTweets(50, 'user', false, undefined, handle);
+        if (jumpAction.autoFetch || local.length === 0) {
+          await handleCrawl('user', handle);
+        }
+      })();
+    } else {
+      setDataSource('search');
+      setSearchQuery(targetQuery);
+      (async () => {
+        const local = await loadLocalTweets(50, 'search', false, targetQuery);
+        if (jumpAction.autoFetch || local.length === 0) {
+          await handleCrawl('search', targetQuery);
+        }
+      })();
+    }
+  }, [jumpAction?.timestamp]);
 
   const handleLoadMore = async () => {
     if (isLoading || (totalDbCount > 0 && tweets.length >= totalDbCount)) return;
@@ -1379,9 +1427,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                         📰 深度长文
                       </span>
                     )}
-                    {tweet.media_urls && tweet.media_urls.length > 0 && (
+                    {isTweetVideo(tweet) ? (
+                      <span className="feed-tag" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 600 }}>
+                        🎬 视频
+                      </span>
+                    ) : tweet.media_urls && tweet.media_urls.length > 0 ? (
                       <span className="feed-tag">📷 图文</span>
-                    )}
+                    ) : null}
                     {tweet.is_retweet && (
                       <span className="feed-tag">🔁 转推</span>
                     )}
@@ -1691,19 +1743,123 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 </div>
               )}
 
-              {/* 本地配图预览容器 */}
-              {selectedTweet.media_urls && selectedTweet.media_urls.length > 0 && (
-                <div id="tweet-detail-media" style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--line)', marginBottom: '24px' }}>
-                  {selectedTweet.media_urls.map((img, i) => (
-                    <img
-                      key={i}
-                      src={img}
-                      style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', background: '#0a0a0a', display: 'block', marginBottom: i < selectedTweet.media_urls!.length - 1 ? '4px' : 0 }}
-                      alt={`Tweet media ${i + 1}`}
-                    />
-                  ))}
-                </div>
-              )}
+              {/* 本地媒体（视频与配图）预览容器 */}
+              {(() => {
+                const isVideo = isTweetVideo(selectedTweet);
+                const videoUrl = selectedTweet.video_url || selectedTweet.media_urls?.find((m) => isVideoUrl(m));
+                const posterUrl =
+                  selectedTweet.video_poster ||
+                  selectedTweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
+                  selectedTweet.media_urls?.find((m) => !isVideoUrl(m));
+                const displayImages = (selectedTweet.media_urls || []).filter(
+                  (m) => !isVideoUrl(m) && m !== posterUrl
+                );
+
+                return (
+                  <>
+                    {/* 原生 HTML5 视频播放器 */}
+                    {isVideo && videoUrl && (
+                      <div
+                        id="tweet-detail-video"
+                        style={{
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: '1px solid var(--line-strong)',
+                          background: '#050505',
+                          marginBottom: '20px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        <video
+                          controls
+                          playsInline
+                          preload="metadata"
+                          poster={posterUrl}
+                          src={videoUrl}
+                          style={{
+                            width: '100%',
+                            maxHeight: '480px',
+                            display: 'block',
+                            backgroundColor: '#000',
+                          }}
+                        >
+                          您的系统暂不支持直接播放该格式视频。
+                        </video>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 16px',
+                            background: 'var(--paper-sunken)',
+                            borderTop: '1px solid var(--line)',
+                            fontSize: '12.5px',
+                            color: 'var(--ink-soft)',
+                            gap: '12px',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '15px' }}>🎬</span>
+                            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>推特在线视频 (MP4)</span>
+                            <span style={{ fontSize: '11px', color: 'var(--ink-faint)' }}>免落盘直接流式播放</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <button
+                              className="secondary-button"
+                              style={{ fontSize: '12px', padding: '4px 10px', height: '28px' }}
+                              onClick={() => api.openExternal(videoUrl)}
+                              title="在系统默认浏览器（如 Safari / Chrome）中高速播放原视频"
+                            >
+                              <span>🌐 在系统浏览器播放 ↗</span>
+                            </button>
+                            <button
+                              className="secondary-button"
+                              style={{ fontSize: '12px', padding: '4px 10px', height: '28px' }}
+                              onClick={() => {
+                                const tweetUrl = `https://x.com/${selectedTweet.author_username || 'i'}/status/${selectedTweet.tweet_id}`;
+                                api.openExternal(tweetUrl);
+                              }}
+                              title="在 X 官方页面查看该推文及视频原帖"
+                            >
+                              <span>🐦 在 X 查看 ↗</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 普通配图容器 */}
+                    {displayImages.length > 0 && (
+                      <div
+                        id="tweet-detail-media"
+                        style={{
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: '1px solid var(--line)',
+                          marginBottom: '24px',
+                        }}
+                      >
+                        {displayImages.map((img, i) => (
+                          <img
+                            key={i}
+                            src={img}
+                            style={{
+                              width: '100%',
+                              maxHeight: '420px',
+                              objectFit: 'contain',
+                              background: '#0a0a0a',
+                              display: 'block',
+                              marginBottom: i < displayImages.length - 1 ? '4px' : 0,
+                            }}
+                            alt={`Tweet media ${i + 1}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* 互动数据卡片 */}
               <div className="surface" style={{ padding: '16px', background: 'var(--paper-sunken)', display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>

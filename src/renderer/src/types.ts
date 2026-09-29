@@ -18,6 +18,19 @@ export interface ReportItem {
 
 export type ActiveTab = 'reports' | 'trends' | 'studio';
 
+export interface StudioJumpAction {
+  query: string;
+  autoFetch?: boolean;
+  timestamp: number;
+}
+
+export interface ReportJumpAction {
+  type: 'trends' | 'daily';
+  category?: string;
+  topic?: TrendTopic;
+  timestamp: number;
+}
+
 // Mock datasets for standalone prototype preview
 export const MOCK_REPORTS: ReportItem[] = [
   {

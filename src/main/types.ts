@@ -18,6 +18,8 @@ export interface Tweet {
   quoted_text?: string;
   urls?: string[];
   media_urls?: string[];
+  video_url?: string;
+  video_poster?: string;
   source_type?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
   list_id?: string;
   fetched_at?: string;

@@ -118,6 +118,8 @@ export class Storage {
         view_count INTEGER DEFAULT 0,
         urls TEXT,
         media_urls TEXT,
+        video_url TEXT,
+        video_poster TEXT,
         source_type TEXT DEFAULT 'legacy',
         list_id TEXT,
         fetched_at TEXT NOT NULL
@@ -137,6 +139,14 @@ export class Storage {
       const hasSourceType = columns.some((c) => c.name === 'source_type');
       if (!hasSourceType) {
         this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'legacy'`);
+      }
+      const hasVideoUrl = columns.some((c) => c.name === 'video_url');
+      if (!hasVideoUrl) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN video_url TEXT`);
+      }
+      const hasVideoPoster = columns.some((c) => c.name === 'video_poster');
+      if (!hasVideoPoster) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN video_poster TEXT`);
       }
       this.db.exec(`CREATE INDEX IF NOT EXISTS idx_source_type ON tweets(source_type)`);
 
@@ -185,12 +195,12 @@ export class Storage {
         tweet_id, author_id, author_name, author_username,
         text, created_at, is_retweet, retweeted_author, retweeted_text,
         is_quote, quoted_author, quoted_text, like_count, retweet_count,
-        reply_count, view_count, urls, media_urls, source_type, list_id, fetched_at
+        reply_count, view_count, urls, media_urls, video_url, video_poster, source_type, list_id, fetched_at
       ) VALUES (
         @tweet_id, @author_id, @author_name, @author_username,
         @text, @created_at, @is_retweet, @retweeted_author, @retweeted_text,
         @is_quote, @quoted_author, @quoted_text, @like_count, @retweet_count,
-        @reply_count, @view_count, @urls, @media_urls, @source_type, @list_id, @fetched_at
+        @reply_count, @view_count, @urls, @media_urls, @video_url, @video_poster, @source_type, @list_id, @fetched_at
       )
     `);
 
@@ -217,6 +227,8 @@ export class Storage {
             view_count: item.view_count || 0,
             urls: JSON.stringify(item.urls || []),
             media_urls: JSON.stringify(item.media_urls || []),
+            video_url: item.video_url || null,
+            video_poster: item.video_poster || null,
             source_type: item.source_type || defaultSourceType || 'following',
             list_id: item.list_id || listId || null,
             fetched_at: item.fetched_at || nowIso,
@@ -237,7 +249,8 @@ export class Storage {
               const hasRicherContent =
                 item.text &&
                 (item.text.length > (existing.text || '').length ||
-                  (item.media_urls?.length || 0) > (existing.media_urls?.length || 0));
+                  (item.media_urls?.length || 0) > (existing.media_urls?.length || 0) ||
+                  Boolean(item.video_url && !existing.video_url));
 
               this.db
                 .prepare(
@@ -246,6 +259,8 @@ export class Storage {
                   text = CASE WHEN ? THEN ? ELSE text END,
                   media_urls = CASE WHEN ? THEN ? ELSE media_urls END,
                   urls = CASE WHEN ? THEN ? ELSE urls END,
+                  video_url = COALESCE(?, video_url),
+                  video_poster = COALESCE(?, video_poster),
                   source_type = ?,
                   list_id = COALESCE(?, list_id),
                   like_count = ?,
@@ -263,6 +278,8 @@ export class Storage {
                   JSON.stringify(item.media_urls || existing.media_urls || []),
                   hasRicherContent ? 1 : 0,
                   JSON.stringify(item.urls || existing.urls || []),
+                  item.video_url || null,
+                  item.video_poster || null,
                   targetSourceType,
                   item.list_id || listId || null,
                   item.like_count ?? existing.like_count,
@@ -869,6 +886,8 @@ export class Storage {
       view_count: Number(row.view_count || 0),
       urls,
       media_urls: mediaUrls,
+      video_url: (row.video_url as string) || undefined,
+      video_poster: (row.video_poster as string) || undefined,
       source_type: (row.source_type as any) || 'following',
       list_id: (row.list_id as string) || undefined,
       fetched_at: String(row.fetched_at || ''),

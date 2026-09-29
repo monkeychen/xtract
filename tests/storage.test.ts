@@ -609,6 +609,30 @@ describe('Storage Module', () => {
     expect(followingVpn.length).toBe(1);
     expect(followingVpn[0].tweet_id).toBe('10001');
   });
+
+  it('test_storage_video_fields_persistence', () => {
+    const videoTweet: Partial<Tweet> = {
+      tweet_id: 'video_999',
+      author_name: 'Video Creator',
+      author_username: 'creator',
+      text: 'Check out this awesome demo video!',
+      created_at: '2026-09-10T12:00:00Z',
+      like_count: 50,
+      retweet_count: 10,
+      media_urls: ['https://pbs.twimg.com/thumb.jpg', 'https://video.twimg.com/demo.mp4'],
+      video_url: 'https://video.twimg.com/demo.mp4',
+      video_poster: 'https://pbs.twimg.com/thumb.jpg',
+    };
+
+    const res = storage.saveTweets([videoTweet]);
+    expect(res.inserted).toBe(1);
+
+    const retrieved = storage.getTweetById('video_999');
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.video_url).toBe('https://video.twimg.com/demo.mp4');
+    expect(retrieved?.video_poster).toBe('https://pbs.twimg.com/thumb.jpg');
+    expect(retrieved?.media_urls).toContain('https://video.twimg.com/demo.mp4');
+  });
 });
 
 

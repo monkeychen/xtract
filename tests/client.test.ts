@@ -101,6 +101,8 @@ describe('Client Parser Module', () => {
     expect(parsed?.media_urls).toContain('https://pbs.twimg.com/video_thumb/123.jpg');
     expect(parsed?.media_urls).toContain('https://video.twimg.com/vid_high.mp4');
     expect(parsed?.media_urls).not.toContain('https://video.twimg.com/vid_low.mp4');
+    expect(parsed?.video_url).toBe('https://video.twimg.com/vid_high.mp4');
+    expect(parsed?.video_poster).toBe('https://pbs.twimg.com/video_thumb/123.jpg');
   });
 
   it('test_parse_timeline_instructions', () => {

@@ -3,8 +3,20 @@ import type { TrendTopic } from '../types.js';
 import { api } from '../services/api.js';
 
 interface TrendsViewProps {
-  onSearchInStudio: (query: string) => void;
+  onSearchInStudio: (query: string, trend?: TrendTopic) => void;
   onGenerateDigestForTrend: (topic: TrendTopic) => void;
+}
+
+export function getCleanTrendSearchTerm(trend: TrendTopic): string {
+  const raw = trend.name || trend.query || '';
+  // 过滤推特搜索专有语法（如 lang:en, since:2026-xx, min_faves:xx 等）
+  let cleaned = raw
+    .replace(/\b(lang|since|until|min_faves|min_retweets|filter|url):[^\s]+/gi, '')
+    .replace(/["“”'‘’]/g, ' ')
+    .replace(/^#+/, '')
+    .trim();
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned || (trend.name || '').replace(/^#+/, '').trim() || trend.name;
 }
 
 export const TrendsView: React.FC<TrendsViewProps> = ({
@@ -213,7 +225,7 @@ export const TrendsView: React.FC<TrendsViewProps> = ({
                 <button
                   className="secondary-button"
                   style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => onSearchInStudio(trend.query || trend.name)}
+                  onClick={() => onSearchInStudio(getCleanTrendSearchTerm(trend), trend)}
                 >
                   <span>查看推文</span>
                 </button>
