@@ -119,6 +119,7 @@ export class Storage {
         urls TEXT,
         media_urls TEXT,
         source_type TEXT DEFAULT 'legacy',
+        list_id TEXT,
         fetched_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
@@ -138,6 +139,12 @@ export class Storage {
         this.db.exec(`ALTER TABLE tweets ADD COLUMN source_type TEXT DEFAULT 'legacy'`);
       }
       this.db.exec(`CREATE INDEX IF NOT EXISTS idx_source_type ON tweets(source_type)`);
+
+      const hasListId = columns.some((c) => c.name === 'list_id');
+      if (!hasListId) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN list_id TEXT`);
+      }
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_list_id ON tweets(list_id)`);
 
       // 自动清洗并规范化存量非 ISO-8601 格式的推文时间 (如推特原生 "Wed Aug 26 ...")
       // 确保 SQLite 中字符串排序 ORDER BY created_at DESC 与物理真实时间完全一致
@@ -166,7 +173,8 @@ export class Storage {
 
   public saveTweets(
     tweets: Partial<Tweet>[],
-    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' = 'following'
+    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' = 'following',
+    listId?: string
   ): { inserted: number; skipped: number } {
     let inserted = 0;
     let skipped = 0;
@@ -177,12 +185,12 @@ export class Storage {
         tweet_id, author_id, author_name, author_username,
         text, created_at, is_retweet, retweeted_author, retweeted_text,
         is_quote, quoted_author, quoted_text, like_count, retweet_count,
-        reply_count, view_count, urls, media_urls, source_type, fetched_at
+        reply_count, view_count, urls, media_urls, source_type, list_id, fetched_at
       ) VALUES (
         @tweet_id, @author_id, @author_name, @author_username,
         @text, @created_at, @is_retweet, @retweeted_author, @retweeted_text,
         @is_quote, @quoted_author, @quoted_text, @like_count, @retweet_count,
-        @reply_count, @view_count, @urls, @media_urls, @source_type, @fetched_at
+        @reply_count, @view_count, @urls, @media_urls, @source_type, @list_id, @fetched_at
       )
     `);
 
@@ -210,6 +218,7 @@ export class Storage {
             urls: JSON.stringify(item.urls || []),
             media_urls: JSON.stringify(item.media_urls || []),
             source_type: item.source_type || defaultSourceType || 'following',
+            list_id: item.list_id || listId || null,
             fetched_at: item.fetched_at || nowIso,
           });
           inserted++;
@@ -238,6 +247,7 @@ export class Storage {
                   media_urls = CASE WHEN ? THEN ? ELSE media_urls END,
                   urls = CASE WHEN ? THEN ? ELSE urls END,
                   source_type = ?,
+                  list_id = COALESCE(?, list_id),
                   like_count = ?,
                   retweet_count = ?,
                   reply_count = ?,
@@ -254,6 +264,7 @@ export class Storage {
                   hasRicherContent ? 1 : 0,
                   JSON.stringify(item.urls || existing.urls || []),
                   targetSourceType,
+                  item.list_id || listId || null,
                   item.like_count ?? existing.like_count,
                   item.retweet_count ?? existing.retweet_count,
                   item.reply_count ?? existing.reply_count,
@@ -303,29 +314,40 @@ export class Storage {
     return row ? row.count : 0;
   }
 
-  public queryTweets(options: TweetQueryOptions = {}): Tweet[] {
-    const limit = options.limit ?? 50;
-    const offset = options.offset ?? 0;
+  private buildWhereClauses(options: TweetQueryOptions): {
+    whereClauses: string[];
+    params: (string | number)[];
+  } {
     const minLikes = options.minLikes ?? 0;
     const minRetweets = options.minRetweets ?? 0;
 
     const whereClauses: string[] = ['like_count >= ?', 'retweet_count >= ?'];
     const params: (string | number)[] = [minLikes, minRetweets];
 
-    if (options.sourceType && options.sourceType !== 'all') {
+    // 1. 博主追踪维度：若显式指定了博主，彻底放开 source_type 限制，聚合该博主在全库的所有推文（关注流、搜索或列表）
+    if (options.user && options.user.trim()) {
+      whereClauses.push('LOWER(author_username) = LOWER(?)');
+      params.push(options.user.replace(/^@/, '').trim());
+    } else if (options.sourceType && options.sourceType !== 'all') {
+      // 2. 按数据源筛选
       if (options.sourceType === 'following') {
         whereClauses.push(`source_type IN ('following', 'legacy')`);
       } else if (options.sourceType === 'user') {
-        if (options.user) {
-          whereClauses.push(`(source_type = 'user' OR source_type = 'legacy')`);
+        whereClauses.push(`(source_type = 'user' OR source_type = 'legacy')`);
+      } else if (options.sourceType === 'list') {
+        // 监控列表：若指定了具体 listId，精准匹配 list_id
+        if (options.listId && options.listId.trim()) {
+          whereClauses.push('(list_id = ? OR (source_type = \'list\' AND list_id IS NULL))');
+          params.push(options.listId.trim());
         } else {
-          whereClauses.push(`source_type = 'user'`);
+          whereClauses.push(`source_type = 'list'`);
         }
       } else if (options.sourceType === 'search') {
-        if (options.query) {
+        // 全网搜索：
+        // 若带有 query，彻底放开 source_type 限制，直接对本地全库执行全文搜索！
+        // 若未提供 query，则退化展示已抓取的 search 或全量推文
+        if (!options.query || !options.query.trim()) {
           whereClauses.push(`(source_type = 'search' OR source_type = 'legacy')`);
-        } else {
-          whereClauses.push(`source_type = 'search'`);
         }
       } else {
         whereClauses.push('source_type = ?');
@@ -333,16 +355,21 @@ export class Storage {
       }
     }
 
-    if (options.user) {
-      whereClauses.push('LOWER(author_username) = LOWER(?)');
-      params.push(options.user.replace(/^@/, '').trim());
-    }
-
-    if (options.query) {
+    // 3. 关键词全文模糊检索：命中正文、作者名或 Handle
+    if (options.query && options.query.trim()) {
       const q = `%${options.query.trim().toLowerCase()}%`;
       whereClauses.push('(LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
       params.push(q, q, q);
     }
+
+    return { whereClauses, params };
+  }
+
+  public queryTweets(options: TweetQueryOptions = {}): Tweet[] {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+
+    const { whereClauses, params } = this.buildWhereClauses(options);
 
     const sql = `
       SELECT * FROM tweets
@@ -352,47 +379,11 @@ export class Storage {
     `;
 
     const rows = this.db.prepare(sql).all(...params, limit, offset) as Record<string, unknown>[];
-    return rows.map(this.mapRowToTweet);
+    return rows.map(this.mapRowToTweet.bind(this));
   }
 
   public countTweets(options: TweetQueryOptions = {}): number {
-    const minLikes = options.minLikes ?? 0;
-    const minRetweets = options.minRetweets ?? 0;
-
-    const whereClauses: string[] = ['like_count >= ?', 'retweet_count >= ?'];
-    const params: (string | number)[] = [minLikes, minRetweets];
-
-    if (options.sourceType && options.sourceType !== 'all') {
-      if (options.sourceType === 'following') {
-        whereClauses.push(`source_type IN ('following', 'legacy')`);
-      } else if (options.sourceType === 'user') {
-        if (options.user) {
-          whereClauses.push(`(source_type = 'user' OR source_type = 'legacy')`);
-        } else {
-          whereClauses.push(`source_type = 'user'`);
-        }
-      } else if (options.sourceType === 'search') {
-        if (options.query) {
-          whereClauses.push(`(source_type = 'search' OR source_type = 'legacy')`);
-        } else {
-          whereClauses.push(`source_type = 'search'`);
-        }
-      } else {
-        whereClauses.push('source_type = ?');
-        params.push(options.sourceType);
-      }
-    }
-
-    if (options.user) {
-      whereClauses.push('LOWER(author_username) = LOWER(?)');
-      params.push(options.user.replace(/^@/, '').trim());
-    }
-
-    if (options.query) {
-      const q = `%${options.query.trim().toLowerCase()}%`;
-      whereClauses.push('(LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
-      params.push(q, q, q);
-    }
+    const { whereClauses, params } = this.buildWhereClauses(options);
 
     const sql = `SELECT COUNT(*) as total FROM tweets WHERE ${whereClauses.join(' AND ')}`;
     const row = this.db.prepare(sql).get(...params) as { total: number } | undefined;
@@ -879,6 +870,7 @@ export class Storage {
       urls,
       media_urls: mediaUrls,
       source_type: (row.source_type as any) || 'following',
+      list_id: (row.list_id as string) || undefined,
       fetched_at: String(row.fetched_at || ''),
     };
   }

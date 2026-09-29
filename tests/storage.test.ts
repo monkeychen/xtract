@@ -541,6 +541,74 @@ describe('Storage Module', () => {
     expect(isArticleTweet(truncatedNote)).toBe(false);
     expect(isTweetContentIncomplete(truncatedNote)).toBe(true);
   });
+
+  it('test_four_data_sources_relaxed_search_and_list_id', () => {
+    // 1. Prepare sample tweets across different source types
+    const tweetFromFollowing: Partial<Tweet> = {
+      tweet_id: '10001',
+      author_username: 'AndyL5cc',
+      author_name: 'Andy',
+      text: 'WiFi一连就能上X，VPN都不用开',
+      source_type: 'following',
+      like_count: 10,
+    };
+    const tweetFromSearch: Partial<Tweet> = {
+      tweet_id: '10002',
+      author_username: 'other_user',
+      author_name: 'Other',
+      text: '分享一个优秀的 VPN 工具',
+      source_type: 'search',
+      like_count: 5,
+    };
+    const tweetListA: Partial<Tweet> = {
+      tweet_id: '10003',
+      author_username: 'dev_guy',
+      author_name: 'Dev',
+      text: '独立开发者必看的工具集合',
+      source_type: 'list',
+      list_id: 'LIST_INDEPENDENT_DEV',
+      like_count: 20,
+    };
+    const tweetListB: Partial<Tweet> = {
+      tweet_id: '10004',
+      author_username: 'writer_guy',
+      author_name: 'Writer',
+      text: '文学作品赏析',
+      source_type: 'list',
+      list_id: 'LIST_LITERATURE',
+      like_count: 30,
+    };
+
+    storage.saveTweets([tweetFromFollowing, tweetFromSearch, tweetListA, tweetListB]);
+
+    // Test A: Search mode relaxes source_type when query is present (Full-library search)
+    // Both tweetFromFollowing and tweetFromSearch should be matched for 'VPN'!
+    const vpnResults = storage.queryTweets({ sourceType: 'search', query: 'VPN' });
+    expect(vpnResults.length).toBe(2);
+    expect(vpnResults.some((t) => t.tweet_id === '10001')).toBe(true);
+    expect(vpnResults.some((t) => t.tweet_id === '10002')).toBe(true);
+    expect(storage.countTweets({ sourceType: 'search', query: 'VPN' })).toBe(2);
+
+    // Test B: User mode aggregates author across all sources (even if captured via following)
+    const andyResults = storage.queryTweets({ sourceType: 'user', user: 'AndyL5cc' });
+    expect(andyResults.length).toBe(1);
+    expect(andyResults[0].tweet_id === '10001').toBe(true);
+    expect(storage.countTweets({ sourceType: 'user', user: 'AndyL5cc' })).toBe(1);
+
+    // Test C: List mode accurately partitions by list_id
+    const listAResults = storage.queryTweets({ sourceType: 'list', listId: 'LIST_INDEPENDENT_DEV' });
+    expect(listAResults.length).toBe(1);
+    expect(listAResults[0].tweet_id).toBe('10003');
+
+    const listBResults = storage.queryTweets({ sourceType: 'list', listId: 'LIST_LITERATURE' });
+    expect(listBResults.length).toBe(1);
+    expect(listBResults[0].tweet_id).toBe('10004');
+
+    // Test D: Following mode with query scopes within following feed
+    const followingVpn = storage.queryTweets({ sourceType: 'following', query: 'VPN' });
+    expect(followingVpn.length).toBe(1);
+    expect(followingVpn[0].tweet_id).toBe('10001');
+  });
 });
 
 

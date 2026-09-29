@@ -167,11 +167,16 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
   const [searchQuery, setSearchQuery] = useState(
     initialSearchQuery && !initialSearchQuery.startsWith('@') ? initialSearchQuery : 'AI'
   );
-  const [userHandle, setUserHandle] = useState(
-    initialSearchQuery && initialSearchQuery.startsWith('@')
-      ? initialSearchQuery.replace(/^@/, '')
-      : 'karpathy'
-  );
+  const [userHandle, setUserHandle] = useState(() => {
+    if (initialSearchQuery && initialSearchQuery.startsWith('@')) {
+      return initialSearchQuery.replace(/^@/, '');
+    }
+    try {
+      return localStorage.getItem('xtract_last_user_handle') || 'karpathy';
+    } catch {
+      return 'karpathy';
+    }
+  });
   const [userLists, setUserLists] = useState<XListInfo[]>([]);
   const [selectedList, setSelectedList] = useState('2100985900734062922');
   const [customListId, setCustomListId] = useState('');
@@ -328,24 +333,28 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     source = dataSource,
     isAppend = false,
     queryParam?: string,
-    userParam?: string
+    userParam?: string,
+    listIdParam?: string
   ) => {
     setIsLoading(true);
     try {
       let sourceType: TweetQueryOptions['sourceType'] = 'following';
       let q: string | undefined = undefined;
       let u: string | undefined = undefined;
+      let lId: string | undefined = undefined;
 
       if (source === 'user') {
         sourceType = 'user';
-        u = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '');
+        u = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '') || undefined;
       } else if (source === 'search') {
         sourceType = 'search';
-        q = (queryParam !== undefined ? queryParam : searchQuery).trim();
+        q = (queryParam !== undefined ? queryParam : searchQuery).trim() || undefined;
       } else if (source === 'lists') {
         sourceType = 'list';
+        lId = (listIdParam !== undefined ? listIdParam : (selectedList === 'custom' ? customListId : selectedList)).trim() || undefined;
       } else {
         sourceType = 'following';
+        q = (queryParam !== undefined ? queryParam : streamFilter).trim() || undefined;
       }
 
       const offset = isAppend ? tweets.length : 0;
@@ -357,12 +366,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
           sourceType,
           query: q,
           user: u,
+          listId: lId,
         }),
         api.countTweets({
           minLikes,
           sourceType,
           query: q,
           user: u,
+          listId: lId,
         }),
       ]);
 
@@ -402,11 +413,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     } else if (newSource === 'following') {
       loadLocalTweets(50, 'following', false);
     } else {
-      loadLocalTweets(50, 'lists', false);
+      const currentListId = selectedList === 'custom' ? customListId : selectedList;
+      loadLocalTweets(50, 'lists', false, undefined, undefined, currentListId);
     }
   };
 
-  // 搜索框防抖联动本地查询
+  // 搜索框防抖联动本地全库查询
   const searchDebounceRef = useRef<any>(null);
   const handleSearchChange = (val: string) => {
     setSearchQuery(val);
@@ -416,13 +428,29 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
     }, 250);
   };
 
-  // 博主输入框防抖联动本地查询
+  // 博主输入框防抖联动本地全量博主推文查询
   const userDebounceRef = useRef<any>(null);
   const handleUserChange = (val: string) => {
     setUserHandle(val);
+    const clean = val.trim().replace(/^@/, '');
+    if (clean) {
+      try {
+        localStorage.setItem('xtract_last_user_handle', clean);
+      } catch {}
+    }
     if (userDebounceRef.current) clearTimeout(userDebounceRef.current);
     userDebounceRef.current = setTimeout(() => {
-      loadLocalTweets(50, 'user', false, undefined, val);
+      loadLocalTweets(50, 'user', false, undefined, clean);
+    }, 250);
+  };
+
+  // 关注流实时过滤输入框联动后端 SQLite 全量查询
+  const streamFilterDebounceRef = useRef<any>(null);
+  const handleStreamFilterChange = (val: string) => {
+    setStreamFilter(val);
+    if (streamFilterDebounceRef.current) clearTimeout(streamFilterDebounceRef.current);
+    streamFilterDebounceRef.current = setTimeout(() => {
+      loadLocalTweets(50, 'following', false, val);
     }, 250);
   };
 
@@ -574,7 +602,16 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
       );
 
       // Reload local tweets for current data source
-      await loadLocalTweets(50, source, false);
+      if (source === 'lists') {
+        const cleanListId = selectedList === 'custom' ? customListId.match(/(\d{5,})/)?.[1] || customListId.trim() : selectedList;
+        await loadLocalTweets(50, 'lists', false, undefined, undefined, cleanListId);
+      } else if (source === 'user') {
+        await loadLocalTweets(50, 'user', false, undefined, userHandle);
+      } else if (source === 'search') {
+        await loadLocalTweets(50, 'search', false, searchQuery);
+      } else {
+        await loadLocalTweets(50, 'following', false);
+      }
 
       setTimeout(() => {
         setCrawlProgress(null);
@@ -885,9 +922,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 className="text-input"
                 style={{ flex: 1, maxWidth: '240px', fontSize: '12.5px', padding: '6px 10px' }}
                 type="text"
-                placeholder="🔍 过滤当前推文..."
+                placeholder="🔍 搜索关注流推文 (全库检索)..."
                 value={streamFilter}
-                onChange={(e) => setStreamFilter(e.target.value)}
+                onChange={(e) => handleStreamFilterChange(e.target.value)}
               />
             </div>
           )}
@@ -1064,7 +1101,13 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                 className="select-input"
                 style={{ flex: 1, maxWidth: '260px', fontSize: '12.5px', padding: '6px 10px' }}
                 value={selectedList}
-                onChange={(e) => setSelectedList(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedList(val);
+                  if (val !== 'custom') {
+                    loadLocalTweets(50, 'lists', false, undefined, undefined, val);
+                  }
+                }}
               >
                 {userLists.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -1079,9 +1122,23 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '' 
                   className="text-input"
                   style={{ flex: 1, minWidth: '140px', fontSize: '12.5px', padding: '6px 10px' }}
                   type="text"
-                  placeholder="输入 List ID 或链接..."
+                  placeholder="输入 List ID 或链接 (回车搜索)..."
                   value={customListId}
-                  onChange={(e) => setCustomListId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomListId(val);
+                    const match = val.match(/(\d{5,})/);
+                    if (match) {
+                      loadLocalTweets(50, 'lists', false, undefined, undefined, match[1]);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const match = customListId.match(/(\d{5,})/);
+                      const clean = match ? match[1] : customListId.trim();
+                      if (clean) loadLocalTweets(50, 'lists', false, undefined, undefined, clean);
+                    }
+                  }}
                 />
               )}
               <button

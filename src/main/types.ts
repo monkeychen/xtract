@@ -19,6 +19,7 @@ export interface Tweet {
   urls?: string[];
   media_urls?: string[];
   source_type?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
+  list_id?: string;
   fetched_at?: string;
 }
 
@@ -60,6 +61,7 @@ export interface TweetQueryOptions {
   sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' | 'all';
   user?: string;
   query?: string;
+  listId?: string;
 }
 
 export interface DeleteResult {

@@ -121,6 +121,7 @@ export class Pipeline {
     process.stderr.write(`⏳ 开始抓取 X 列表 (${listIdOrUrl}) 的最新推文（目标 ${limit} 篇）...\n`);
 
     const match = listIdOrUrl.match(/(\d{5,})/);
+    const cleanListId = match ? match[1] : listIdOrUrl.trim();
     if (match) {
       Config.saveUserList({
         id: match[1],
@@ -133,7 +134,7 @@ export class Pipeline {
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets, 'list');
+      const { inserted, skipped } = this.storage.saveTweets(tweets, 'list', cleanListId);
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );

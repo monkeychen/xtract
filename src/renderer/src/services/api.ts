@@ -140,16 +140,23 @@ class ApiService {
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
     let result = [...MOCK_TWEETS];
-    if (options.sourceType && options.sourceType !== 'all') {
-      result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
-    }
-    if (options.minLikes) {
-      result = result.filter((t) => t.like_count >= (options.minLikes || 0));
-    }
     if (options.user) {
       result = result.filter(
         (t) => t.author_username.toLowerCase() === options.user?.toLowerCase()
       );
+    } else if (options.sourceType && options.sourceType !== 'all') {
+      if (options.sourceType === 'list') {
+        if (options.listId) {
+          result = result.filter((t) => (t as any).list_id === options.listId || (t.source_type === 'list' && !(t as any).list_id));
+        } else {
+          result = result.filter((t) => t.source_type === 'list');
+        }
+      } else if (options.sourceType !== 'search' || !options.query) {
+        result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
+      }
+    }
+    if (options.minLikes) {
+      result = result.filter((t) => t.like_count >= (options.minLikes || 0));
     }
     if (options.query) {
       const q = options.query.toLowerCase().trim();
@@ -172,16 +179,23 @@ class ApiService {
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
     let result = [...MOCK_TWEETS];
-    if (options.sourceType && options.sourceType !== 'all') {
-      result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
-    }
-    if (options.minLikes) {
-      result = result.filter((t) => t.like_count >= (options.minLikes || 0));
-    }
     if (options.user) {
       result = result.filter(
         (t) => t.author_username.toLowerCase() === options.user?.toLowerCase()
       );
+    } else if (options.sourceType && options.sourceType !== 'all') {
+      if (options.sourceType === 'list') {
+        if (options.listId) {
+          result = result.filter((t) => (t as any).list_id === options.listId || (t.source_type === 'list' && !(t as any).list_id));
+        } else {
+          result = result.filter((t) => t.source_type === 'list');
+        }
+      } else if (options.sourceType !== 'search' || !options.query) {
+        result = result.filter((t) => (t.source_type || 'following') === options.sourceType);
+      }
+    }
+    if (options.minLikes) {
+      result = result.filter((t) => t.like_count >= (options.minLikes || 0));
     }
     if (options.query) {
       const q = options.query.toLowerCase().trim();
