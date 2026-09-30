@@ -36,6 +36,11 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         revealedPaths: [] as string[],
         viewCalls: [] as any[],
         listCalls: [] as any[],
+        fetchFollowingCalls: [] as any[],
+        fetchUserCalls: [] as any[],
+        fetchListCalls: [] as any[],
+        searchTweetsCalls: [] as any[],
+        savedUserLists: [] as any[],
       };
 
       const mockDbTweets = [
@@ -201,8 +206,28 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         },
         fetchFollowingStream: async () => ({ count: 2, tweets: mockDbTweets }),
         fetchUserTimeline: async () => ({ count: 1, tweets: [mockDbTweets[0]] }),
-        searchTweets: async () => ({ count: 1, tweets: [mockDbTweets[1]] }),
+        searchTweets: async (query: string, opts: any) => {
+          (window as any).__recordedCalls.searchTweetsCalls.push({ query, opts });
+          return { count: 1, tweets: [mockDbTweets[1]] };
+        },
         fetchListTimeline: async () => ({ count: 2, tweets: mockDbTweets }),
+        // --- 真实抓取 API（handleCrawl 直接调用的三个入口）---
+        fetchFollowing: async (opts: any) => {
+          (window as any).__recordedCalls.fetchFollowingCalls.push(opts);
+          return { fetched: opts?.limit ?? 20, inserted: 5, skipped: 1 };
+        },
+        fetchUser: async (username: string, opts: any) => {
+          (window as any).__recordedCalls.fetchUserCalls.push({ username, opts });
+          return { fetched: opts?.limit ?? 20, inserted: 3, skipped: 0 };
+        },
+        fetchList: async (listId: string, opts: any) => {
+          (window as any).__recordedCalls.fetchListCalls.push({ listId, opts });
+          return { fetched: opts?.limit ?? 20, inserted: 4, skipped: 0 };
+        },
+        saveUserList: async (list: any) => {
+          (window as any).__recordedCalls.savedUserLists.push(list);
+          return { success: true };
+        },
         getUserLists: async () => [
           { id: '2100985900734062922', name: 'AI与自媒体', memberCount: 6, isOwner: true },
         ],
@@ -617,5 +642,227 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
 
     const openedUrls = await page.evaluate(() => (window as any).__recordedCalls.openedUrls);
     expect(openedUrls).toContain('https://Dot.com');
+  });
+
+  // ==========================================================================
+  // Flow 12-18: 抓取链路、流式进度、加载更多、空态与键盘关闭
+  // 新增于 openspec 2026-09-30-test-regression-net（Flow 1-11 保持不变）
+  //
+  // 本项目仅依赖 playwright-core，未引入 @playwright/test，因此没有
+  // expect(locator).toBeVisible() / expect.poll 等断言器。以下用
+  // playwright-core 原生 Locator API + vitest expect 组合实现等待与断言，
+  // 避免退化为固定 waitForTimeout 的脆弱写法。
+  // ==========================================================================
+
+  const recorded = (key: string): Promise<any[]> =>
+    page.evaluate((k: string) => (window as any).__recordedCalls[k], key) as unknown as Promise<any[]>;
+
+  const resetRecording = (key: string) =>
+    page.evaluate((k) => {
+      (window as any).__recordedCalls[k] = [];
+    }, key);
+
+  /** 轮询直到条件满足或超时，返回最后一次探测值。 */
+  async function waitUntil<T>(probe: () => Promise<T>, predicate: (v: T) => boolean, timeoutMs = 5000): Promise<T> {
+    const start = Date.now();
+    for (;;) {
+      const v = await probe();
+      if (predicate(v)) return v;
+      if (Date.now() - start > timeoutMs) return v;
+      await page.waitForTimeout(100);
+    }
+  }
+
+  async function expectTextToBe(locator: any, expected: string) {
+    await locator.waitFor({ state: 'visible' });
+    const t = await waitUntil<string | null>(
+      () => locator.textContent() as Promise<string | null>,
+      (v) => (v || '').trim() === expected
+    );
+    expect((t || '').trim()).toBe(expected);
+  }
+
+  async function expectTextToContain(locator: any, needle: string) {
+    await locator.waitFor({ state: 'visible' });
+    const t = await waitUntil<string | null>(
+      () => locator.textContent() as Promise<string | null>,
+      (v) => (v || '').includes(needle)
+    );
+    expect(t || '').toContain(needle);
+  }
+
+  it('Flow 12: Crawl Target Guards Reject Empty Input Without Firing Any Fetch', async () => {
+    await resetRecording('searchTweetsCalls');
+    await resetRecording('fetchUserCalls');
+
+    // --- search 源：空关键词 ---
+    await page.locator('#chip-source-search').click();
+    await page.locator('#search-query-input').waitFor({ state: 'visible' });
+    await page.locator('#search-query-input').fill('');
+    await page.locator('#zone-search button.split-btn-main').click();
+
+    await expectTextToBe(page.locator('#toast-message'), '请输入要搜索的关键词');
+    expect(await recorded('searchTweetsCalls')).toHaveLength(0);
+
+    // --- user 源：空 handle ---
+    await page.locator('#chip-source-user').click();
+    await page.locator('#user-handle-input').waitFor({ state: 'visible' });
+    await page.locator('#user-handle-input').fill('');
+    await page.locator('#zone-user button.split-btn-main').click();
+
+    await expectTextToBe(page.locator('#toast-message'), '请输入要追踪的博主用户名（如 @username）');
+    expect(await recorded('fetchUserCalls')).toHaveLength(0);
+
+    // 复原到关注流，避免影响后续 Flow
+    await page.locator('#chip-source-following').click();
+    await page.locator('#stream-filter-input').waitFor({ state: 'visible' });
+  });
+
+  it('Flow 13: Following Crawl Passes Pages And Limit Computed From Crawl Count', async () => {
+    await resetRecording('fetchFollowingCalls');
+
+    // 显式把抓取条数设为 50：crawlLimit 默认值为 20，直接断言易与默认值混淆
+    await page.locator('#zone-following button.split-btn-arrow').click();
+    await page.locator('#menu-following.split-btn-menu.open .split-btn-item', { hasText: '50 条' }).click();
+    await expectTextToBe(page.locator('#label-crawl-following'), '🔄 抓取最新 (50条)');
+
+    await page.locator('#zone-following button.split-btn-main').click();
+
+    // pages = Math.ceil(50 / 20) = 3
+    const calls = await waitUntil(
+      () => recorded('fetchFollowingCalls'),
+      (v) => v.length >= 1
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({ pages: 3, limit: 50 });
+  });
+
+  it('Flow 14: Search Crawl Passes Query And MinLikes Threshold', async () => {
+    await resetRecording('searchTweetsCalls');
+
+    // 先切到 50+ 赞门槛，使 minLikes 进入抓取入参
+    await page.locator('.fmt-chip', { hasText: '50+ 赞' }).click();
+
+    await page.locator('#chip-source-search').click();
+    await page.locator('#search-query-input').fill('LLM');
+    await page.waitForTimeout(500); // 250ms 防抖 + 列表重载
+    await page.locator('#zone-search button.split-btn-main').click();
+
+    const calls = await waitUntil(
+      () => recorded('searchTweetsCalls'),
+      (v) => v.length >= 1
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query).toBe('LLM');
+    expect(calls[0].opts.minLikes).toBe(50);
+
+    // 复位门槛，避免污染后续 Flow
+    await page.locator('.fmt-chip', { hasText: '全部' }).first().click();
+  });
+
+  it('Flow 15: User And List Crawls Strip Prefixes And Parse Ids', async () => {
+    await resetRecording('fetchUserCalls');
+    await resetRecording('fetchListCalls');
+
+    // --- user 源：剥离 @ 前缀 ---
+    await page.locator('#chip-source-user').click();
+    await page.locator('#user-handle-input').fill('@karpathy');
+    await page.waitForTimeout(500);
+    await page.locator('#zone-user button.split-btn-main').click();
+
+    const userCalls = await waitUntil(
+      () => recorded('fetchUserCalls'),
+      (v) => v.length >= 1
+    );
+    expect(userCalls[0].username).toBe('karpathy');
+
+    // --- lists 源：先选 custom 才会渲染自定义输入框，再从 URL 解析纯数字 ID ---
+    await page.locator('#chip-source-lists').click();
+    await page.locator('#list-select').selectOption('custom');
+    await page.locator('#custom-list-input').fill('https://x.com/i/lists/1234567890');
+    await page.waitForTimeout(500);
+    await page.locator('#zone-lists button.split-btn-main').click();
+
+    const listCalls = await waitUntil(
+      () => recorded('fetchListCalls'),
+      (v) => v.length >= 1
+    );
+    expect(listCalls[0].listId).toBe('1234567890');
+  });
+
+  it('Flow 16: Live Crawl Progress Card Reflects Streaming Events', async () => {
+    await page.locator('#chip-source-following').click();
+    await page.locator('#stream-filter-input').waitFor({ state: 'visible' });
+
+    // 触发抓取后，进度卡片由 handleCrawl 立即创建
+    await page.locator('#zone-following button.split-btn-main').click();
+    await page.locator('#crawl-progress-card').waitFor({ state: 'visible' });
+
+    // 模拟主进程推送 done 事件
+    await page.evaluate(() => {
+      (window as any).__streamCallback({ taskId: 't1', stage: 'done', text: '已落库 12 条' });
+    });
+    await expectTextToContain(page.locator('#crawl-progress-card'), '抓取完成');
+    await expectTextToContain(page.locator('#crawl-progress-card'), '已落库 12 条');
+
+    // 模拟 error 事件（三态中的失败态）
+    await page.evaluate(() => {
+      (window as any).__streamCallback({ taskId: 't1', stage: 'error', text: '触发风控拦截' });
+    });
+    await expectTextToContain(page.locator('#crawl-progress-card'), '抓取失败');
+    await expectTextToContain(page.locator('#crawl-progress-card'), '触发风控拦截');
+  });
+
+  it('Flow 17: Load More Button Reflects Exhausted State And Is Disabled', async () => {
+    await page.locator('#chip-source-following').click();
+    await page.locator('#stream-filter-input').waitFor({ state: 'visible' });
+
+    // mock 库共 5 条，默认拉取 50 条 → 已达上限
+    await expectTextToBe(page.locator('#btn-load-more'), '✓ 已是全部推文');
+    const disabled = await waitUntil(
+      () => page.locator('#btn-load-more').isDisabled(),
+      (v) => v === true
+    );
+    expect(disabled).toBe(true);
+
+    // 过滤到更少结果时仍保持"已全部"。
+    // 注意：mock 的 listTweets 只对推文正文做关键词过滤、不匹配作者名，
+    // 因此关键词必须取自 mock 正文中真实存在的片段。
+    await page.locator('#stream-filter-input').fill('GPT');
+    await page.waitForTimeout(500);
+    await expectTextToBe(page.locator('#btn-load-more'), '✓ 已是全部推文');
+
+    await page.locator('#stream-filter-input').fill('');
+    await page.waitForTimeout(500);
+  }, 30000);
+
+  it('Flow 18: Empty States And Escape Key Dismissals', async () => {
+    // --- 空态：过滤到无结果时展示空态文案 ---
+    await page.locator('#chip-source-following').click();
+    await page.locator('#stream-filter-input').waitFor({ state: 'visible' });
+    await page.locator('#stream-filter-input').fill('zzz绝对不存在的关键词zzz');
+    await page.waitForTimeout(500);
+    await expectTextToContain(page.locator('#feed-list-container'), '本地暂无关注流推文');
+
+    await page.locator('#stream-filter-input').fill('');
+    await page.waitForTimeout(500);
+
+    // --- Escape 关闭下拉菜单 ---
+    await page.locator('#zone-following button.split-btn-arrow').click();
+    await page.locator('#menu-following').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    const menuClass = await waitUntil(
+      () => page.locator('#menu-following').getAttribute('class'),
+      (v) => !(v || '').includes('open')
+    );
+    expect(menuClass).not.toContain('open');
+
+    // --- Escape 关闭灯箱（选一条带配图的推文：mock 第 4 条 LuBtc）---
+    await page.locator('.feed-item').nth(3).click();
+    await page.locator('#tweet-detail-media img').waitFor({ state: 'visible' });
+    await page.locator('#tweet-detail-media img').first().click();
+    await page.locator('#image-preview-modal').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await page.locator('#image-preview-modal').waitFor({ state: 'hidden' });
   });
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Tweet, XListInfo, TweetQueryOptions, StudioJumpAction } from '../types.js';
+import type { StreamEvent } from '../../../preload/index.js';
 import { api } from '../services/api.js';
 import { TweetMarkdown, renderInlineMarkdown } from '../components/TweetMarkdown.js';
 
@@ -10,6 +11,56 @@ interface StudioViewProps {
 
 type DataSource = 'following' | 'search' | 'user' | 'lists';
 
+export interface BuildQueryParams {
+  streamFilter: string;
+  searchQuery: string;
+  userHandle: string;
+  /** 可能是 'custom' 哨兵值 */
+  selectedList: string;
+  customListId: string;
+  /** 显式覆盖，undefined 表示不覆盖 */
+  queryParam?: string;
+  userParam?: string;
+  listIdParam?: string;
+}
+
+/**
+ * 依据当前数据源构造本地查询过滤条件。
+ * 注意：search 源的 sourceType 为 'all'（检索本地全库），并非 'search'。
+ */
+export function buildQueryOptions(
+  source: DataSource,
+  params: BuildQueryParams
+): { sourceType: TweetQueryOptions['sourceType']; query?: string; user?: string; listId?: string } {
+  let sourceType: TweetQueryOptions['sourceType'] = 'following';
+  let q: string | undefined = undefined;
+  let u: string | undefined = undefined;
+  let lId: string | undefined = undefined;
+
+  if (source === 'user') {
+    sourceType = 'user';
+    u = (params.userParam !== undefined ? params.userParam : params.userHandle).trim().replace(/^@/, '') || undefined;
+  } else if (source === 'search') {
+    // 全网搜索工作台：检索本地推文库，为空时不添加任何关键词过滤（查全库），有词时全库模糊搜索
+    sourceType = 'all';
+    q = (params.queryParam !== undefined ? params.queryParam : params.searchQuery).trim() || undefined;
+  } else if (source === 'lists') {
+    sourceType = 'list';
+    lId = (
+      params.listIdParam !== undefined
+        ? params.listIdParam
+        : params.selectedList === 'custom'
+        ? params.customListId
+        : params.selectedList
+    ).trim() || undefined;
+  } else {
+    sourceType = 'following';
+    q = (params.queryParam !== undefined ? params.queryParam : params.streamFilter).trim() || undefined;
+  }
+
+  return { sourceType, query: q, user: u, listId: lId };
+}
+
 export function isVideoUrl(url?: string): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
@@ -19,6 +70,182 @@ export function isVideoUrl(url?: string): boolean {
 export function isTweetVideo(tweet: Partial<Tweet>): boolean {
   if (tweet.video_url) return true;
   return Boolean(tweet.media_urls && tweet.media_urls.some((m) => isVideoUrl(m)));
+}
+
+// ============================================================================
+// 可测业务逻辑：抽离自组件内联实现，供单元测试独立覆盖
+// 契约见 openspec/changes/2026-09-30-test-regression-net/design.md
+// ============================================================================
+
+/** X 专栏文章链接特征（urls 或正文中） */
+const ARTICLE_URL_PATTERN = /(?:x\.com|twitter\.com)\/i\/article\/\d+/i;
+/** 官方长推截断体特征：正文以省略号 + t.co 结尾 */
+const TRUNCATED_BODY_PATTERN = /…\s*https:\/\/t\.co\/\S+$/i;
+
+export interface TweetClassification {
+  /** 是否为 X 专栏文章 (Article) */
+  isArticle: boolean;
+  /** 是否为长推文 (Note Tweet) */
+  isLong: boolean;
+}
+
+/**
+ * 判定推文的专栏/长推文属性。
+ * 两个布尔值独立计算，UI 上的互斥优先级由调用方负责。
+ */
+export function classifyTweet(tweet: Partial<Tweet>): TweetClassification {
+  const isArticle = Boolean(
+    tweet.is_article ||
+    tweet.urls?.some((u) => ARTICLE_URL_PATTERN.test(u)) ||
+    (tweet.text && ARTICLE_URL_PATTERN.test(tweet.text)) ||
+    tweet.text?.startsWith('# ')
+  );
+  const isLong = Boolean(
+    tweet.is_note_tweet ||
+    (tweet.text && tweet.text.length > 280) ||
+    (tweet.text && TRUNCATED_BODY_PATTERN.test(tweet.text.trim()))
+  );
+  return { isArticle, isLong };
+}
+
+export interface TweetMedia {
+  isVideo: boolean;
+  videoUrl?: string;
+  /** 非视频推文恒为 undefined，严禁把首张真实配图排挤掉 */
+  posterUrl?: string;
+  /** 已剔除视频 URL；视频推文额外剔除封面 */
+  displayImages: string[];
+}
+
+/** 提取推文的展示媒体：视频直链、视频封面与图集。 */
+export function extractMedia(tweet: Partial<Tweet>): TweetMedia {
+  const isVideo = isTweetVideo(tweet);
+  const videoUrl = tweet.video_url || tweet.media_urls?.find((m) => isVideoUrl(m));
+  // 只有视频推文才提取 video_poster；非视频推文 posterUrl 必须为 undefined，严禁把首张配图排挤掉
+  const posterUrl = isVideo
+    ? tweet.video_poster ||
+      tweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
+      tweet.media_urls?.find((m) => !isVideoUrl(m)) ||
+      undefined
+    : undefined;
+  // 非视频推文展示全部真实配图；视频推文若有 posterUrl 则在视频播放器展示封面
+  const displayImages = (tweet.media_urls || []).filter(
+    (m) => !isVideoUrl(m) && (isVideo && posterUrl ? m !== posterUrl : true)
+  );
+  return { isVideo, videoUrl, posterUrl, displayImages };
+}
+
+/** 对本地已加载推文做关键词内存过滤：匹配正文、作者昵称、作者用户名，大小写不敏感。 */
+export function filterTweetsByKeyword(tweets: Tweet[], keyword: string): Tweet[] {
+  if (!keyword.trim()) return tweets;
+  const q = keyword.toLowerCase().trim();
+  return tweets.filter(
+    (t) =>
+      (t.text && t.text.toLowerCase().includes(q)) ||
+      (t.author_name && t.author_name.toLowerCase().includes(q)) ||
+      (t.author_username && t.author_username.toLowerCase().includes(q))
+  );
+}
+
+export interface CrawlProgress {
+  active: boolean;
+  source: DataSource;
+  title: string;
+  stage: string;
+  detail: string;
+  percent: number;
+  completed?: boolean;
+  error?: string;
+}
+
+/**
+ * 归约主进程推送的抓取流式事件（普通进度 / 完成 / 失败三态）。
+ * fallbackSource 显式传入，避免归约逻辑对闭包 dataSource 产生隐式依赖。
+ */
+export function reduceStreamEvent(
+  prev: CrawlProgress | null,
+  event: StreamEvent,
+  fallbackSource: DataSource
+): CrawlProgress | null {
+  if (!event) return prev;
+  if (event.stage === 'error') {
+    return prev
+      ? {
+          ...prev,
+          stage: '抓取失败',
+          detail: event.text || '发生未知错误',
+          percent: 100,
+          error: event.text,
+        }
+      : null;
+  }
+  if (event.stage === 'done') {
+    return prev
+      ? {
+          ...prev,
+          stage: '抓取完成',
+          detail: event.text || '已完成落库去重',
+          percent: 100,
+          completed: true,
+        }
+      : null;
+  }
+  return {
+    active: true,
+    source: prev?.source || fallbackSource,
+    title: prev?.title || '正在抓取推文数据',
+    stage: event.text || '正在处理...',
+    detail: `进度: ${event.progress || 50}%`,
+    percent: event.progress || 50,
+  };
+}
+
+/** 格式化推文绝对时间；日期不可解析时回退返回原始字符串。 */
+export function formatTweetDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false });
+  } catch {
+    return iso;
+  }
+}
+
+// --- 抓取前置守卫与入参计算 -------------------------------------------------
+
+/** 抓取条数换算为分页数（每页 20 条，至少一页）。 */
+export function computePages(limit: number): number {
+  return Math.max(1, Math.ceil(limit / 20));
+}
+
+/** 从搜索词或 URL 中提取推文 ID；无匹配返回 undefined。 */
+export function extractTweetIdFromQuery(query: string): string | undefined {
+  const m = query.match(/status\/(\d{5,})/) || query.match(/^(\d{5,})$/);
+  return m ? m[1] : undefined;
+}
+
+/** 从列表 ID 或列表 URL 中解析出纯数字列表 ID。 */
+export function resolveListId(raw: string): string {
+  const m = raw.match(/(\d{5,})/);
+  return m ? m[1] : raw;
+}
+
+/**
+ * 抓取目标合法性校验。
+ * 仅对 search / user 两个需要用户输入的源做校验；
+ * following 恒有效，lists 的 ID 校验由 handleCrawl 内的空值分支单独处理。
+ */
+export function validateCrawlTarget(
+  source: DataSource,
+  target: string
+): { ok: true } | { ok: false; message: string } {
+  if (source === 'search') {
+    if (!target.trim()) return { ok: false, message: '请输入要搜索的关键词' };
+  } else if (source === 'user') {
+    if (!target.trim().replace(/^@/, '')) {
+      return { ok: false, message: '请输入要追踪的博主用户名（如 @username）' };
+    }
+  }
+  return { ok: true };
 }
 
 /**
@@ -578,16 +805,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
   const activeTweetIdRef = useRef<string | null>(null);
 
   // Live Crawl Progress State
-  const [crawlProgress, setCrawlProgress] = useState<{
-    active: boolean;
-    source: DataSource;
-    title: string;
-    stage: string;
-    detail: string;
-    percent: number;
-    completed?: boolean;
-    error?: string;
-  } | null>(null);
+  const [crawlProgress, setCrawlProgress] = useState<CrawlProgress | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -653,41 +871,9 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
   useEffect(() => {
     const unsubscribe = api.onStreamEvent((event) => {
       if (!event) return;
-      if (event.stage === 'error') {
-        setCrawlProgress((prev) =>
-          prev
-            ? {
-                ...prev,
-                stage: '抓取失败',
-                detail: event.text || '发生未知错误',
-                percent: 100,
-                error: event.text,
-              }
-            : null
-        );
+      setCrawlProgress((prev) => reduceStreamEvent(prev, event, dataSource));
+      if (event.stage === 'error' || event.stage === 'done') {
         setIsLoading(false);
-      } else if (event.stage === 'done') {
-        setCrawlProgress((prev) =>
-          prev
-            ? {
-                ...prev,
-                stage: '抓取完成',
-                detail: event.text || '已完成落库去重',
-                percent: 100,
-                completed: true,
-              }
-            : null
-        );
-        setIsLoading(false);
-      } else {
-        setCrawlProgress((prev) => ({
-          active: true,
-          source: prev?.source || dataSource,
-          title: prev?.title || '正在抓取推文数据',
-          stage: event.text || '正在处理...',
-          detail: `进度: ${event.progress || 50}%`,
-          percent: event.progress || 50,
-        }));
       }
     });
 
@@ -726,24 +912,16 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
   ) => {
     setIsLoading(true);
     try {
-      let sourceType: TweetQueryOptions['sourceType'] = 'following';
-      let q: string | undefined = undefined;
-      let u: string | undefined = undefined;
-      let lId: string | undefined = undefined;
-
-      if (source === 'user') {
-        sourceType = 'user';
-        u = (userParam !== undefined ? userParam : userHandle).trim().replace(/^@/, '') || undefined;
-      } else if (source === 'search') {
-        sourceType = 'all'; // 全网搜索工作台：检索本地推文库，为空时不添加任何关键词过滤（查全库），有词时全库模糊搜索
-        q = (queryParam !== undefined ? queryParam : searchQuery).trim() || undefined;
-      } else if (source === 'lists') {
-        sourceType = 'list';
-        lId = (listIdParam !== undefined ? listIdParam : (selectedList === 'custom' ? customListId : selectedList)).trim() || undefined;
-      } else {
-        sourceType = 'following';
-        q = (queryParam !== undefined ? queryParam : streamFilter).trim() || undefined;
-      }
+      const { sourceType, query: q, user: u, listId: lId } = buildQueryOptions(source, {
+        streamFilter,
+        searchQuery,
+        userHandle,
+        selectedList,
+        customListId,
+        queryParam,
+        userParam,
+        listIdParam,
+      });
 
       const offset = isAppend ? tweets.length : 0;
       const [data, totalCount] = await Promise.all([
@@ -887,22 +1065,24 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
 
     let title = '正在从 X 官方流实时抓取关注流';
     const effectiveQuery = (overrideTarget !== undefined ? overrideTarget : searchQuery).trim();
+    const effectiveUser = (overrideTarget !== undefined ? overrideTarget : userHandle).trim();
+    const userGuard = validateCrawlTarget('user', effectiveUser);
 
     if (source === 'search') {
-      if (!effectiveQuery) {
-        showToast('请输入要搜索的关键词');
+      const guard = validateCrawlTarget('search', effectiveQuery);
+      if (!guard.ok) {
+        showToast(guard.message);
         setIsLoading(false);
         return;
       }
       title = `正在全网实时搜索关键词「${effectiveQuery}」`;
     } else if (source === 'user') {
-      const u = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
-      if (!u) {
-        showToast('请输入要追踪的博主用户名（如 @username）');
+      if (!userGuard.ok) {
+        showToast(userGuard.message);
         setIsLoading(false);
         return;
       }
-      title = `正在抓取博主 @${u} 的推文包`;
+      title = `正在抓取博主 @${effectiveUser.replace(/^@/, '')} 的推文包`;
     } else if (source === 'lists') {
       title = '正在从 X 列表实时抓取推文';
     }
@@ -935,15 +1115,14 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
       let skippedCount = 0;
 
       if (source === 'following') {
-        const pages = Math.max(1, Math.ceil(crawlLimit / 20));
+        const pages = computePages(crawlLimit);
         const res = await api.fetchFollowing({ pages, limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
         skippedCount = res.skipped;
       } else if (source === 'search') {
-        const matchId = effectiveQuery.match(/status\/(\d{5,})/) || effectiveQuery.match(/^(\d{5,})$/);
-        if (matchId) {
-          const tweetId = matchId[1];
+        const tweetId = extractTweetIdFromQuery(effectiveQuery);
+        if (tweetId) {
           showToast(`正在精准同步推文【${tweetId}】完整全文...`);
           const res = await api.viewTweet(tweetId, { forceRefresh: true, exportMd: true });
           fetchedCount = 1;
@@ -957,7 +1136,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
           insertedCount = res.count;
         }
       } else if (source === 'user') {
-        const handle = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
+        const handle = effectiveUser.replace(/^@/, '');
         const res = await api.fetchUser(handle, { limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
@@ -974,8 +1153,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
           clearTimeout(progressTimer);
           return;
         }
-        const match = listId.match(/(\d{5,})/);
-        const cleanId = match ? match[1] : listId;
+        const cleanId = resolveListId(listId);
 
         const res = await api.fetchList(cleanId, { limit: crawlLimit });
         fetchedCount = res.fetched;
@@ -1220,23 +1398,20 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
   };
 
   // Instant In-Memory Filter
-  const filteredTweets = tweets.filter((t) => {
-    if (!streamFilter.trim()) return true;
-    const q = streamFilter.toLowerCase().trim();
-    return (
-      (t.text && t.text.toLowerCase().includes(q)) ||
-      (t.author_name && t.author_name.toLowerCase().includes(q)) ||
-      (t.author_username && t.author_username.toLowerCase().includes(q))
-    );
-  });
+  const filteredTweets = filterTweetsByKeyword(tweets, streamFilter);
 
   const allChecked = filteredTweets.length > 0 && checkedIds.size === filteredTweets.length;
+
+  // 详情栏的专栏/长推文判定（未选中推文时为 null，JSX 内以可选链消费）
+  const detailClassification = selectedTweet ? classifyTweet(selectedTweet) : null;
 
   return (
     <main id="view-studio" className="view-container active">
       {/* Toast Notification */}
       {toastMessage && (
         <div
+          id="toast-message"
+          role="status"
           style={{
             position: 'fixed',
             top: '76px',
@@ -1743,6 +1918,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
               const avatarLetter = (tweet.author_name || tweet.author_username || 'X')[0].toUpperCase();
               const displayTitle = getTweetListDisplayTitle(tweet.text);
               const relTime = formatRelativeTime(tweet.created_at);
+              const { isArticle, isLong } = classifyTweet(tweet);
 
               return (
                 <div
@@ -1777,12 +1953,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
 
                   {/* 第 2 行：推文单行精炼标题/第一行文字 (§1 单行溢出省略，杜绝冗余次级摘要) */}
                   <div className="feed-item-title-row">
-                    {Boolean(
-                      tweet.is_article ||
-                        tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
-                        (tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text)) ||
-                        tweet.text?.startsWith('# ')
-                    ) ? (
+                    {isArticle ? (
                       <span
                         className="feed-tag"
                         style={{
@@ -1793,11 +1964,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                       >
                         📰 专栏文章
                       </span>
-                    ) : Boolean(
-                      tweet.is_note_tweet ||
-                        (tweet.text && tweet.text.length > 280) ||
-                        (tweet.text && /…\s*https:\/\/t\.co\/\S+$/i.test(tweet.text.trim()))
-                    ) ? (
+                    ) : isLong ? (
                       <span
                         className="feed-tag"
                         style={{
@@ -1909,12 +2076,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                       <h3 id="tweet-detail-name" className="serif-title" style={{ fontSize: '17px' }}>
                         {selectedTweet.author_name || selectedTweet.author_username}
                       </h3>
-                      {Boolean(
-                        selectedTweet.is_article ||
-                          selectedTweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
-                          (selectedTweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(selectedTweet.text)) ||
-                          selectedTweet.text?.startsWith('# ')
-                      ) ? (
+                      {detailClassification?.isArticle ? (
                         <span
                           style={{
                             fontSize: '11px',
@@ -1927,11 +2089,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                         >
                           📰 专栏文章 (X Article)
                         </span>
-                      ) : Boolean(
-                        selectedTweet.is_note_tweet ||
-                          (selectedTweet.text && selectedTweet.text.length > 280) ||
-                          (selectedTweet.text && /…\s*https:\/\/t\.co\/\S+$/i.test(selectedTweet.text.trim()))
-                      ) ? (
+                      ) : detailClassification?.isLong ? (
                         <span
                           style={{
                             fontSize: '11px',
@@ -1952,14 +2110,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                       )}
                     </div>
                     <div id="tweet-detail-handle" style={{ fontSize: '12.5px', color: 'var(--ink-faint)' }}>
-                      @{selectedTweet.author_username} · {(() => {
-                        try {
-                          const d = new Date(selectedTweet.created_at);
-                          return isNaN(d.getTime()) ? selectedTweet.created_at : d.toLocaleString('zh-CN', { hour12: false });
-                        } catch {
-                          return selectedTweet.created_at;
-                        }
-                      })()}
+                      @{selectedTweet.author_username} · {formatTweetDate(selectedTweet.created_at)}
                     </div>
                   </div>
                 </div>
@@ -2160,19 +2311,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
 
               {/* 本地媒体（视频与配图）预览容器 */}
               {(() => {
-                const isVideo = isTweetVideo(selectedTweet);
-                const videoUrl = selectedTweet.video_url || selectedTweet.media_urls?.find((m) => isVideoUrl(m));
-                // 只有视频推文才提取 video_poster；非视频推文 posterUrl 必须为 undefined，严禁把首张配图排挤掉
-                const posterUrl = isVideo
-                  ? selectedTweet.video_poster ||
-                    selectedTweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
-                    selectedTweet.media_urls?.find((m) => !isVideoUrl(m)) ||
-                    undefined
-                  : undefined;
-                // 非视频推文展示全部真实配图；视频推文若有 posterUrl 则在视频播放器展示封面
-                const displayImages = (selectedTweet.media_urls || []).filter(
-                  (m) => !isVideoUrl(m) && (isVideo && posterUrl ? m !== posterUrl : true)
-                );
+                const { isVideo, videoUrl, posterUrl, displayImages } = extractMedia(selectedTweet);
 
                 return (
                   <>
