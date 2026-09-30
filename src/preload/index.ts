@@ -22,6 +22,7 @@ export interface AppConfigView {
   xAuthTokenMasked: string;
   xCt0Masked: string;
   onlyLongTweets: boolean;
+  fetchAuthorReplies: boolean;
 }
 
 export interface XtractAPI {

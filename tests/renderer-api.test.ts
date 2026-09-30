@@ -13,6 +13,7 @@ describe('Renderer API Service (Dual-Mode: Standalone Browser & Electron Bridge)
     expect(cfg.llmProvider).toBe('gemini');
     expect(cfg.reasoningEnabled).toBe(true);
     expect(cfg.reasoningEffort).toBe('high');
+    expect(cfg.fetchAuthorReplies).toBe(false);
   });
 
   it('updateConfig should update in-memory config in standalone mode', async () => {
@@ -20,11 +21,13 @@ describe('Renderer API Service (Dual-Mode: Standalone Browser & Electron Bridge)
       LLM_REASONING_ENABLED: 'false',
       LLM_REASONING_EFFORT: 'low',
       LLM_PROVIDER: 'deepseek',
+      FETCH_AUTHOR_REPLIES: 'true',
     });
     expect(res.success).toBe(true);
     expect(res.config.reasoningEnabled).toBe(false);
     expect(res.config.reasoningEffort).toBe('low');
     expect(res.config.llmProvider).toBe('deepseek');
+    expect(res.config.fetchAuthorReplies).toBe(true);
   });
 
   it('fetchFollowing, fetchUser, fetchList should return simulated crawl results', async () => {

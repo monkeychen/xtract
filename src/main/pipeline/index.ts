@@ -175,11 +175,14 @@ export class Pipeline {
 
   async fetchTweetAndStore(
     tweetIdOrUrl: string,
-    timeout?: number
+    options?: { timeout?: number; fetchAuthorReplies?: boolean } | number
   ): Promise<Tweet[]> {
+    const opts = typeof options === 'number' ? { timeout: options } : options;
+    const timeout = opts?.timeout;
+    const fetchAuthorReplies = opts?.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
     process.stderr.write(`⏳ 开始抓取推文 (${tweetIdOrUrl})...\n`);
 
-    const tweets = await this.client.fetchTweetThread(tweetIdOrUrl, { timeout });
+    const tweets = await this.client.fetchTweetThread(tweetIdOrUrl, { timeout, fetchAuthorReplies });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从 X 拉取到 ${fetchedCount} 条相关推文\n`);
 

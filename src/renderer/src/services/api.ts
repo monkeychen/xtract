@@ -42,6 +42,7 @@ class ApiService {
       xAuthTokenMasked: '2a8f••••••••78b9',
       xCt0Masked: 'c901••••••••55aa',
       onlyLongTweets: true,
+      fetchAuthorReplies: false,
     };
   }
 
@@ -62,6 +63,7 @@ class ApiService {
         llmModel: updates.LLM_MODEL || current.llmModel,
         httpProxy: updates.HTTP_PROXY || current.httpProxy,
         onlyLongTweets: updates.FETCH_ONLY_LONG_TWEETS !== undefined ? updates.FETCH_ONLY_LONG_TWEETS !== 'false' : current.onlyLongTweets,
+        fetchAuthorReplies: updates.FETCH_AUTHOR_REPLIES !== undefined ? updates.FETCH_AUTHOR_REPLIES === 'true' : current.fetchAuthorReplies,
       },
     };
   }

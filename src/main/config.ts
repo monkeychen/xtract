@@ -133,6 +133,10 @@ export class Config {
   static get FETCH_ONLY_LONG_TWEETS(): boolean {
     return (process.env.FETCH_ONLY_LONG_TWEETS || 'true').toLowerCase().trim() !== 'false';
   }
+  // Single Tweet Author Replies Filter (单篇推文抓取时是否抓取作者追评/追加回复，默认关闭)
+  static get FETCH_AUTHOR_REPLIES(): boolean {
+    return (process.env.FETCH_AUTHOR_REPLIES || 'false').toLowerCase().trim() === 'true';
+  }
 
   static ensureDirs(): void {
     for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR, this.BROWSER_PROFILE_DIR]) {

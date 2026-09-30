@@ -126,24 +126,29 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.llmProvider).toBe('string');
     expect(typeof config.hasXCredentials).toBe('boolean');
     expect(typeof config.reasoningEnabled).toBe('boolean');
+    expect(typeof config.fetchAuthorReplies).toBe('boolean');
+    expect(config.fetchAuthorReplies).toBe(false);
     expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
   });
 
-  it('Preload updateConfig should update reasoning settings and return updated config', async () => {
+  it('Preload updateConfig should update reasoning and fetchAuthorReplies settings', async () => {
     registerIpcHandlers();
 
     const res = await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'false',
       LLM_REASONING_EFFORT: 'low',
+      FETCH_AUTHOR_REPLIES: 'true',
     });
     expect(res.success).toBe(true);
     expect(res.config.reasoningEnabled).toBe(false);
     expect(res.config.reasoningEffort).toBe('low');
+    expect(res.config.fetchAuthorReplies).toBe(true);
 
     // Restore default
     await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'true',
       LLM_REASONING_EFFORT: 'high',
+      FETCH_AUTHOR_REPLIES: 'false',
     });
   });
 

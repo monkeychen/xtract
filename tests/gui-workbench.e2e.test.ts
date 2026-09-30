@@ -213,6 +213,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           hasXCredentials: true,
           xAuthTokenMasked: '••••••••',
           xCt0Masked: '••••••••',
+          onlyLongTweets: true,
+          fetchAuthorReplies: false,
         }),
         updateConfig: async (updates: any) => ({
           success: true,
@@ -226,6 +228,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
             hasXCredentials: true,
             xAuthTokenMasked: '••••••••',
             xCt0Masked: '••••••••',
+            onlyLongTweets: true,
+            fetchAuthorReplies: updates?.FETCH_AUTHOR_REPLIES === 'true',
           },
         }),
         onStreamEvent: (callback: any) => {
@@ -529,6 +533,20 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await toggleSlider.click();
     await page.waitForTimeout(100);
     expect(await longTweetsToggle.isChecked()).toBe(true);
+
+    // Verify 抓取作者追评开关 is visible and UNCHECKED by default (default false)
+    expect(await page.locator('div', { hasText: '抓取作者追评与追加回复' }).first().isVisible()).toBe(true);
+    const authorRepliesToggle = page.locator('#fetch-author-replies-toggle');
+    expect(await authorRepliesToggle.isChecked()).toBe(false);
+
+    // Toggle author replies switch via slider and back
+    const authorRepliesSlider = page.locator('label.switch:has(#fetch-author-replies-toggle) .slider');
+    await authorRepliesSlider.click();
+    await page.waitForTimeout(100);
+    expect(await authorRepliesToggle.isChecked()).toBe(true);
+    await authorRepliesSlider.click();
+    await page.waitForTimeout(100);
+    expect(await authorRepliesToggle.isChecked()).toBe(false);
 
     await page.locator('button', { hasText: '保存' }).click();
     await page.waitForTimeout(800);

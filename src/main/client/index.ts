@@ -1030,7 +1030,10 @@ export class XClient {
     return allTweets.slice(0, limit);
   }
 
-  async fetchTweetThread(tweetIdOrUrl: string, options?: { timeout?: number }): Promise<Tweet[]> {
+  async fetchTweetThread(
+    tweetIdOrUrl: string,
+    options?: { timeout?: number; fetchAuthorReplies?: boolean }
+  ): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
         '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
@@ -1046,6 +1049,7 @@ export class XClient {
     const targetUrl = `https://x.com/i/status/${cleanId}`;
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
+    const shouldFetchReplies = options?.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
 
     const capturedTweets: Tweet[] = [];
     const browser = await this.launchBrowser(true);
@@ -1084,8 +1088,14 @@ export class XClient {
       for (let i = 0; i < Math.max(30, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedTweets.length > 0) {
-          await new Promise((r) => setTimeout(r, 2000));
-          break;
+          const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
+          if (!shouldFetchReplies && hasMain) {
+            await new Promise((r) => setTimeout(r, 1000));
+            break;
+          } else if (shouldFetchReplies) {
+            await new Promise((r) => setTimeout(r, 2000));
+            break;
+          }
         }
       }
     } finally {
@@ -1101,7 +1111,17 @@ export class XClient {
       }
     }
 
-    return uniqueTweets;
+    // 默认或显式关闭时，仅保留目标主推文本体，过滤掉下方所有作者追评
+    if (!shouldFetchReplies) {
+      return uniqueTweets.filter((t) => t.tweet_id === cleanId);
+    }
+
+    // 显式开启追评时：保留主推文以及该推文作者本人的追加回复（过滤掉非原作者的路人评论）
+    const mainTweet = uniqueTweets.find((t) => t.tweet_id === cleanId);
+    if (!mainTweet) {
+      return uniqueTweets.filter((t) => t.tweet_id === cleanId);
+    }
+    return uniqueTweets.filter((t) => t.author_username === mainTweet.author_username);
   }
 
   async fetchExploreTrends(options?: {

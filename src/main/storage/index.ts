@@ -737,14 +737,15 @@ export class Storage {
 
   public async exportSingleTweetMarkdown(
     tweetId: string,
-    options: { outputPath?: string; downloadImages?: boolean } = {}
+    options: { outputPath?: string; downloadImages?: boolean; fetchAuthorReplies?: boolean } = {}
   ): Promise<{ filePath: string; downloadedImagesCount: number }> {
     const primaryTweet = this.getTweetById(tweetId);
     if (!primaryTweet) {
       throw new Error(`推文 ID \`${tweetId}\` 不存在于本地数据库中。`);
     }
 
-    const thread = this.getThreadTweets(tweetId);
+    const shouldIncludeReplies = options.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
+    const thread = shouldIncludeReplies ? this.getThreadTweets(tweetId) : [];
     const allTweets = thread.length ? thread : [primaryTweet];
 
     const authorUser = primaryTweet.author_username || 'unknown';
@@ -780,9 +781,13 @@ export class Storage {
       '---\n',
     ];
 
+    const isMultiChapter = allTweets.length > 1;
+
     for (let idx = 0; idx < allTweets.length; idx++) {
       const t = allTweets[idx];
-      lines.push(`### 篇章 ${idx + 1} (ID: \`${t.tweet_id}\`)`);
+      if (isMultiChapter) {
+        lines.push(`### 篇章 ${idx + 1} (ID: \`${t.tweet_id}\`)`);
+      }
       lines.push(
         `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\``
       );

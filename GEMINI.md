@@ -76,6 +76,9 @@
 21. **推特视频按需流式加载与零静默流量策略（Demand-Driven Video Streaming & Zero Silent Traffic）**：
     - **为什么**：内置播放器若使用 `preload="metadata"`，会在推文切换瞬间自动向推特视频 CDN（`video.twimg.com`）发起探测请求，遇到代理节点延迟会触发 Chromium 的 `waiting` 事件，造成未点击播放前屏幕中间就冒出缓冲转圈动画，且无故浪费代理节点流量。
     - **对用户的影响**：将视频配置收敛为 `preload="none"` 并设置播放状态安全护栏。未播放时仅展示高清封面图（Poster）与通透的居中大播放按钮【▶】，不消耗 1KB 静默流量，彻底杜绝多余转圈焦虑；只有用户主动点击播放后才按需发起流式缓冲。
+22. **单推追评抓取受控与默认零碎贴策略（Author Replies On-Demand & Default-Off）**：
+    - **为什么**：单篇推文抓取时，旧实现默认将作者全部追加回复一并拉取并存入本地数据库，导致单篇抓取耗时拉长、推文列表被同作者多条碎推文冲刷、本地 Markdown 导出出现冗余篇章碎片。
+    - **对用户的影响**：将作者追加回复抓取抽象为独立受控项，并在 GUI 设置中心与 Headless CLI（`--author-replies` / `--no-author-replies`）双模提供支持，**默认关闭**。仅抓取推文本体，按需开启推文串，既保障了列表的整洁，又赋予了用户完整的控制权。
 
 ### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
 - **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。
@@ -153,7 +156,7 @@ xtract/
   - 查看全网趋势榜单：`pnpm dev:cli -- --trends [--category tech|all|business]`
   - 生成全网趋势深度研报：`pnpm dev:cli -- --trends-digest [--hours 24] [--provider qwen-token-plan]`
   - 关键词实时搜索：`pnpm dev:cli -- --search "<关键词>" [--min-likes 50]`
-  - 查看或导出单篇推文：`pnpm dev:cli -- --view <tweetId|url>`
+  - 查看或导出单篇推文：`pnpm dev:cli -- --view <tweetId|url> [--author-replies | --no-author-replies]`
   - 级联删除推文及本地文件：
     - 按单篇 ID 删除：`pnpm dev:cli -- --delete <tweetId|url> [-y]`
     - 按博主批量删除：`pnpm dev:cli -- --delete --user <username> [-y]`

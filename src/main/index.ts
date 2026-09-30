@@ -55,6 +55,8 @@ if (isCLI) {
     .option('--min-retweets <n>', '最低转发门槛过滤', '0')
     .option('--timeout <seconds>', '网络请求与页面加载超时时间（秒）')
     .option('--all-tweets', '不过滤普通短推文，抓取包含短推文在内的全量推文（默认仅抓取长推文 Note Tweet 与专栏文章 X Article）')
+    .option('--author-replies', '抓取/同步单篇推文时，一并拉取作者本人的追加评论/推文串 (Thread Replies)')
+    .option('--no-author-replies', '抓取/同步单篇推文时，不抓取作者的追加评论（仅保留主推文本体）')
     // LLM Options
     .option(
       '--provider <provider>',
@@ -78,6 +80,12 @@ if (isCLI) {
     const top = parseInt(options.top || '10', 10);
     if (options.allTweets) {
       process.env.FETCH_ONLY_LONG_TWEETS = 'false';
+    }
+
+    // CLI author replies option priority: CLI flags > env > default(false)
+    let fetchAuthorReplies = Config.FETCH_AUTHOR_REPLIES;
+    if (options.authorReplies !== undefined) {
+      fetchAuthorReplies = Boolean(options.authorReplies);
     }
 
     const storage = new Storage();
@@ -137,13 +145,21 @@ if (isCLI) {
         const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
         const isIncomplete = tweet ? isTweetContentIncomplete(tweet) : true;
-        if (!tweet || isIncomplete) {
+        const threadTweets = tweet ? storage.getThreadTweets(tweetId) : [];
+        const missingReplies = fetchAuthorReplies && threadTweets.length <= 1;
+
+        if (!tweet || isIncomplete || missingReplies) {
           const msg = !tweet
             ? `本地数据库未检索到推文 ${tweetId}`
-            : `本地推文 ${tweetId} 包含未展开长文或万字 Article`;
+            : isIncomplete
+            ? `本地推文 ${tweetId} 包含未展开长文或万字 Article`
+            : `已指定 --author-replies，正在拉取作者完整追加回复推文串`;
           process.stderr.write(`🔍 ${msg}，正在从 X 实时抓取完整内容...\n`);
           try {
-            await pipeline.fetchTweetAndStore(tweetId, timeout);
+            await pipeline.fetchTweetAndStore(tweetId, {
+              timeout,
+              fetchAuthorReplies,
+            });
             tweet = storage.getTweetById(tweetId);
           } catch (err: any) {
             process.stderr.write(`❌ 抓取推文失败: ${err.message}\n`);
@@ -160,6 +176,7 @@ if (isCLI) {
           const { filePath } = await storage.exportSingleTweetMarkdown(tweetId, {
             outputPath: options.output,
             downloadImages: true,
+            fetchAuthorReplies,
           });
           exportedMdPath = filePath;
         }
@@ -172,6 +189,11 @@ if (isCLI) {
           process.stdout.write(formatTweetDetail(tweet));
           if (exportedMdPath) {
             process.stdout.write(`🎉 推文已导出为 Markdown 文档: ${exportedMdPath}\n`);
+          }
+          if (!fetchAuthorReplies) {
+            process.stderr.write(
+              `ℹ️ 当前默认不拉取作者追评，如需抓取完整推文串可使用 --author-replies 选项\n`
+            );
           }
         }
         process.exit(0);

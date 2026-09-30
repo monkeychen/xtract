@@ -85,6 +85,7 @@ export function registerIpcHandlers(
       xAuthTokenMasked: mask(Config.X_AUTH_TOKEN),
       xCt0Masked: mask(Config.X_CT0),
       onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+      fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
     };
   });
 
@@ -132,6 +133,7 @@ export function registerIpcHandlers(
           xAuthTokenMasked: mask(process.env.X_AUTH_TOKEN || Config.X_AUTH_TOKEN),
           xCt0Masked: mask(process.env.X_CT0 || Config.X_CT0),
           onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+          fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
         },
       };
     }

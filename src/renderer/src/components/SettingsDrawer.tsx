@@ -24,6 +24,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
   const [onlyLongTweets, setOnlyLongTweets] = useState(true);
+  const [fetchAuthorReplies, setFetchAuthorReplies] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -38,6 +39,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         setReasoningEnabled(cfg.reasoningEnabled !== false);
         setReasoningEffort(cfg.reasoningEffort || 'high');
         setOnlyLongTweets(cfg.onlyLongTweets !== false);
+        setFetchAuthorReplies(cfg.fetchAuthorReplies === true);
       });
       setSaveSuccess(false);
     }
@@ -71,6 +73,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       LLM_REASONING_ENABLED: String(reasoningEnabled),
       LLM_REASONING_EFFORT: reasoningEffort,
       FETCH_ONLY_LONG_TWEETS: String(onlyLongTweets),
+      FETCH_AUTHOR_REPLIES: String(fetchAuthorReplies),
     });
     setIsSaving(false);
     onConfigUpdated();
@@ -256,7 +259,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
               抓取过滤规则
             </h3>
-            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)', marginBottom: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ paddingRight: '12px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
@@ -272,6 +275,28 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                     id="only-long-tweets-toggle"
                     checked={onlyLongTweets}
                     onChange={(e) => setOnlyLongTweets(e.target.checked)}
+                  />
+                  <span className="slider" />
+                </label>
+              </div>
+            </div>
+
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ paddingRight: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
+                    抓取作者追评与追加回复 (Author Replies & Thread)
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginTop: '2px', lineHeight: 1.4 }}>
+                    单篇推文抓取时，是否一并拉取作者本人在下方追加的连续回复/长串推文（默认关闭，仅抓取推文本体）
+                  </div>
+                </div>
+                <label className="switch" style={{ flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    id="fetch-author-replies-toggle"
+                    checked={fetchAuthorReplies}
+                    onChange={(e) => setFetchAuthorReplies(e.target.checked)}
                   />
                   <span className="slider" />
                 </label>
