@@ -12,14 +12,13 @@
 
 ## 3. UI Component & View Implementation
 
-- [x] 3.1 在 `src/renderer/src/views/ReportsView.tsx` 中实现「💡 选题便签栏」与「引文卡片一键点击直达工作台高亮原推」的联动机制
-- [x] 3.2 在 `src/renderer/src/views/TrendsView.tsx` 中实现分类热榜看板、AI 检索短语呈现、以及点击下钻到工作台自动执行检索
-- [x] 3.3 在 `src/renderer/src/views/StudioView.tsx` 中补齐关注流/搜索/博主/Lists 四大源切换、信噪比滑块过滤、Page Bundle 本地配图预览、以及级联物理清理弹窗
-- [x] 3.4 在 `src/renderer/src/components/SettingsDrawer.tsx` 中实现大模型推理开关（ON/OFF）及低/中/高三级强度选择器，并实现与后端持久化同步
+- [x] 3.1 剥离不可用二级 Tab，聚焦单一「XTRACT 情报工作台 (StudioView)」，以顶部四维 Chip 承载关注流、全网搜索、博主追踪与 X 列表
+- [x] 3.2 在 `src/renderer/src/views/StudioView.tsx` 中补齐关注流/搜索/博主/Lists 四大源切换、信噪比滑块过滤、Page Bundle 本地配图预览、以及级联物理清理弹窗
+- [x] 3.3 在 `src/renderer/src/components/SettingsDrawer.tsx` 中实现大模型推理开关（ON/OFF）及低/中/高三级强度选择器，并实现与后端持久化同步
 
 ## 4. Verification & Testing
 
-- [x] 4.1 运行全套自动化测试 `pnpm test`，确保原有 31 个测试用例及新增 IPC 契约测试 100% 通过
+- [x] 4.1 运行全套自动化测试 `pnpm test`，确保原有测试用例及新增 IPC 契约测试 100% 通过
 - [x] 4.2 执行生产构建 `npx tsc --noEmit && npx vite build`，确保无类型错误且打包耗时与体积达标
 
 ## 5. Data Invariants, Real Counting & Cascade Cleanup Enforcement
@@ -45,7 +44,7 @@
 - [x] 7.2 列表有效性主动检测与明确报错：识别 X 404 / 不存在 / 私密页面状态，遇到无效列表即时抛出清晰可操作的错误引导，杜绝静默返回 0 篇
 - [x] 7.3 `fetchListTimeline` 智能轮询与双轨抽取：拦截命中或推文渲染即刻提前结束，耗时从 30s 缩减至 4s；自动提取 `ListByRestId` 真实名称并持久化
 - [x] 7.4 `fetchUserLists` 统一升级为官方 `/i/lists` 路由，账号无自建列表时优雅降级并引导输入公开链接
-- [x] 7.5 全量自动化测试与真实抓取验证：确保所有既有 10 套测试及新增 List 校验测试 100% 通过，生产构建 0 错误
+- [x] 7.5 全量自动化测试与真实抓取验证：确保所有既有测试及新增 List 校验测试 100% 通过，生产构建 0 错误
 
 ## 8. Multi-Source Search Intent Relaxation & List ID Isolation
 
@@ -65,5 +64,41 @@
 - [x] 10.1 X Article 原生万字长文嗅探：识别正文及链接中的 `x.com/i/article/...` 深度文章，工作台推文项打上「📰 深度长文」专属标签
 - [x] 10.2 长文自动/手动同步拉取：在详情页支持一键同步或自动拉取上万字完整长文与高清配图并导出 Page Bundle
 - [x] 10.3 前端异步请求防竞态守卫：在 `handleSelectTweet` 中引入 `activeTweetIdRef` 守卫，丢弃快速切换推文时的过期请求回调，杜绝详情覆盖跳变
-- [x] 10.4 全量验收门禁：运行全套 10 套单测 72 个用例全部 PASS，tsc 0 错误，vite 生产构建 0 错误
+- [x] 10.4 全量验收门禁：运行全套单测与 E2E 测试全部 PASS，tsc 0 错误，vite 生产构建 0 错误
 
+## 11. Strict Fetch Limit Contract & Early Termination
+
+- [x] 11.1 全链路贯通 `limit` 参数契约：UI 下拉选单（20 / 50 / 100）-> IPC -> Pipeline -> XClient 全程透传明确条数
+- [x] 11.2 向下滚动加载早停机制：在滚动循环中动态统计已捕获推文，一旦 `countSoFar >= limit` 立即提前 break 退出循环，大幅缩短抓取等待时间
+- [x] 11.3 精准切片入库保证：返回前严格执行 `allTweets.slice(0, limit)`，入库条数与前端展示 100% 吻合
+
+## 12. macOS Native Window Lifecycle Management
+
+- [x] 12.1 拦截窗口 `close` 事件：macOS 平台下默认调用 `win.hide()`，保持后台常驻不销毁 Chromium 实例与 IPC 状态
+- [x] 12.2 监听 `app.on('activate')`：用户点击 Dock 图标时瞬间无感恢复主视窗并置顶 (`win.show(); win.focus()`)
+- [x] 12.3 规范退出管理：监听 `before-quit` 设置 `isQuitting = true`，确保快捷键 Cmd+Q 或菜单退出时平滑释放资源
+
+## 13. Rich Hyperlink Formatting & Clean Media T.co Stripping
+
+- [x] 13.1 正文尾缀媒体短链清洗：利用正则 `/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g` 自动修剪仅作为媒体展示的末尾无意义短链
+- [x] 13.2 严格边界外链替换：使用非贪婪正则将正文中的 `https://t.co/xxx` 转换为 `[display_url](expanded_url)` 标准 Markdown 格式，绝不误吞中文字符
+- [x] 13.3 数据库存量迁移自愈：`initDb` 自动执行增量事务迁移，利用存量推文的 `urls` 元数据将历史残留 `t.co` 平滑自愈为 Markdown 链接
+
+## 14. Long Content Filtering & Normalized Newlines Pipeline
+
+- [x] 14.1 默认长推文/专栏过滤：抓取链路默认仅保留 Note Tweet（>280字或截断）与 X Article，单句闲聊碎碎念直接过滤；CLI 支持 `--all-tweets` 覆盖
+- [x] 14.2 设置抽屉可视化开关：在 `SettingsDrawer.tsx` 中增加「抓取过滤规则」即时开关，支持用户一键切换过滤策略
+- [x] 14.3 全链路反转义平滑自愈：在解析、存储、渲染与 Markdown 导出全流程统一部署换行反转义，彻底消灭未经转义的 `\n\n` 字面量字符
+
+## 15. Rich Tweet Markdown Engine & Executive Summary Card
+
+- [x] 15.1 自研原生轻量 AST 渲染组件 `src/renderer/src/components/TweetMarkdown.tsx`，支持 H1~H4 标题、段落行距与中文节次
+- [x] 15.2 X Article 专栏专属「⚡ 核心摘要 / 提要」速览卡片：将专栏开头的提要引用块渲染为带浅暖色沉降底色、高亮左边框、闪电徽标与舒适列表行距的高光速览卡片
+- [x] 15.3 配图全屏高斯模糊灯箱预览：支持点击图片全屏无损放大预览，支持 ESC 退出与外链打开
+- [x] 15.4 编写针对 Markdown 解析器的专属单元测试 `tests/tweet-markdown.test.ts`，验证标题、摘要卡片、列表与链接
+
+## 16. Demand-Driven Video Streaming & Zero Silent Traffic Safeguard
+
+- [x] 16.1 播放器配置收敛为 `preload="none"`：未点击播放前，绝不向推特视频 CDN 发起任何网络请求，实现真正的零静默流量
+- [x] 16.2 播放状态安全护栏：在用户未点击播放前（`isPlaying === false`），忽略一切底层 waiting 事件，未播时只展示高清封面与通透大播放按钮【▶】，彻底杜绝未播先转圈
+- [x] 16.3 流媒体缓冲状态机与容灾外跳：播放中途卡顿展示优雅缓冲转圈，遇到解码受阻弹出自愈卡片，常驻提供【📋 复制直链】与【🌐 在系统浏览器播放 ↗】
