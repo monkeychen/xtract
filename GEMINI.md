@@ -133,6 +133,7 @@ xtract/                     # 项目根目录
 │           └── {tweet_id}/    # 第二层：单篇推文/长文独立资产包（自包含）
 │               ├── article.md # 包含正文、互动指标与元数据的完整 Markdown
 │               └── images/    # 该文章专属配图（Markdown 相对路径引用 images/）
+├── tests/                  # 自动化单元测试集
 └── main.py                 # CLI 入口
 ```
 

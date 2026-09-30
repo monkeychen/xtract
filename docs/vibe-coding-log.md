@@ -154,7 +154,7 @@ flowchart TD
   - **专属订阅套餐（Token Plan / Code Plan）**：国内厂商推出的按月固定 Token 包（如阿里百炼 Token Plan 的 `sk-sp-` Key，智谱清言的 Coding Plan）。系统自动识别 Key 前缀并无缝分流至专用高速端点（如 `token-plan.cn-beijing.maas.aliyuncs.com` 和 `open.bigmodel.cn/api/coding/paas/v4`），防止误扣普通按量账户余额。
 
 ### 2. 2026 主流模型版本锁死（杜绝已弃用版本）
-严禁使用历史上已淘汰的模型代号（如 `deepseek-chat`、`moonshot-v1`），全量对齐 2026 最新官方标准并默认开启 High 级思考：
+严禁使用历史上已淘汰的模型代号（如 `deepseek-chat`、`moonshot-v1`），全量对齐 2026 最新官方标准并默认开启 High 级思考（最新模型清单、端点及完整参数配置统一维护在 [docs/llm-providers.md](llm-providers.md)）：
 - **Google Gemini**：主力 `gemini-3.8-flash`（思考级 `HIGH`）、长推理 `gemini-3.1-pro`；
 - **OpenAI**：主力 `gpt-5.6-sol`（`reasoning_effort: "high"`）；
 - **DeepSeek**：主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M 多模态）；

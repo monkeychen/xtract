@@ -18,7 +18,7 @@
   - [4.2 仅抓取推文入库 (`--fetch-only`)](#42-仅抓取推文入库---fetch-only)
   - [4.3 仅离线生成早报 (`--report-only`)](#43-仅离线生成早报---report-only)
   - [4.4 查看已抓取推文列表 (`--list`)](#44-查看已抓取推文列表---list)
-  - [4.5 查看单篇推文全文详情 (`--view`)](#45-查看单篇推文全文详情---view)
+  - [4.5 查看/抓取单篇推文并导出 Markdown (`--view`)](#45-查看抓取单篇推文并导出-markdown---view)
   - [4.6 导出推文为 Markdown 归档 (`--export`)](#46-导出推文为-markdown-归档---export)
   - [4.7 获取与检索指定博主推文 (`--user`)](#47-获取与检索指定博主推文---user)
   - [4.8 获取指定 X 列表最新推文 (`--x-list`)](#48-获取指定-x-列表最新推文---x-list)
@@ -64,6 +64,8 @@
    - 自动展开 X 官方的长推（Note Tweet/Articles），保留完整的长文深度内容与外链。
 7. **推广推文（广告）自动过滤**：
    - 数据进入数据库前自动剥离所有信息流广告（Promoted Tweets），保证知识库与早报的纯净度。
+
+> 💡 **架构决策与理论推演**：完整的 12 项系统级设计决策（ADR 为什么与对用户的影响）详见项目宪法文档：[GEMINI.md §4](GEMINI.md#4-核心架构与设计决策) 及 [docs/architecture.md](docs/architecture.md)。
 
 ---
 
@@ -163,6 +165,8 @@ MOONSHOT_BASE_URL=
 | **智谱专属 (`zhipu-code-plan`)** | `ZHIPUAI_API_KEY` | `ZHIPUAI_BASE_URL` | `https://open.bigmodel.cn/api/coding/paas/v4` | `glm-5.3-flash` | Coding Plan 套餐专属端点（享受包月额度，避免扣按量余额） |
 | **MiniMax (`minimax`)** | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` | `https://api.minimax.chat/v1` | `MiniMax-M3` | 官方直连端点；默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true` |
 | **月之暗面 (`kimi`)** | `MOONSHOT_API_KEY` | `MOONSHOT_BASE_URL` | `https://api.moonshot.cn/v1` | `kimi-k3` | 官方兼容端点；原生全模态推理，默认携带 `reasoning_effort: "high"` |
+
+> 📌 **单一事实源约定**：各大厂商最新主力/长推理/轻量级可选模型清单、Token Plan 计费特性、已下线弃用模型封禁清单统一由 [docs/llm-providers.md](docs/llm-providers.md) 维护。
 
 ---
 
@@ -303,20 +307,21 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 支持传入**推文 ID** 或 **X 原文链接**。如果本地数据库已有则秒级展示；如果本地未检索到，系统会**自动从 X 在线实时抓取**、解析其连帖 Thread 并落库保存后展示。
 
 系统**默认自动导出为单篇独立 Markdown 文档**（受参数 `--export-md` 控制，默认开启）：
-- **图片自动回传本地**：正文及连帖所有图片会自动下载保存在 Markdown 文档所在目录的 `images/` 子目录下，文档中自动转换为本地相对路径 `![图片](images/...)`，离线阅读或迁移知识库无损展示。
+- **作者与推文两级自包含胶囊归档**：默认按 `output/articles/{author_username}/{tweet_id}/article.md` 结构保存，单篇推文所有正文、互动指标、元数据与图片自成一体，方便按作者分类管理或独立迁移至知识库。
+- **图片自动隔离下载**：正文及连帖所有图片会自动下载保存在专属 `images/` 子目录下，文档中自动转换为本地相对路径 `![图片](images/...)`，离线阅读或迁移知识库无损展示。
 - **视频提供在线直链**：视频不会占用海量带宽下载大体积文件，而是保留高清 MP4 播放与下载链接。
 - **完整连帖展开**：若目标推文是作者的多条连帖（Thread），自动合并整理为结构化各章节展开。
-- **灵活目录配置**：默认输出至 `output/`（图片存 `output/images/`），可配合 `-o / --output` 指定存放目录或自定义文件名。
+- **灵活目录配置**：默认输出至 `output/articles/`，亦可配合 `-o / --output` 指定自定义输出文件或目录。
 
 * **基本语法**：
   ```bash
-  # 抓取/查看单篇推文（默认自动导出 Markdown 并下载图片至 output/images/）
+  # 抓取/查看单篇推文（默认自动导出至 output/articles/<博主>/<推文ID>/article.md 并下载专属配图）
   uv run python main.py --view https://x.com/username/status/2086710313219727862
 
   # 指定自定义存放目录（文档存入 my_folder/，图片自动存入 my_folder/images/）
   uv run python main.py --view <推文ID或URL> -o my_folder/
 
-  # 指定自定义文件名（图片存入 custom_notes/images/）
+  # 指定自定义文件名
   uv run python main.py --view <推文ID或URL> -o custom_notes/article.md
 
   # 仅在终端查看卡片，不导出 Markdown 也不下载图片
@@ -339,8 +344,8 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
   │   - https://pbs.twimg.com/media/HR0i8iNaUAAYrrW.jpg                          │
   ╰──────────────────────────────────────────────────────────────────────────────╯
   💾 正在导出单篇推文 Markdown 文档并下载图片资源...
-  🎉 推文已导出为 Markdown 文档: output/tweet_2097871610414067757_miles_mazy.md
-  🖼️ 已同步下载 1 张图片至: output/images
+  🎉 推文已导出为 Markdown 文档: output/articles/miles_mazy/2097871610414067757/article.md
+  🖼️ 已同步下载 1 张图片至: output/articles/miles_mazy/2097871610414067757/images
   可在 Markdown 编辑器中直接查阅，文中图片已自动关联本地相对路径。
   ```
 
@@ -618,38 +623,25 @@ usage: main.py [-h] [--login [{x,openai,gemini}]] [--check-auth] [--trends]
 ### 4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
 任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换 7 大主流厂商大模型与双轨认证机制：
 
-* **支持的 7 大主流厂商 (`--provider`) 与 2026 最新官方模型（全量默认启用深度思考/推理模式与多模态，等级为 high）**：
-  1. **Google (`gemini`)**：
-     - 最新主力：`gemini-3.8-flash`（默认，极速与高阶智能兼备，全模态，`--effort high` / `thinking_level: HIGH`）、`gemini-3.1-pro`（长推理）、`gemini-2.5-flash`
-     - 认证支持：账号订阅免 Key 模式（走本地 `agy`，0 API 账单）或官方 API Key
-  2. **OpenAI (`openai` / `gpt`)**：
-     - 最新主力：`gpt-5.6-sol`（默认，GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，亦兼容 `gpt-5.6` 别名）、`gpt-4o`、`o3-mini`、`o1`
-     - 认证支持：账号订阅模式（通过 `--login openai` 捕获 Plus 会话）或官方 API Key
-  3. **DeepSeek (`deepseek`)**：
-     - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`）、`deepseek-v4-pro`
-     - ⚠️ **模型升级警示**：旧版 `deepseek-chat` 与 `deepseek-reasoner` 别名已于 2026 年 7 月正式下线停运，系统已全面切至 `deepseek-flash`
-  4. **阿里通义千问 (`qwen` / `qwen-token-plan`)**：
-     - 最新主力：`qwen3.8-flash`（默认，原生全模态推理，默认携带 `enable_thinking: true` 与 `reasoning_effort: "high"`）、`qwen3.8-max`（旗舰推理）、`qwen3.7-plus`
-     - **普通按量端点**：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
-     - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-       - *智能感知*：若 API Key 为 `sk-sp-` 开头，系统自动切换至 Token Plan 端点；亦可显式指定 `--provider qwen-token-plan` 或配置 `DASHSCOPE_BASE_URL`
-  5. **智谱清言 (`zhipu` / `zhipu-code-plan`)**：
-     - 最新主力：`glm-5.3-flash`（默认，1M 上下文原生多模态主力高吞吐，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`）、`glm-5.3`（旗舰复杂软件工程与智能体长程任务）、`glm-5.3-flashx`（极速版）
-     - **普通开放平台端点**：`https://open.bigmodel.cn/api/paas/v4`（指定 `--provider zhipu`）
-     - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（指定 `--provider zhipu-code-plan`）
-       - *享用套餐额度*：配置 `ZHIPUAI_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4` 或指定 `--provider zhipu-code-plan`，避免消耗普通按量余额
-     - **深度思考机制**：默认注入 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`
-  6. **MiniMax (`minimax`)**：
-     - 最新主力：`MiniMax-M3`（默认，最新原生多模态 1M 旗舰，默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true`）、`MiniMax-M2.7-highspeed`
-     - 接入方式：MiniMax 开放平台 API (`api.minimax.chat/v1`)
-  7. **月之暗面 Kimi (`kimi`)**：
-     - 最新主力：`kimi-k3`（默认，2.8万亿参数 100万 Token 原生全模态推理旗舰，默认携带 `reasoning_effort: "high"`）、`kimi-k2.7-code`
-     - ⚠️ **模型升级警示**：旧版 `moonshot-v1` 系列（8k/32k/128k）及 `kimi-latest` 已下线停运，官方要求全量使用 `kimi-k3`
+* **支持的 7 大主流厂商与默认主力模型（全部默认开启 High 级深度思考与原生多模态）**：
+
+| 厂商 / Provider | 标识 (`--provider`) | 默认主力模型 | 推荐认证模式 (`--auth-mode`) |
+| :--- | :--- | :--- | :--- |
+| **Google** | `gemini` (默认) | `gemini-3.8-flash` | `account`（本地 agy，0 API 账单）或 `api_key` |
+| **OpenAI** | `openai` / `gpt` | `gpt-5.6-sol` | `account`（ChatGPT Plus 网页会话）或 `api_key` |
+| **DeepSeek** | `deepseek` | `deepseek-flash` | `api_key` (V4.1-Flash，1M 上下文) |
+| **阿里通义千问** | `qwen` / `qwen-token-plan` | `qwen3.8-flash` | `api_key`（自动感知 `sk-sp-` Token Plan 专属端点） |
+| **智谱清言** | `zhipu` / `zhipu-code-plan` | `glm-5.3-flash` | `api_key`（支持 Coding Plan 专属端点） |
+| **MiniMax** | `minimax` | `MiniMax-M3` | `api_key`（1M 多模态旗舰，内置思考流） |
+| **月之暗面 Kimi** | `kimi` | `kimi-k3` | `api_key`（2.8T 原生全模态推理旗舰） |
+
+> 📌 **完整模型清单与端点约定**：关于长推理备选模型（如 `gemini-3.1-pro`、`qwen3.8-max`）、各厂商专属 Token Plan / Code Plan 配置与下线废弃版本警示，统一详见权威文档：[docs/llm-providers.md](docs/llm-providers.md)。
+
 * **双轨认证模式 (`--auth-mode`)**：
   - `account`：**账号订阅免 Key 模式**（支持 Google Gemini 与 OpenAI ChatGPT Plus，0 额外账单，白嫖月付配额）
   - `api_key`：**官方 API Key 计费模式**（按 Token 计费，高并发首选）
 * **指定具体模型 (`--model`)**：
-  - 覆盖默认模型（如 `--model deepseek-v4-pro`、`--model qwen-max`、`--model kimi-k3`、`--model gpt-4o`）
+  - 覆盖默认模型（如 `--model deepseek-v4-pro`、`--model qwen3.8-max`、`--model kimi-k3`）
 * **使用示例**：
   ```bash
   # 使用 DeepSeek 最新 V4.1-Flash 提炼今日关注流早报
@@ -762,15 +754,16 @@ launchctl load ~/Library/LaunchAgents/com.xtract.digest.plist
 
 ## 7. 存储架构与数据目录规范
 
-项目严格遵守结构分层与安全规范：
+项目严格遵守结构分层与安全规范（完整规范与清理策略参见 [GEMINI.md §5](GEMINI.md#5-目录与命名规范)）：
 
 ```
 xtract/                     # 项目根目录
-├── GEMINI.md               # 项目架构约束与设计记录
-├── README.md               # 本项目全量使用指南
+├── GEMINI.md               # 项目宪法与架构约束（AI 核心规范）
+├── README.md               # 本项目全量使用指南与操作手册
 ├── docs/                   # 正式工程设计与架构文档
 │   ├── architecture.md     # 系统总体架构设计 (HLD)
 │   ├── detailed_design.md  # 详细设计与核心机制 (LLD)
+│   ├── llm-providers.md    # 各大模型版本、端点与参数约定（高频变动，单一事实源）
 │   └── vibe-coding-log.md  # Vibe Coding 全周期复盘与踩坑实录
 ├── pyproject.toml          # uv 依赖管理
 ├── .env.example            # 环境变量配置模板
@@ -798,23 +791,30 @@ xtract/                     # 项目根目录
 │   └── raw/                # 原始 JSON 快照备份（灾备，保留 30 天）
 ├── output/                 # 输出结果
 │   ├── reports/            # 生成的 Markdown 早报与趋势研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
-│   └── tweets_YYYY-MM-DD.md# 导出的全量推文归档清单
+│   └── articles/           # 单篇推文/专栏长文作者归档胶囊目录
+│       └── {author_username}/ # 第一层：按博主/作者归档 (如 miles_mazy, karpathy)
+│           └── {tweet_id}/    # 第二层：单篇推文/长文独立资产包（自包含）
+│               ├── article.md # 包含正文、互动指标与元数据的完整 Markdown
+│               └── images/    # 该文章专属配图（Markdown 相对路径引用 images/）
 ├── tests/                  # 自动化单元测试集
 └── main.py                 # 统一 CLI 入口
 ```
 
 ### SQLite 数据表结构 (`tweets`)
+
+> 📌 **单一事实源约定**：完整的 DDL 结构、字段约束与索引定义统一以 [`docs/detailed_design.md §3.1`](docs/detailed_design.md#31-sqlite-数据库表设计-datatweetsdb) 及 [`src/storage.py`](src/storage.py) 为准。
+
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
-| `tweet_id` | `TEXT PRIMARY KEY` | 推文唯一 ID（去重核心键） |
-| `author_name` | `TEXT` | 博主昵称 |
-| `author_username` | `TEXT` | 博主 Handle（`@screen_name`） |
-| `text` | `TEXT` | 完整正文（自动展开 Note Tweet 长文） |
-| `created_at` | `TEXT` | 发布时间戳 |
-| `is_retweet` / `is_quote` | `INTEGER` | 是否为转推 / 引用推文 |
-| `retweeted_text` / `quoted_text` | `TEXT` | 转推或引用的原文内容 |
+| `tweet_id` | `TEXT PRIMARY KEY` | 推文唯一 ID（去重核心主键） |
+| `author_id` / `author_username` | `TEXT` | 作者数值 ID 与 Handle（`@screen_name`） |
+| `author_name` | `TEXT` | 博主昵称展示名 |
+| `text` | `TEXT` | 完整正文（自动展开 Note Tweet 与 Articles 专栏长文） |
+| `created_at` | `TEXT` | 发布时间戳（UTC） |
+| `is_retweet` / `retweeted_text` | `INTEGER` / `TEXT` | 是否为转推及原文正文 |
+| `is_quote` / `quoted_text` | `INTEGER` / `TEXT` | 是否为引用推文及原文正文 |
 | `like_count` / `retweet_count` | `INTEGER` | 点赞与转发互动数据 |
-| `view_count` | `INTEGER` | 浏览曝光量 |
+| `reply_count` / `view_count` | `INTEGER` | 回复数与浏览曝光量 |
 | `urls` / `media_urls` | `TEXT (JSON)` | 提取的外部链接与媒体附件数组 |
 | `fetched_at` | `TEXT` | 采集入库的 ISO 时间戳 |
 

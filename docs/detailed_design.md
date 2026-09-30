@@ -243,27 +243,34 @@ sequenceDiagram
 
 ### 3.1 SQLite 数据库表设计 (`data/tweets.db`)
 
+本系统的权威数据模式严格以 [`src/storage.py`](../src/storage.py) 中的 DDL 为准：
+
 ```sql
 CREATE TABLE IF NOT EXISTS tweets (
-    tweet_id TEXT PRIMARY KEY,          -- 推文唯一 Snowflake ID
-    author_username TEXT NOT NULL,      -- 作者 Handle (如 elonmusk)
-    author_name TEXT NOT NULL,          -- 作者昵称展示名
-    text TEXT NOT NULL,                 -- 清洗后的完整推文文本
-    created_at TEXT NOT NULL,           -- X 原始时间戳 (如 "Fri Sep 21 14:32:00 +0000 2026")
+    tweet_id TEXT PRIMARY KEY,          -- 推文唯一 Snowflake ID (去重主键)
+    author_id TEXT,                     -- 作者数值 ID
+    author_name TEXT,                   -- 作者昵称展示名
+    author_username TEXT,               -- 作者 Handle (@screen_name)
+    text TEXT NOT NULL,                 -- 清洗后的完整推文文本 (长文/Articles 展开)
+    created_at TEXT,                    -- X 原始时间戳 (UTC ISO/Twitter 格式)
+    is_retweet INTEGER DEFAULT 0,       -- 是否为转推 (0/1)
+    retweeted_author TEXT,              -- 被转推原文作者
+    retweeted_text TEXT,                -- 被转推原文正文
+    is_quote INTEGER DEFAULT 0,         -- 是否为引用推文 (0/1)
+    quoted_author TEXT,                 -- 被引用原文作者
+    quoted_text TEXT,                   -- 被引用原文正文
     like_count INTEGER DEFAULT 0,       -- 点赞数
     retweet_count INTEGER DEFAULT 0,    -- 转推/转发数
     reply_count INTEGER DEFAULT 0,      -- 回复数
-    quote_count INTEGER DEFAULT 0,      -- 引用数
     view_count INTEGER DEFAULT 0,       -- 浏览曝光量 (Impression)
-    media_urls TEXT,                    -- 逗号分隔的原始图片/视频封面 URL
-    source_type TEXT DEFAULT 'following',-- 采集来源: following | search | trends | user | list
-    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- 本地入库时间戳
+    urls TEXT,                          -- 正文提取的外部链接 (JSON 数组)
+    media_urls TEXT,                    -- 附件图片/封面等媒体地址 (JSON 数组)
+    fetched_at TEXT NOT NULL            -- 本地入库时间戳 (ISO 格式)
 );
 
 -- 核心加速索引
-CREATE INDEX IF NOT EXISTS idx_tweets_created_at ON tweets(created_at);
-CREATE INDEX IF NOT EXISTS idx_tweets_likes ON tweets(like_count);
-CREATE INDEX IF NOT EXISTS idx_tweets_source ON tweets(source_type);
+CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at);
+CREATE INDEX IF NOT EXISTS idx_fetched_at ON tweets(fetched_at);
 ```
 
 ### 3.2 离线媒体与报告目录规约
@@ -271,22 +278,22 @@ CREATE INDEX IF NOT EXISTS idx_tweets_source ON tweets(source_type);
 - `data/raw/raw_YYYYMMDD_HHMM.json`：保存近 30 天调试捕获的原始网络快照。
 - `output/reports/YYYY-MM-DD.md`：每日关注流智能早报。
 - `output/reports/trends_YYYY-MM-DD.md`：全网趋势深度研报。
-- `output/tweet_{id}_{author}.md`：离线单篇/长推文无损归档文档。
+- `output/articles/{author_username}/{tweet_id}/`：单篇推文/长文独立资产胶囊目录（包含 `article.md` 及专属 `images/` 子目录，支持离线图文关联与无损迁移）。
 
 ---
 
 ## 4. 多厂商端点路由与特化参数映射
 
-系统自动对 API Key 前缀或配置参数进行智能路由与特化参数装载：
+系统自动对 API Key 前缀或配置参数进行智能路由与特化参数装载。各厂商最新模型版本及详细端点规格统一由 [`docs/llm-providers.md`](llm-providers.md) 维护：
 
-| 厂商 | 标识 | 专属端点 Base URL | 特化思考参数 Payload |
+| 厂商 | 标识 | 路由特征 | 特化思考参数 Payload 契约 |
 | :--- | :--- | :--- | :--- |
-| **阿里千问 (Token Plan)** | `qwen-token-plan` | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `{"enable_thinking": true, "reasoning_effort": "high"}` |
-| **阿里千问 (按量)** | `qwen` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `{"enable_thinking": true, "reasoning_effort": "high"}` |
-| **智谱清言 (Coding Plan)**| `zhipu-code-plan` | `https://open.bigmodel.cn/api/coding/paas/v4` | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
-| **智谱清言 (普通)** | `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
-| **DeepSeek** | `deepseek` | `https://api.deepseek.com/v1` | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
-| **MiniMax** | `minimax` | `https://api.minimax.chat/v1` | `{"thinking": {"type": "enabled"}, "reasoning_split": true}` |
-| **月之暗面 Kimi** | `kimi` | `https://api.moonshot.cn/v1` | `{"reasoning_effort": "high"}` |
-| **OpenAI** | `openai` | `https://api.openai.com/v1` | `{"reasoning_effort": "high"}` |
-| **Google Gemini** | `gemini` | 走本地 `agy` 账号免 Key 驱动通道 | `--effort high` / `thinking_level: HIGH` |
+| **阿里千问 (Token Plan)** | `qwen-token-plan` | Key 以 `sk-sp-` 开头或显式指定 provider | `{"enable_thinking": true, "reasoning_effort": "high"}` |
+| **阿里千问 (按量)** | `qwen` | Key 以 `sk-` 开头 | `{"enable_thinking": true, "reasoning_effort": "high"}` |
+| **智谱清言 (Coding Plan)**| `zhipu-code-plan` | 指定 provider 或设置专属 Base URL | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
+| **智谱清言 (普通)** | `zhipu` | 官方标准端点 | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
+| **DeepSeek** | `deepseek` | 官方标准端点 | `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}` |
+| **MiniMax** | `minimax` | 官方标准端点 | `{"thinking": {"type": "enabled"}, "reasoning_split": true}` |
+| **月之暗面 Kimi** | `kimi` | 官方标准端点 | `{"reasoning_effort": "high"}` |
+| **OpenAI** | `openai` | 官方标准端点（或通过 `--login openai` 走 Plus 会话） | `{"reasoning_effort": "high"}` |
+| **Google Gemini** | `gemini` | 账号模式走本地 `agy`，API 模式走官方端点 | `--effort high` / `thinking_level: HIGH` |
