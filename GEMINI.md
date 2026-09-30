@@ -3,7 +3,48 @@
 ## 1. 目标与背景
 从 X（Twitter）个人的 Following（时间线关注流）、指定 Lists（列表）、特定博主、全网热门趋势（Explore Trends）以及关键词高级搜索（Search Timeline）中自动拉取最新实时推文，通过本地 SQLite 存储去重与互动指标信噪比过滤，利用国内外多大模型（双轨认证：API-Key / 账号订阅免Key）对核心讨论、要闻资讯与全网突发热点进行结构化聚类与研报生成。
 
-## 2. 核心架构与设计决策
+## 2. 边界与 Non-Goals
+- **不做 Web UI / GUI**：纯 CLI 工具，不引入前端框架或 Web 服务器。
+- **不做多用户 / 账号管理**：单机单用户，不考虑权限、租户隔离。
+- **不做推文发布**：只读取、不写入 X 平台。
+- **不托管远端服务**：本地运行，不提供 API 或 SaaS。
+- **不做全量历史回溯**：只拉取实时增量，不爬取用户全部历史推文。
+
+## 3. 技术栈与环境约束
+
+| 层 | 选型 | 版本约束 | 选型理由 |
+|---|---|---|---|
+| 语言 | Python | ≥ 3.12 | 类型提示完善，asyncio 成熟 |
+| 包管理 | uv | — | 比 pip/poetry 快 10-100×，lockfile 确定性好 |
+| 浏览器自动化 | Playwright | ≥ 1.62 | 原生拦截网络流，免逆向签名 |
+| HTTP 客户端 | httpx | ≥ 0.28 | 原生 async + HTTP/2 + SSE 流式 |
+| 数据库 | SQLite（标准库） | — | 零部署、嵌入式、单文件备份 |
+| 配置验证 | Pydantic | ≥ 2.13 | 类型安全的环境变量解析 |
+| CLI 输出 | Rich | ≥ 15.0 | 美观的终端表格、进度条、高亮 |
+| LLM（Google） | google-genai | ≥ 2.22 | 官方 Gemini SDK |
+| 测试 | pytest | ≥ 9.1 | dev 依赖 |
+
+### 关键环境变量
+
+完整模板见 [`.env.example`](.env.example)，以下为必须关注的项：
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `X_AUTH_TOKEN` / `X_CT0` | 二选一 | X 会话凭据（或用 `--login x` 交互登录） |
+| `HTTP_PROXY` | 视网络 | 访问 X 及海外 LLM 时的代理地址 |
+| `LLM_PROVIDER` | 否 | 默认 `gemini`，可选 7 大厂商 |
+| `LLM_AUTH_MODE` | 否 | `account`（默认，走订阅）/ `api_key` |
+| `GEMINI_API_KEY` | 按需 | api_key 模式下必填 |
+| `OPENAI_API_KEY` | 按需 | api_key 模式下必填 |
+| `DEEPSEEK_API_KEY` | 按需 | api_key 模式下必填 |
+| `DASHSCOPE_API_KEY` | 按需 | Qwen api_key 模式下必填（`sk-` 普通 / `sk-sp-` Token Plan） |
+| `ZHIPUAI_API_KEY` | 按需 | 智谱 api_key 模式下必填 |
+| `MINIMAX_API_KEY` | 按需 | MiniMax api_key 模式下必填 |
+| `MOONSHOT_API_KEY` | 按需 | Kimi api_key 模式下必填 |
+| `FETCH_MAX_PAGES` | 否 | 单次抓取最大翻页数，默认 `3` |
+| `FETCH_TIMEOUT` | 否 | 单次抓取超时秒数，默认 `60` |
+
+## 4. 核心架构与设计决策
 
 ### 架构流程
 `Fetch (Following / List / User / Search / Trends Playwright 拦截)` -> `Deduplicate & Store (SQLite 去重与元数据落库)` -> `Filter (互动门槛与无效过滤)` -> `Summarize (多模型统一调度)` -> `Output (Markdown 归档与图片隔离保存)`
@@ -46,22 +87,11 @@
     - **为什么**：X 官方 Top（热门）算法基于全网历史累计互动量，仅搜关键词极易把数月甚至一年前的万赞长青旧帖推在前面，导致趋势研报被旧闻污染。
     - **对用户的影响**：系统在搜索层自动注入 X 原生 `since:YYYY-MM-DD` 时间算子（支持 `--hours` 精确调控时间窗口），并在语料进入大模型前进行 `created_at` 的 UTC 二次硬校验，彻底阻断陈旧推文，确保研报全部来自当下最新事实与讨论。
 
-### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
-- **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。账号订阅通道走本地 `agy`。
-- **OpenAI GPT**：默认主力 `gpt-5.6-sol`（GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，兼容 `gpt-5.6` 别名），账号通道走 ChatGPT Plus 会话。
-- **DeepSeek**：默认主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态，默认 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），高阶 `deepseek-v4-pro`。（**禁止使用已下线的 `deepseek-chat` / `deepseek-reasoner`**）。
-- **阿里通义千问 Qwen**：默认主力 `qwen3.8-flash`（原生全模态推理，默认携带 `enable_thinking: true` 与 `reasoning_effort: "high"`），旗舰 `qwen3.8-max`，平衡版 `qwen3.7-plus`。
-  - 普通按量端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
-  - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-sp-` 开头，系统自动识别或指定 `--provider qwen-token-plan`）
-- **智谱清言 Zhipu**：默认主力 `glm-5.3-flash`（原生多模态高吞吐，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），旗舰复杂工程 `glm-5.3`，极速 `glm-5.3-flashx`。
-  - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`（指定 `--provider zhipu`）
-  - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`（支持通过 `ZHIPUAI_BASE_URL` 或指定 `--provider zhipu-code-plan` 接入以享受套餐额度）
-- **MiniMax**：默认主力 `MiniMax-M3`（1M多模态旗舰，默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true`），极速 `MiniMax-M2.7-highspeed`。
-- **月之暗面 Kimi**：默认主力 `kimi-k3`（2.8T参数1M上下文旗舰，原生全模态推理，默认携带 `reasoning_effort: "high"`），代码 `kimi-k2.7-code`。（**禁止使用已下线的 `moonshot-v1` 及 `kimi-latest`**）。
+> 各模型具体版本、端点 URL 与参数格式见 [`docs/llm-providers.md`](docs/llm-providers.md)（高频变动，独立维护）。
 
 ---
 
-## 3. 目录与命名规范
+## 5. 目录与命名规范
 
 ```
 xtract/                     # 项目根目录
@@ -70,6 +100,7 @@ xtract/                     # 项目根目录
 ├── docs/                   # 正式工程设计与架构文档
 │   ├── architecture.md     # 系统总体架构设计 (HLD)
 │   ├── detailed_design.md  # 详细设计与核心机制 (LLD)
+│   ├── llm-providers.md    # 各大模型版本、端点与参数约定（高频变动）
 │   └── vibe-coding-log.md  # 项目全周期复盘与踩坑设计日志
 ├── pyproject.toml          # uv 项目与依赖配置
 ├── .env.example            # 环境变量模板
@@ -115,7 +146,7 @@ xtract/                     # 项目根目录
 
 ---
 
-## 4. 运行与验证命令
+## 6. 运行与验证命令
 - 初始化环境：`uv venv && uv pip install -e .`
 - 执行全量流水线：`uv run python main.py`
 - 仅拉取推文：`uv run python main.py --fetch-only`
