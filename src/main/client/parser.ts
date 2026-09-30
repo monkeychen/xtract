@@ -86,6 +86,47 @@ export function formatArticleContent(articleResult: any): { text: string; mediaU
 }
 
 /**
+ * URL entity structure from Twitter GraphQL.
+ */
+export interface UrlEntity {
+  url?: string;
+  expanded_url?: string;
+  display_url?: string;
+}
+
+/**
+ * 将推文文本中的 t.co 短链转换为 Markdown 超链接 [display_url](expanded_url)，
+ * 并安全剔除正文末尾仅作为配图/视频附件展示的无意义媒体短链。
+ */
+export function formatTweetTextWithMarkdownUrls(
+  text: string,
+  urlEntities: UrlEntity[] = [],
+  mediaEntities: Array<{ url?: string }> = []
+): string {
+  if (!text) return '';
+  let res = text;
+
+  // 1. 移除多媒体附件短链 (推特官方在正文末尾自动追加的配图/视频短链，如 " https://t.co/SqrFuDR2et")
+  for (const m of mediaEntities) {
+    if (m?.url) {
+      res = res.replaceAll(` ${m.url}`, '');
+      res = res.replaceAll(m.url, '');
+    }
+  }
+  res = res.trimEnd();
+
+  // 2. 将外链 t.co 替换为 Markdown 格式 [display_url](expanded_url)
+  for (const u of urlEntities) {
+    if (u?.url && u?.expanded_url) {
+      const label = u.display_url || u.expanded_url;
+      res = res.replaceAll(u.url, `[${label}](${u.expanded_url})`);
+    }
+  }
+
+  return res;
+}
+
+/**
  * Extracts a clean Tweet object from an X GraphQL tweet_results node.
  */
 export function parseTweetResult(tweetResult: any): Tweet | null {
@@ -128,10 +169,23 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     fullText = noteTweet.text || legacy.full_text || '';
   }
 
+  // Collect primary URL entities & Media entities for rich markdown conversion
+  const primaryUrlEntities: UrlEntity[] = [
+    ...(legacy.entities?.urls || []),
+    ...(tweetResult.note_tweet?.note_tweet_results?.result?.entity_set?.urls || []),
+  ];
+  const primaryMediaEntities: Array<{ url?: string; media_url_https?: string; type?: string; video_info?: any }> = [
+    ...(legacy.extended_entities?.media || []),
+    ...(legacy.entities?.media || []),
+  ];
+
   // Retweet info
   const isRetweet = Boolean(legacy.retweeted_status_result);
   let retweetedAuthor = '';
   let retweetedText = '';
+  const rtUrlEntities: UrlEntity[] = [];
+  const rtMediaEntities: Array<{ url?: string }> = [];
+
   if (isRetweet) {
     let rtResult = legacy.retweeted_status_result?.result || {};
     if (rtResult.__typename === 'TweetWithVisibilityResults') {
@@ -141,12 +195,19 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     const rtUser = rtResult.core?.user_results?.result || {};
     retweetedAuthor = rtUser.core?.screen_name || rtUser.legacy?.screen_name || '';
     retweetedText = rtLegacy.full_text || '';
+
+    if (rtLegacy.entities?.urls) rtUrlEntities.push(...rtLegacy.entities.urls);
+    if (rtLegacy.extended_entities?.media) rtMediaEntities.push(...rtLegacy.extended_entities.media);
+    else if (rtLegacy.entities?.media) rtMediaEntities.push(...rtLegacy.entities.media);
   }
 
   // Quote info
   const isQuote = Boolean(legacy.is_quote_status);
   let quotedAuthor = '';
   let quotedText = '';
+  const qtUrlEntities: UrlEntity[] = [];
+  const qtMediaEntities: Array<{ url?: string }> = [];
+
   if (isQuote && tweetResult.quoted_status_result) {
     let qResult = tweetResult.quoted_status_result?.result || {};
     if (qResult.__typename === 'TweetWithVisibilityResults') {
@@ -156,35 +217,34 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     const qUser = qResult.core?.user_results?.result || {};
     quotedAuthor = qUser.core?.screen_name || qUser.legacy?.screen_name || '';
     quotedText = qLegacy.full_text || '';
+
+    if (qLegacy.entities?.urls) qtUrlEntities.push(...qLegacy.entities.urls);
+    if (qLegacy.extended_entities?.media) qtMediaEntities.push(...qLegacy.extended_entities.media);
+    else if (qLegacy.entities?.media) qtMediaEntities.push(...qLegacy.entities.media);
   }
+
+  // Format texts with Markdown links and clean media attachments
+  fullText = formatTweetTextWithMarkdownUrls(fullText, primaryUrlEntities, primaryMediaEntities);
+  if (retweetedText) {
+    retweetedText = formatTweetTextWithMarkdownUrls(retweetedText, rtUrlEntities, rtMediaEntities);
+  }
+  if (quotedText) {
+    quotedText = formatTweetTextWithMarkdownUrls(quotedText, qtUrlEntities, qtMediaEntities);
+  }
+
   // Media items extraction (including videos and GIFs)
   let videoUrl: string | undefined = undefined;
   let videoPoster: string | undefined = undefined;
 
   const allMediaContainers = [
-    legacy.extended_entities?.media,
-    legacy.entities?.media,
+    primaryMediaEntities,
+    rtMediaEntities,
+    qtMediaEntities,
   ];
-  if (isRetweet && legacy.retweeted_status_result) {
-    let rt = legacy.retweeted_status_result?.result || {};
-    if (rt.__typename === 'TweetWithVisibilityResults') rt = rt.tweet || {};
-    if (rt.legacy) {
-      allMediaContainers.push(rt.legacy.extended_entities?.media);
-      allMediaContainers.push(rt.legacy.entities?.media);
-    }
-  }
-  if (isQuote && tweetResult.quoted_status_result) {
-    let qt = tweetResult.quoted_status_result?.result || {};
-    if (qt.__typename === 'TweetWithVisibilityResults') qt = qt.tweet || {};
-    if (qt.legacy) {
-      allMediaContainers.push(qt.legacy.extended_entities?.media);
-      allMediaContainers.push(qt.legacy.entities?.media);
-    }
-  }
 
   for (const container of allMediaContainers) {
     if (!Array.isArray(container)) continue;
-    for (const m of container) {
+    for (const m of container as any[]) {
       if (m.media_url_https && !mediaUrls.includes(m.media_url_https)) {
         mediaUrls.push(m.media_url_https);
       }
@@ -209,8 +269,8 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
   }
 
   const urls: string[] = [];
-  for (const u of legacy.entities?.urls || []) {
-    if (u.expanded_url) {
+  for (const u of primaryUrlEntities) {
+    if (u.expanded_url && !urls.includes(u.expanded_url)) {
       urls.push(u.expanded_url);
     }
   }

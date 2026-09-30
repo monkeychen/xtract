@@ -205,6 +205,48 @@ export class Storage {
         });
         backfillTx();
       }
+
+      // 自动清洗历史存量推文中残留的裸短链并转换为 Markdown 超链接，剔除末尾多余媒体短链
+      const unformattedRows = this.db.prepare(`
+        SELECT tweet_id, text, urls, media_urls FROM tweets
+        WHERE text LIKE '%https://t.co/%'
+      `).all() as { tweet_id: string; text: string; urls: string; media_urls: string }[];
+
+      if (unformattedRows.length > 0) {
+        const updateTextStmt = this.db.prepare('UPDATE tweets SET text = ? WHERE tweet_id = ?');
+        const migrateTextTx = this.db.transaction(() => {
+          for (const row of unformattedRows) {
+            let nextText = row.text;
+            // 剔除末尾媒体短链
+            if (row.media_urls) {
+              nextText = nextText.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
+                const raw = match.trim();
+                if (row.urls && row.urls.includes(raw)) return match;
+                return '';
+              });
+            }
+            // 转换真实外链为 Markdown 格式 [hostname](url)
+            try {
+              const parsedUrls = JSON.parse(row.urls || '[]') as string[];
+              const validUrls = parsedUrls.filter((u) => typeof u === 'string' && !u.includes('https://t.co/'));
+              if (validUrls.length > 0) {
+                for (const u of validUrls) {
+                  try {
+                    const uObj = new URL(u);
+                    const label = uObj.hostname.replace(/^www\./, '');
+                    nextText = nextText.replace(/https:\/\/t\.co\/[a-zA-Z0-9]+/g, `[${label}](${u})`);
+                  } catch {}
+                }
+              }
+            } catch {}
+
+            if (nextText !== row.text) {
+              updateTextStmt.run(nextText, row.tweet_id);
+            }
+          }
+        });
+        migrateTextTx();
+      }
     } catch {
       // 忽略迁移警告
     }
@@ -623,6 +665,28 @@ export class Storage {
         `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\``
       );
       let tweetBody = t.text;
+      // 1. 若正文末尾残留媒体短链且该推文含配图，安全剔除末尾多余短链
+      if (t.media_urls && t.media_urls.length > 0) {
+        tweetBody = tweetBody.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
+          const raw = match.trim();
+          if (t.urls && t.urls.includes(raw)) return match;
+          return '';
+        });
+      }
+      // 2. 若推文含有 urls 且正文中存在未转换的 t.co 短链，自动对齐为 Markdown 链接 [hostname](url)
+      if (t.urls && t.urls.length > 0 && tweetBody.includes('https://t.co/')) {
+        const validUrls = t.urls.filter((u) => !u.includes('https://t.co/'));
+        if (validUrls.length > 0) {
+          for (const u of validUrls) {
+            try {
+              const uObj = new URL(u);
+              const label = uObj.hostname.replace(/^www\./, '');
+              tweetBody = tweetBody.replace(/https:\/\/t\.co\/[a-zA-Z0-9]+/g, `[${label}](${u})`);
+            } catch {}
+          }
+        }
+      }
+
       const extraMediaLines: string[] = [];
 
       if (t.is_retweet) {

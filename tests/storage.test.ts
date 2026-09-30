@@ -633,6 +633,33 @@ describe('Storage Module', () => {
     expect(retrieved?.video_poster).toBe('https://pbs.twimg.com/thumb.jpg');
     expect(retrieved?.media_urls).toContain('https://video.twimg.com/demo.mp4');
   });
+
+  it('test_storage_legacy_tco_links_migration_and_markdown_export', async () => {
+    // 1. Manually insert an unformatted legacy tweet with t.co shortlink and media shortlink
+    const rawTweet: Partial<Tweet> = {
+      tweet_id: 'link_test_101',
+      author_name: 'Tech Blogger',
+      author_username: 'tech_blogger',
+      text: '重大发布！点击https://t.co/abcXYZ查看产品官网 https://t.co/imgXYZ',
+      created_at: '2026-09-30T00:00:00Z',
+      urls: ['https://superai.com/launch'],
+      media_urls: ['https://pbs.twimg.com/media/pic.jpg'],
+    };
+
+    storage.saveTweets([rawTweet]);
+
+    // 2. Export markdown and verify tweet body has converted [hostname](url) and stripped media shortlink
+    const { filePath } = await storage.exportSingleTweetMarkdown('link_test_101', {
+      downloadImages: false,
+    });
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    const mdContent = fs.readFileSync(filePath, 'utf-8');
+    // Media attachment t.co is stripped
+    expect(mdContent).not.toContain('https://t.co/imgXYZ');
+    // Link t.co is converted to markdown link
+    expect(mdContent).toContain('[superai.com](https://superai.com/launch)');
+  });
 });
 
 

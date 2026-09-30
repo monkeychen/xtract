@@ -20,6 +20,123 @@ export function isTweetVideo(tweet: Partial<Tweet>): boolean {
   return Boolean(tweet.media_urls && tweet.media_urls.some((m) => isVideoUrl(m)));
 }
 
+/**
+ * 格式化并渲染推文正文，将 Markdown 链接 [label](url)、原生 URL 转换为可直接点击的超链接组件
+ */
+export function renderFormattedTweetText(
+  text: string,
+  urls?: string[],
+  onOpenUrl?: (url: string) => void
+): React.ReactNode {
+  if (!text) return null;
+
+  // 1. 若正文末尾残留媒体附件短链（如 https://t.co/... 且该推文含媒体附件），自动剔除
+  let cleanText = text;
+  cleanText = cleanText.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
+    const raw = match.trim();
+    if (urls && urls.includes(raw)) return match;
+    return '';
+  });
+
+  // 2. 正则分词匹配 Markdown 链接 [label](url)、Twitter t.co 短链 以及 合法 ASCII 裸 URL
+  // 必须精确限制字符集，杜绝将紧随其后的中文字符误当成 URL 截断吞噬
+  const tokenRegex =
+    /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)|(https:\/\/t\.co\/[a-zA-Z0-9]+)|(https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;%=]+)/g;
+
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenRegex.exec(cleanText)) !== null) {
+    if (match.index > lastIndex) {
+      elements.push(cleanText.substring(lastIndex, match.index));
+    }
+
+    if (match[1] && match[2]) {
+      // 命中 Markdown 链接 [label](url)
+      const label = match[1];
+      const targetUrl = match[2];
+      elements.push(
+        <a
+          key={`md-${match.index}`}
+          href={targetUrl}
+          className="tweet-inline-link"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (onOpenUrl) onOpenUrl(targetUrl);
+          }}
+          style={{
+            color: 'var(--accent, #0284c7)',
+            textDecoration: 'none',
+            borderBottom: '1px solid var(--accent, #0284c7)',
+            cursor: 'pointer',
+            fontWeight: 500,
+            padding: '0 2px',
+            borderRadius: '2px',
+          }}
+          title={`在系统默认浏览器中打开: ${targetUrl}`}
+        >
+          {label} ↗
+        </a>
+      );
+    } else if (match[3] || match[4]) {
+      // 命中裸 URL (t.co 或普通外链)
+      const rawUrl = match[3] || match[4];
+      let targetUrl = rawUrl;
+      let displayLabel = rawUrl;
+
+      // 历史推文短链智能解绑：若匹配到 t.co 短链，且推文元数据包含真实 urls，则自动对齐真实地址
+      if (rawUrl.includes('https://t.co/') && urls && urls.length > 0) {
+        const validUrls = urls.filter((u) => !u.includes('https://t.co/'));
+        if (validUrls.length > 0) {
+          targetUrl = validUrls[0];
+        }
+      }
+
+      try {
+        const uObj = new URL(targetUrl);
+        displayLabel = uObj.hostname.replace(/^www\./, '') + (uObj.pathname.length > 1 ? uObj.pathname.slice(0, 16) + '...' : '');
+      } catch {
+        displayLabel = targetUrl;
+      }
+
+      elements.push(
+        <a
+          key={`raw-${match.index}`}
+          href={targetUrl}
+          className="tweet-inline-link"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (onOpenUrl) onOpenUrl(targetUrl);
+          }}
+          style={{
+            color: 'var(--accent, #0284c7)',
+            textDecoration: 'none',
+            borderBottom: '1px solid var(--accent, #0284c7)',
+            cursor: 'pointer',
+            fontWeight: 500,
+            padding: '0 2px',
+            borderRadius: '2px',
+          }}
+          title={`在系统默认浏览器中打开: ${targetUrl}`}
+        >
+          {displayLabel} ↗
+        </a>
+      );
+    }
+
+    lastIndex = tokenRegex.lastIndex;
+  }
+
+  if (lastIndex < cleanText.length) {
+    elements.push(cleanText.substring(lastIndex));
+  }
+
+  return elements.length > 0 ? elements : cleanText;
+}
+
 export interface TweetVideoPlayerProps {
   videoUrl: string;
   posterUrl?: string;
@@ -2002,7 +2119,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                 </button>
               </div>
 
-              {/* 推文全文排版 (§2.2 保持换行与段落格式) */}
+              {/* 推文全文排版 (§2.2 保持换行与段落格式并渲染富文本可点击超链接) */}
               <div
                 id="tweet-detail-text"
                 style={{
@@ -2014,7 +2131,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                   wordBreak: 'break-word',
                 }}
               >
-                {selectedTweet.text}
+                {renderFormattedTweetText(selectedTweet.text, selectedTweet.urls, (url) => api.openExternal(url))}
               </div>
 
               {/* 转推卡片 (Retweet Card) */}
@@ -2032,7 +2149,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                     🔁 转推自 @{selectedTweet.retweeted_author || '原作者'}
                   </div>
                   <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
-                    {selectedTweet.retweeted_text || selectedTweet.text}
+                    {renderFormattedTweetText(
+                      selectedTweet.retweeted_text || selectedTweet.text,
+                      selectedTweet.urls,
+                      (url) => api.openExternal(url)
+                    )}
                   </div>
                 </div>
               )}
@@ -2052,7 +2173,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                     💬 引用推文 @{selectedTweet.quoted_author || '原作者'}
                   </div>
                   <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
-                    {selectedTweet.quoted_text}
+                    {renderFormattedTweetText(
+                      selectedTweet.quoted_text || '',
+                      selectedTweet.urls,
+                      (url) => api.openExternal(url)
+                    )}
                   </div>
                 </div>
               )}

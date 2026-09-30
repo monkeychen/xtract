@@ -101,6 +101,21 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           urls: [],
           source_type: 'following',
         },
+        {
+          tweet_id: '2105106509797769398',
+          author_id: '123460',
+          author_name: 'Qihang',
+          author_username: 'qihang_zeng6688',
+          text: '笑不活了😂\n\nOpenAI发布Dots这款产品\n\n然后马哥反手就买了[Dot.com](https://Dot.com)这个域名\n点[Dot.com](https://Dot.com)网站直接跳到了Grok Bot😂',
+          created_at: new Date().toISOString(),
+          like_count: 520,
+          retweet_count: 88,
+          reply_count: 24,
+          view_count: 36000,
+          media_urls: ['https://pbs.twimg.com/media/HTbWwcobQAAwBKf.jpg'],
+          urls: ['https://Dot.com'],
+          source_type: 'following',
+        },
       ];
 
       (window as any).xtractAPI = {
@@ -537,5 +552,33 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(300);
 
     expect(await page.locator('#batch-delete-dialog').isVisible()).toBe(false);
+  });
+
+  it('Flow 11: Rich Tweet Text Markdown Links & Clickable Navigation', async () => {
+    // 1. Locate and click Qihang's tweet (contains [Dot.com](https://Dot.com))
+    const linkTweetItem = page.locator('.feed-item', { hasText: '笑不活了' }).first();
+    expect(await linkTweetItem.isVisible()).toBe(true);
+
+    await linkTweetItem.click();
+    await page.waitForTimeout(300);
+
+    // 2. Locate detail text container
+    const detailText = page.locator('#tweet-detail-text');
+    expect(await detailText.isVisible()).toBe(true);
+
+    // 3. Verify inline links are rendered as <a> elements with [Dot.com] label, NOT raw t.co
+    const inlineLinks = detailText.locator('a.tweet-inline-link');
+    expect(await inlineLinks.count()).toBeGreaterThanOrEqual(1);
+
+    const firstLinkText = await inlineLinks.first().textContent();
+    expect(firstLinkText).toContain('Dot.com');
+    expect(firstLinkText).not.toContain('https://t.co/');
+
+    // 4. Click the link and verify system browser navigation was called
+    await inlineLinks.first().click();
+    await page.waitForTimeout(200);
+
+    const openedUrls = await page.evaluate(() => (window as any).__recordedCalls.openedUrls);
+    expect(openedUrls).toContain('https://Dot.com');
   });
 });

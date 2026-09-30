@@ -347,6 +347,19 @@ CREATE INDEX IF NOT EXISTS idx_tweets_list_id ON tweets(list_id);
    - 预演支持：提供 `--dry-run` 标志，只返回命中行数及拟删除目录树，不触发任何真实写操作；
    - 人机交互确认：终端非 `--json` 且未携带 `-y/--yes` 时，强制提示输入 `y/N` 确认，防止自动化失控或手滑误删。
 
+### 3.4 推文正文超链接富文本化与媒体短链清洗机制
+为解决 X 原生 `t.co` 短链混排导致的语义丢失、无法点击以及图片附件短链尾缀冗余问题，系统在网络抓取、数据持久化与视图渲染各层实施闭环：
+1. **网络抓取与解析层 (`parser.ts`)**：
+   - 提取推文 payload 中的 `entities.urls`（包含 `url`、`expanded_url`、`display_url`）与 `entities.media`（包含附件媒体短链）；
+   - 正文尾缀媒体短链剔除：使用严格正则 `/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g` 自动修剪仅作为媒体展示的末尾无意义链接；
+   - 严格边界外链替换：针对正文中夹杂在汉字、英文之间的外部短链，使用无侵蚀正则将 `https://t.co/xxx` 转换为 `[display_url](expanded_url)` Markdown 标准格式，杜绝 `\S+` 贪婪匹配误吞中文后续文字；
+2. **渲染与交互层 (`StudioView.tsx`)**：
+   - 实现 `renderFormattedTweetText` 富文本分词器，优先捕获 Markdown 链接 `[label](url)`，其次捕获标准 HTTP/HTTPS 裸 URL；
+   - 渲染为具有现代毛玻璃对比度的超链接胶囊/文字，支持鼠标 hover 悬停下划线与 `↗` 标识，点击无缝调用 `api.openExternal(url)` 唤起系统浏览器；
+3. **数据库存储与导出层 (`storage/index.ts`)**：
+   - `initDb` 自动执行增量事务迁移，扫描库内存量推文，利用推文持久化的 `urls` 元数据将历史残留的 `t.co` 平滑自愈为 Markdown 链接；
+   - Markdown 归档导出 (`index.md`) 同步清洗尾部媒体短链并对齐 Markdown 链接，确保本地知识库可读性与自包含性。
+
 ---
 
 ## 4. 多厂商端点路由与特化参数映射

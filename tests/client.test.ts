@@ -5,6 +5,7 @@ import {
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
   isTweetContentIncomplete,
+  formatTweetTextWithMarkdownUrls,
 } from '../src/main/client/parser.js';
 
 describe('Client Parser Module', () => {
@@ -349,5 +350,85 @@ describe('Client Parser Module', () => {
       urls: ['https://x.com/i/article/1892837462'],
     };
     expect(isTweetContentIncomplete(incompleteArticle)).toBe(true);
+  });
+
+  it('test_format_tweet_text_with_markdown_urls_and_clean_media', () => {
+    // Exact scenario from user: https://x.com/qihang_zeng6688/status/2105106509797769398
+    const rawText =
+      '笑不活了😂\n\nOpenAI发布Dots这款产品\n\n然后马哥反手就买了https://t.co/2ARAbcGLHV这个域名\n点https://t.co/2ARAbcGLHV网站直接跳到了Grok Bot😂 https://t.co/SqrFuDR2et';
+    const urlEntities = [
+      {
+        url: 'https://t.co/2ARAbcGLHV',
+        expanded_url: 'https://Dot.com',
+        display_url: 'Dot.com',
+      },
+    ];
+    const mediaEntities = [
+      {
+        url: 'https://t.co/SqrFuDR2et',
+        media_url_https: 'https://pbs.twimg.com/media/HTbWwcobQAAwBKf.jpg',
+      },
+    ];
+
+    const formatted = formatTweetTextWithMarkdownUrls(rawText, urlEntities, mediaEntities);
+
+    // 1. URLs are converted into [display_url](expanded_url)
+    expect(formatted).toContain('[Dot.com](https://Dot.com)');
+    expect(formatted).not.toContain('https://t.co/2ARAbcGLHV');
+
+    // 2. Photo attachment t.co link at the end is completely trimmed away
+    expect(formatted).not.toContain('https://t.co/SqrFuDR2et');
+    expect(formatted.endsWith('Grok Bot😂')).toBe(true);
+  });
+
+  it('test_parse_tweet_result_converts_tco_to_markdown_link', () => {
+    const rawTweet = {
+      rest_id: '2105106509797769398',
+      core: {
+        user_results: {
+          result: {
+            rest_id: '8888',
+            core: {
+              name: 'Qihang',
+              screen_name: 'qihang_zeng6688',
+            },
+          },
+        },
+      },
+      legacy: {
+        full_text:
+          '笑不活了😂\n\nOpenAI发布Dots这款产品\n\n然后马哥反手就买了https://t.co/2ARAbcGLHV这个域名\n点https://t.co/2ARAbcGLHV网站直接跳到了Grok Bot😂 https://t.co/SqrFuDR2et',
+        created_at: 'Wed Sep 30 01:00:00 +0000 2026',
+        favorite_count: 520,
+        retweet_count: 88,
+        reply_count: 24,
+        entities: {
+          urls: [
+            {
+              url: 'https://t.co/2ARAbcGLHV',
+              expanded_url: 'https://Dot.com',
+              display_url: 'Dot.com',
+            },
+          ],
+          media: [
+            {
+              url: 'https://t.co/SqrFuDR2et',
+              media_url_https: 'https://pbs.twimg.com/media/HTbWwcobQAAwBKf.jpg',
+            },
+          ],
+        },
+      },
+    };
+
+    const parsed = parseTweetResult(rawTweet);
+    expect(parsed).not.toBeNull();
+    // 1. Text is rich markdown with [label](link)
+    expect(parsed?.text).toBe(
+      '笑不活了😂\n\nOpenAI发布Dots这款产品\n\n然后马哥反手就买了[Dot.com](https://Dot.com)这个域名\n点[Dot.com](https://Dot.com)网站直接跳到了Grok Bot😂'
+    );
+    // 2. URLs array has expanded url
+    expect(parsed?.urls).toEqual(['https://Dot.com']);
+    // 3. Media urls array has image
+    expect(parsed?.media_urls).toEqual(['https://pbs.twimg.com/media/HTbWwcobQAAwBKf.jpg']);
   });
 });
