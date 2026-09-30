@@ -391,11 +391,65 @@ CREATE INDEX IF NOT EXISTS idx_tweets_list_id ON tweets(list_id);
    - 在 `parser` 格式化、`storage` 入库映射、`initDb` 存量迁移及前端视图分词渲染各层建立统一反转义流水线：`.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n')`；
    - 彻底消除存量推文与新推文中未经反转义的 `\n\n` 字面量字符，还原推特原汁原味的段落排版。
 
+### 3.6 推文详情原生 Markdown 渲染与 X Article 专栏专属排版机制
+X Article 专栏文章通常为数千至上万字的高价值研报，正文按 Markdown 规范存储大标题（`#`）、核心摘要引用块（`> **核心摘要 / 提要**:`）、中文章节与列表。
+1. **轻量级原生 TweetMarkdown 渲染引擎**：
+   - 彻底避免厚重的三方富文本依赖，在渲染进程定制轻量级分词解析器；
+   - 智能识别 H1-H4 大小标题、代码块、列表项、中文段落节次；
+   - 核心速览卡片（⚡）：对包含 `**核心摘要 / 提要**` 的引用块渲染为极具杂志质感的高光速览卡片，配备专属羽毛笔/闪电高亮图标；
+2. **段落行距与排版质感**：
+   - 段落间距自适应，消除字面量换行符造成的贴合挤压；
+   - 支持正文中的超链接识别并一键调起系统默认浏览器。
+
+### 3.7 推特视频按需流式加载与零静默流量策略机制 (Demand-Driven Video Streaming)
+1. **静默流量阻断**：
+   - 内置播放器（`TweetVideoPlayer`）严格配置 `preload="none"`，未播放时仅展示高清封面图（Poster）与居中大播放按钮【▶】；
+   - 杜绝旧实现 `preload="metadata"` 在推文切换时静默向推特视频 CDN（`video.twimg.com`）发起探测请求而消耗用户代理节点流量，彻底消除未播放前的缓冲转圈等待焦虑。
+2. **会话级代理穿透与防盗链注入**：
+   - 主进程自动挂载会话代理 `session.defaultSession.setProxy`；
+   - 动态注入官方 `Referer: https://x.com/`，规避推特视频 CDN 的跨域防盗链拦截；
+3. **播放容灾与双轨通道**：
+   - 提供缓冲状态提示与错误自愈；
+   - 界面常驻提供【📋 复制直链】与【🌐 在系统浏览器播放 ↗】双轨高速通道，保证任意复杂网络环境下的播放可用性。
+
+### 3.8 单推作者追评抓取受控与默认零碎贴机制 (Author Replies On-Demand)
+1. **默认零碎贴策略**：
+   - 单篇推文抓取时，默认 `fetchAuthorReplies = false`，仅抓取目标推文本体，自动过滤掉该推文下方作者的所有追加评论；
+   - 避免抓取耗时拉长、推文列表被同作者多条碎推文冲刷、以及本地 Markdown 导出产生多余篇章拼接。
+2. **按需抓取与早期过滤**：
+   - `fetchTweetThread` 在嗅探到响应后立即执行早期过滤：若未开启追评抓取，仅返回主推文；若开启，则仅保留原作者发表的连续回复（Thread），同时清洗掉非原作者的路人灌水评论；
+   - `pipeline.fetchTweetAndStore` 联动受控落库，确保无用推文不写入本地 SQLite；
+3. **双模受控与缓存自愈**：
+   - GUI 设置中心（`SettingsDrawer`）提供【抓取作者追评与追加回复】可视化开关；
+   - CLI 命令行提供 `--author-replies` 与 `--no-author-replies` 选项，且具备缓存自愈能力（若本地仅存单推而命令显式带 `--author-replies`，自动重新发起网络拉取补全）。
+
+### 3.9 图文推文全媒体呈现与高斯模糊灯箱预览机制
+1. **解耦视频与配图过滤通道**：
+   - 旧逻辑将视频封面错误应用至普通图文推文导致单图推文不显示；重构后彻底解耦视频与普通配图通道，100% 完整呈现单图与多图。
+2. **推特现代网格布局**：
+   - 单图高清展示，双图并列，三图/四图自适应推特官方经典网格布局；
+3. **沉浸式灯箱预览 (Lightbox)**：
+   - 点击推文配图瞬间呼出全屏高斯模糊灯箱；
+   - 支持键盘 `ESC` 键快捷退出、点击外部蒙层关闭、以及右上方【在浏览器打开原图 ↗】直达高清原图。
+
 ---
 
-## 4. 多厂商端点路由与特化参数映射
+## 4. 多厂商大模型驱动、端点路由与特化参数映射
 
-系统自动对 API Key 前缀或配置参数进行智能路由与特化参数装载：
+### 4.1 7 大主流模型 2026 最新版本与文档约定（全量默认开启 high 级长推理）
+- **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。
+- **OpenAI GPT**：默认主力 `gpt-5.6-sol`（GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，兼容 `gpt-5.6` 别名）。
+- **DeepSeek**：默认主力 `deepseek-flash`（DeepSeek-V4.1-Flash，1M上下文多模态，默认 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），高阶 `deepseek-v4-pro`。
+- **阿里通义千问 Qwen**：默认主力 `qwen3.8-flash`（原生全模态推理，默认携带 `enable_thinking: true` 与 `reasoning_effort: "high"`），旗舰 `qwen3.8-max`，平衡版 `qwen3.7-plus`。
+  - 普通按量端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-` 开头）
+  - **Token Plan 专属端点**：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（Key 为 `sk-sp-` 开头，系统自动识别）
+- **智谱清言 Zhipu**：默认主力 `glm-5.3-flash`（原生多模态高吞吐，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`），旗舰复杂工程 `glm-5.3`，极速 `glm-5.3-flashx`。
+  - 普通开放平台端点：`https://open.bigmodel.cn/api/paas/v4`
+  - **Coding Plan 专属端点**：`https://open.bigmodel.cn/api/coding/paas/v4`
+- **MiniMax**：默认主力 `MiniMax-M3`（1M多模态旗舰，默认启用 `thinking: {"type": "enabled"}` 与 `reasoning_split: true`），极速 `MiniMax-M2.7-highspeed`。
+- **月之暗面 Kimi**：默认主力 `kimi-k3`（2.8T参数1M上下文旗舰，原生全模态推理，默认携带 `reasoning_effort: "high"`），代码 `kimi-k2.7-code`。
+
+### 4.2 厂商端点路由与特化参数装载矩阵
 
 | 厂商 | 标识 | 专属端点 Base URL | 特化思考参数 Payload |
 | :--- | :--- | :--- | :--- |
@@ -408,3 +462,4 @@ CREATE INDEX IF NOT EXISTS idx_tweets_list_id ON tweets(list_id);
 | **月之暗面 Kimi** | `kimi` | `https://api.moonshot.cn/v1` | `{"reasoning_effort": "high"}` |
 | **OpenAI** | `openai` | `https://api.openai.com/v1` | `{"reasoning_effort": "high"}` |
 | **Google Gemini** | `gemini` | 走本地 `agy` 账号免 Key 驱动通道 | `--effort high` / `thinking_level: HIGH` |
+
