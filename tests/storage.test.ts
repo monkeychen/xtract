@@ -125,6 +125,15 @@ describe('Storage Module', () => {
     expect(aliceTweetsAt.length).toBe(1);
     expect(aliceTweetsAt[0].tweet_id).toBe('1001');
 
+    // Fuzzy matching by username substring or author display name
+    const fuzzyUserTweets = storage.getTweetsByUser('lic');
+    expect(fuzzyUserTweets.length).toBe(1);
+    expect(fuzzyUserTweets[0].author_username).toBe('alice');
+
+    const fuzzyNameTweets = storage.getTweetsByUser('lice');
+    expect(fuzzyNameTweets.length).toBe(1);
+    expect(fuzzyNameTweets[0].author_name).toBe('Alice');
+
     const nonUserTweets = storage.getTweetsByUser('unknown_user');
     expect(nonUserTweets.length).toBe(0);
 

@@ -142,8 +142,11 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           (window as any).__recordedCalls.listCalls.push(opts);
           let result = [...mockDbTweets];
           if (opts?.user) {
+            const u = opts.user.toLowerCase();
             result = result.filter(
-              (t) => t.author_username.toLowerCase() === opts.user.toLowerCase()
+              (t) =>
+                t.author_username.toLowerCase().includes(u) ||
+                t.author_name.toLowerCase().includes(u)
             );
           }
           if (opts?.query) {
@@ -161,8 +164,11 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           (window as any).__recordedCalls.countCalls.push(opts);
           let result = [...mockDbTweets];
           if (opts?.user) {
+            const u = opts.user.toLowerCase();
             result = result.filter(
-              (t) => t.author_username.toLowerCase() === opts.user.toLowerCase()
+              (t) =>
+                t.author_username.toLowerCase().includes(u) ||
+                t.author_name.toLowerCase().includes(u)
             );
           }
           if (opts?.query) {

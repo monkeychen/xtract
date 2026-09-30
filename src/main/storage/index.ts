@@ -526,9 +526,11 @@ export class Storage {
     const params: (string | number)[] = [minLikes, minRetweets];
 
     // 1. 博主追踪维度：若显式指定了博主，彻底放开 source_type 限制，聚合该博主在全库的所有推文（关注流、搜索或列表）
+    // 支持模糊匹配博主用户名（账号ID）或博主昵称（author_name）
     if (options.user && options.user.trim()) {
-      whereClauses.push('LOWER(author_username) = LOWER(?)');
-      params.push(options.user.replace(/^@/, '').trim());
+      const u = `%${options.user.replace(/^@/, '').trim().toLowerCase()}%`;
+      whereClauses.push('(LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
+      params.push(u, u);
     } else if (options.sourceType && options.sourceType !== 'all') {
       // 2. 按数据源筛选
       if (options.sourceType === 'following') {

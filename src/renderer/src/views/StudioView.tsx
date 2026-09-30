@@ -1379,7 +1379,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="输入关键词、推文链接或 ID (回车/搜本地即查，右侧按钮实时抓取)..."
+                placeholder="输入【关键词、推文链接或ID】即触发本地搜索"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onKeyDown={(e) => {
@@ -1388,14 +1388,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                   }
                 }}
               />
-              <button
-                className="secondary-button"
-                style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                onClick={() => loadLocalTweets(50, 'search', false, searchQuery)}
-                title="在本地 SQLite 数据库中检索该关键词"
-              >
-                <span>🔍 搜本地</span>
-              </button>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
@@ -1461,7 +1453,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="@博主用户名 (输入即搜本地，回车或右侧实时抓取)..."
+                placeholder="输入【博主用户名或昵称】即触发本地搜索"
                 value={userHandle}
                 onChange={(e) => handleUserChange(e.target.value)}
                 onKeyDown={(e) => {
@@ -1471,21 +1463,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                   }
                 }}
               />
-              <button
-                className="secondary-button"
-                style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                onClick={() => {
-                  const u = userHandle.trim().replace(/^@/, '');
-                  if (!u) {
-                    showToast('请输入要检索的博主用户名（如 @username）');
-                    return;
-                  }
-                  loadLocalTweets(50, 'user', false, undefined, u);
-                }}
-                title="在本地 SQLite 数据库中检索该博主的推文"
-              >
-                <span>🔍 查本地</span>
-              </button>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
