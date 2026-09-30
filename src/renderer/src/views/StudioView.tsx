@@ -1305,9 +1305,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
           {/* 容器 1: 关注流操作区 */}
           {dataSource === 'following' && (
             <div id="zone-following" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>
-                上次同步: 15分钟前
-              </span>
               <div className="split-btn-group">
                 <button
                   className="cta-button split-btn-main"
