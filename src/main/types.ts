@@ -20,6 +20,8 @@ export interface Tweet {
   media_urls?: string[];
   video_url?: string;
   video_poster?: string;
+  is_note_tweet?: boolean;
+  is_article?: boolean;
   source_type?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
   list_id?: string;
   fetched_at?: string;

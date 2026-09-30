@@ -8,6 +8,10 @@ import {
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
   extractListsFromGraphQL,
+  isArticleTweet,
+  isNoteTweet,
+  isLongContentTweet,
+  isTweetContentIncomplete,
 } from './parser.js';
 
 export {
@@ -16,6 +20,10 @@ export {
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
   extractListsFromGraphQL,
+  isArticleTweet,
+  isNoteTweet,
+  isLongContentTweet,
+  isTweetContentIncomplete,
 };
 
 export interface FetchTimelineOptions {
@@ -23,12 +31,14 @@ export interface FetchTimelineOptions {
   maxPages?: number;
   pageDelay?: number;
   timeout?: number;
+  onlyLongTweets?: boolean;
 }
 
 export interface FetchUserOptions {
   limit?: number;
   pageDelay?: number;
   timeout?: number;
+  onlyLongTweets?: boolean;
 }
 
 export interface FetchSearchOptions {
@@ -36,6 +46,7 @@ export interface FetchSearchOptions {
   limit?: number;
   pageDelay?: number;
   timeout?: number;
+  onlyLongTweets?: boolean;
 }
 
 export class XClient {
@@ -600,12 +611,18 @@ export class XClient {
         }
       }
 
+      const onlyLong =
+        options?.onlyLongTweets !== undefined
+          ? options.onlyLongTweets
+          : Config.FETCH_ONLY_LONG_TWEETS;
+
       // Paginate by scrolling if user requested more and we haven't reached limit
       for (let pIdx = 1; pIdx < maxPages; pIdx++) {
         if (limit) {
           let countSoFar = 0;
           for (const instList of capturedInstructions) {
-            countSoFar += parseTimelineInstructions(instList).length;
+            const batch = parseTimelineInstructions(instList);
+            countSoFar += onlyLong ? batch.filter(isLongContentTweet).length : batch.length;
           }
           if (countSoFar >= limit) {
             break;
@@ -621,6 +638,11 @@ export class XClient {
       await browser.close();
     }
 
+    const onlyLong =
+      options?.onlyLongTweets !== undefined
+        ? options.onlyLongTweets
+        : Config.FETCH_ONLY_LONG_TWEETS;
+
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
     for (const instList of capturedInstructions) {
@@ -628,9 +650,15 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          allTweets.push(t);
+          if (!onlyLong || isLongContentTweet(t)) {
+            allTweets.push(t);
+          }
         }
       }
+    }
+
+    if (onlyLong) {
+      process.stderr.write(`ℹ️ 过滤规则生效：仅抓取长推文 (Note Tweet) 与专栏文章 (X Article)\n`);
     }
 
     return limit ? allTweets.slice(0, limit) : allTweets;
@@ -648,6 +676,10 @@ export class XClient {
     const pageDelay = options?.pageDelay || 2.0;
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
+    const onlyLong =
+      options?.onlyLongTweets !== undefined
+        ? options.onlyLongTweets
+        : Config.FETCH_ONLY_LONG_TWEETS;
 
     process.stderr.write(
       `⏳ 正在通过推特双轨机制拉取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`
@@ -662,10 +694,13 @@ export class XClient {
         limit: Math.max(limit, 20),
         pageDelay,
         timeout: Math.min(timeout, 25),
+        onlyLongTweets: onlyLong,
       });
 
       const matched = searchTweets.filter(
-        (t) => t.author_username.toLowerCase() === cleanUser.toLowerCase()
+        (t) =>
+          t.author_username.toLowerCase() === cleanUser.toLowerCase() &&
+          (!onlyLong || isLongContentTweet(t))
       );
 
       if (matched.length > 0) {
@@ -743,7 +778,9 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          allTweets.push(t);
+          if (!onlyLong || isLongContentTweet(t)) {
+            allTweets.push(t);
+          }
         }
       }
     }
@@ -880,6 +917,11 @@ export class XClient {
       await browser.close();
     }
 
+    const onlyLong =
+      options?.onlyLongTweets !== undefined
+        ? options.onlyLongTweets
+        : Config.FETCH_ONLY_LONG_TWEETS;
+
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
     for (const instList of capturedInstructions) {
@@ -887,7 +929,9 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          allTweets.push(t);
+          if (!onlyLong || isLongContentTweet(t)) {
+            allTweets.push(t);
+          }
         }
       }
     }
@@ -964,6 +1008,11 @@ export class XClient {
       await session.close();
     }
 
+    const onlyLong =
+      options?.onlyLongTweets !== undefined
+        ? options.onlyLongTweets
+        : Config.FETCH_ONLY_LONG_TWEETS;
+
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
     for (const instList of capturedInstructions) {
@@ -971,7 +1020,9 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          allTweets.push(t);
+          if (!onlyLong || isLongContentTweet(t)) {
+            allTweets.push(t);
+          }
         }
       }
     }

@@ -513,6 +513,23 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(200);
     expect(await page.locator('.fmt-chip.active', { hasText: '标准' }).isVisible()).toBe(true);
 
+    // Verify 抓取过滤规则 switch is visible and checked by default
+    const filterRuleHeader = page.locator('div', { hasText: '抓取过滤规则' }).first();
+    expect(await filterRuleHeader.isVisible()).toBe(true);
+    expect(await page.locator('div', { hasText: '仅抓取长推文与专栏文章' }).first().isVisible()).toBe(true);
+
+    const longTweetsToggle = page.locator('#only-long-tweets-toggle');
+    expect(await longTweetsToggle.isChecked()).toBe(true);
+
+    // Toggle switch via slider and back
+    const toggleSlider = page.locator('label.switch:has(#only-long-tweets-toggle) .slider');
+    await toggleSlider.click();
+    await page.waitForTimeout(100);
+    expect(await longTweetsToggle.isChecked()).toBe(false);
+    await toggleSlider.click();
+    await page.waitForTimeout(100);
+    expect(await longTweetsToggle.isChecked()).toBe(true);
+
     await page.locator('button', { hasText: '保存' }).click();
     await page.waitForTimeout(800);
 

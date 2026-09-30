@@ -53,6 +53,7 @@ if (isCLI) {
     .option('--min-likes <n>', '最低点赞门槛过滤', '0')
     .option('--min-retweets <n>', '最低转发门槛过滤', '0')
     .option('--timeout <seconds>', '网络请求与页面加载超时时间（秒）')
+    .option('--all-tweets', '不过滤普通短推文，抓取包含短推文在内的全量推文（默认仅抓取长推文 Note Tweet 与专栏文章 X Article）')
     // LLM Options
     .option(
       '--provider <provider>',
@@ -74,6 +75,9 @@ if (isCLI) {
     const pages = options.pages ? parseInt(options.pages, 10) : undefined;
     const timeout = options.timeout ? parseInt(options.timeout, 10) : undefined;
     const top = parseInt(options.top || '10', 10);
+    if (options.allTweets) {
+      process.env.FETCH_ONLY_LONG_TWEETS = 'false';
+    }
 
     const storage = new Storage();
     const client = new XClient(timeout);

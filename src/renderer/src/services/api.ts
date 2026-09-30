@@ -41,6 +41,7 @@ class ApiService {
       hasXCredentials: true,
       xAuthTokenMasked: '2a8f••••••••78b9',
       xCt0Masked: 'c901••••••••55aa',
+      onlyLongTweets: true,
     };
   }
 
@@ -60,6 +61,7 @@ class ApiService {
         llmAuthMode: updates.LLM_AUTH_MODE || current.llmAuthMode,
         llmModel: updates.LLM_MODEL || current.llmModel,
         httpProxy: updates.HTTP_PROXY || current.httpProxy,
+        onlyLongTweets: updates.FETCH_ONLY_LONG_TWEETS !== undefined ? updates.FETCH_ONLY_LONG_TWEETS !== 'false' : current.onlyLongTweets,
       },
     };
   }

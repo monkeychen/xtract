@@ -660,6 +660,58 @@ describe('Storage Module', () => {
     // Link t.co is converted to markdown link
     expect(mdContent).toContain('[superai.com](https://superai.com/launch)');
   });
+
+  it('test_storage_escaped_newlines_migration_and_healing', () => {
+    // Save tweet with literal escaped '\n\n'
+    const tweetWithEscapes: Partial<Tweet> = {
+      tweet_id: 'escape_101',
+      author_name: 'Test Dev',
+      author_username: 'testdev',
+      text: '第一行\\n\\n第二行\\r\\n第三行',
+      quoted_text: '引用第一行\\n\\n引用第二行',
+      created_at: '2026-09-30T02:00:00Z',
+    };
+
+    storage.saveTweets([tweetWithEscapes]);
+
+    const retrieved = storage.getTweetById('escape_101');
+    expect(retrieved).not.toBeNull();
+    // Literal '\n' characters should be healed to real physical newlines
+    expect(retrieved?.text).toBe('第一行\n\n第二行\n第三行');
+    expect(retrieved?.quoted_text).toBe('引用第一行\n\n引用第二行');
+    expect(retrieved?.text).not.toContain('\\n');
+  });
+
+  it('test_storage_note_and_article_flags_persistence', () => {
+    const articleTweet: Partial<Tweet> = {
+      tweet_id: 'art_flag_1',
+      author_name: 'Article Author',
+      author_username: 'author_art',
+      text: '# Deep Architecture Overview\n\nFull article body...',
+      created_at: '2026-09-30T03:00:00Z',
+      is_article: true,
+      is_note_tweet: false,
+    };
+
+    const noteTweet: Partial<Tweet> = {
+      tweet_id: 'note_flag_1',
+      author_name: 'Note Author',
+      author_username: 'author_note',
+      text: 'Short preview text… https://t.co/noteLink',
+      urls: ['https://t.co/noteLink'],
+      created_at: '2026-09-30T03:05:00Z',
+      is_note_tweet: true,
+      is_article: false,
+    };
+
+    storage.saveTweets([articleTweet, noteTweet]);
+
+    const art = storage.getTweetById('art_flag_1');
+    expect(art?.is_article).toBe(true);
+
+    const note = storage.getTweetById('note_flag_1');
+    expect(note?.is_note_tweet).toBe(true);
+  });
 });
 
 

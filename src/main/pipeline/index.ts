@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
-import { XClient } from '../client/index.js';
+import { XClient, isLongContentTweet } from '../client/index.js';
 import { Summarizer } from './summarizer.js';
 import type { Tweet, TrendTopic, StreamChunk } from '../types.js';
 
@@ -91,6 +91,7 @@ export class Pipeline {
       maxPages: effectivePages,
       limit,
       timeout: actualTimeout,
+      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条推文\n`);
@@ -100,7 +101,8 @@ export class Pipeline {
       const rawPath = path.join(Config.RAW_DIR, `raw_${nowStr}.json`);
       fs.writeFileSync(rawPath, JSON.stringify(tweets, null, 2), 'utf-8');
 
-      const { inserted, skipped } = this.storage.saveTweets(tweets, 'following');
+      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'following');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -119,12 +121,17 @@ export class Pipeline {
     const cleanUser = username.replace(/^@/, '').trim();
     process.stderr.write(`⏳ 开始抓取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`);
 
-    const tweets = await this.client.fetchUserTimeline(cleanUser, { limit, timeout });
+    const tweets = await this.client.fetchUserTimeline(cleanUser, {
+      limit,
+      timeout,
+      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+    });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条 @${cleanUser} 的推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets, 'user');
+      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'user');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -148,12 +155,17 @@ export class Pipeline {
       });
     }
 
-    const tweets = await this.client.fetchListTimeline(listIdOrUrl, { limit, timeout });
+    const tweets = await this.client.fetchListTimeline(listIdOrUrl, {
+      limit,
+      timeout,
+      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+    });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets, 'list', cleanListId);
+      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'list', cleanListId);
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
@@ -203,6 +215,7 @@ export class Pipeline {
       searchType,
       limit,
       timeout,
+      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从搜索拉取到 ${fetchedCount} 条推文\n`);
@@ -218,7 +231,8 @@ export class Pipeline {
     }
 
     if (fetchedCount > 0) {
-      const { inserted, skipped } = this.storage.saveTweets(tweets, 'search');
+      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'search');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );

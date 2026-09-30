@@ -149,6 +149,7 @@ describe('Pipeline and Summarizer Modules', () => {
       created_at: new Date().toISOString(),
       like_count: 10,
       retweet_count: 1,
+      is_note_tweet: true,
     }));
 
     const mockClient: any = {
@@ -161,6 +162,7 @@ describe('Pipeline and Summarizer Modules', () => {
     expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
       maxPages: 1,
       limit: 20,
+      onlyLongTweets: true,
       timeout: undefined,
     });
     expect(fetched).toBe(20);

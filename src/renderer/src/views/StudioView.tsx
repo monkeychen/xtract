@@ -31,7 +31,7 @@ export function renderFormattedTweetText(
   if (!text) return null;
 
   // 1. 若正文末尾残留媒体附件短链（如 https://t.co/... 且该推文含媒体附件），自动剔除
-  let cleanText = text;
+  let cleanText = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
   cleanText = cleanText.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
     const raw = match.trim();
     if (urls && urls.includes(raw)) return match;
@@ -1877,9 +1877,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                   {/* 第 2 行：推文单行精炼标题/第一行文字 (§1 单行溢出省略，杜绝冗余次级摘要) */}
                   <div className="feed-item-title-row">
                     {Boolean(
-                      tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
-                        (tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text))
-                    ) && (
+                      tweet.is_article ||
+                        tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
+                        (tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text)) ||
+                        tweet.text?.startsWith('# ')
+                    ) ? (
                       <span
                         className="feed-tag"
                         style={{
@@ -1888,9 +1890,24 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                           fontWeight: 600,
                         }}
                       >
-                        📰 深度长文
+                        📰 专栏文章
                       </span>
-                    )}
+                    ) : Boolean(
+                      tweet.is_note_tweet ||
+                        (tweet.text && tweet.text.length > 280) ||
+                        (tweet.text && /…\s*https:\/\/t\.co\/\S+$/i.test(tweet.text.trim()))
+                    ) ? (
+                      <span
+                        className="feed-tag"
+                        style={{
+                          background: 'rgba(14, 165, 233, 0.12)',
+                          color: '#0284c7',
+                          fontWeight: 600,
+                        }}
+                      >
+                        📝 长推文
+                      </span>
+                    ) : null}
                     {isTweetVideo(tweet) ? (
                       <span className="feed-tag" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 600 }}>
                         🎬 视频
@@ -1992,9 +2009,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                         {selectedTweet.author_name || selectedTweet.author_username}
                       </h3>
                       {Boolean(
-                        selectedTweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
-                          (selectedTweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(selectedTweet.text))
-                      ) && (
+                        selectedTweet.is_article ||
+                          selectedTweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u)) ||
+                          (selectedTweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(selectedTweet.text)) ||
+                          selectedTweet.text?.startsWith('# ')
+                      ) ? (
                         <span
                           style={{
                             fontSize: '11px',
@@ -2005,9 +2024,26 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                             fontWeight: 600,
                           }}
                         >
-                          📰 X Article 深度长文
+                          📰 专栏文章 (X Article)
                         </span>
-                      )}
+                      ) : Boolean(
+                        selectedTweet.is_note_tweet ||
+                          (selectedTweet.text && selectedTweet.text.length > 280) ||
+                          (selectedTweet.text && /…\s*https:\/\/t\.co\/\S+$/i.test(selectedTweet.text.trim()))
+                      ) ? (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#0284c7',
+                            background: 'rgba(14, 165, 233, 0.12)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          📝 长推文 (Note Tweet)
+                        </span>
+                      ) : null}
                       {isDetailLoading && (
                         <span style={{ fontSize: '11px', color: 'var(--cinnabar)', background: 'var(--cinnabar-wash)', padding: '1px 6px', borderRadius: '4px' }}>
                           ⚡ 正在自动同步全文与高清媒体...

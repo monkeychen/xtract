@@ -6,6 +6,9 @@ import {
   parseTrendsFromGraphQL,
   isTweetContentIncomplete,
   formatTweetTextWithMarkdownUrls,
+  isArticleTweet,
+  isNoteTweet,
+  isLongContentTweet,
 } from '../src/main/client/parser.js';
 
 describe('Client Parser Module', () => {
@@ -430,5 +433,63 @@ describe('Client Parser Module', () => {
     expect(parsed?.urls).toEqual(['https://Dot.com']);
     // 3. Media urls array has image
     expect(parsed?.media_urls).toEqual(['https://pbs.twimg.com/media/HTbWwcobQAAwBKf.jpg']);
+  });
+
+  it('test_format_tweet_text_cleans_literal_escaped_newlines', () => {
+    // Literal '\n\n' and '\r\n' should be cleanly transformed to physical newlines
+    const textWithLiteralEscapes = '段落一\\n\\n段落二\\r\\n段落三';
+    const cleaned = formatTweetTextWithMarkdownUrls(textWithLiteralEscapes);
+    expect(cleaned).toBe('段落一\n\n段落二\n段落三');
+    expect(cleaned).not.toContain('\\n');
+    expect(cleaned).not.toContain('\\r');
+  });
+
+  it('test_is_article_and_is_note_tweet_detection', () => {
+    // 1. Article detection via x.com/i/article URL
+    const articleByUrl = {
+      tweet_id: 'art_1',
+      text: 'Check out my long article https://x.com/i/article/123456789',
+      urls: ['https://x.com/i/article/123456789'],
+    };
+    expect(isArticleTweet(articleByUrl)).toBe(true);
+    expect(isNoteTweet(articleByUrl)).toBe(false);
+    expect(isLongContentTweet(articleByUrl)).toBe(true);
+
+    // 2. Article detection via Markdown H1 header
+    const articleByHeader = {
+      tweet_id: 'art_2',
+      text: '# Comprehensive Architecture Analysis\n\nDetailed breakdown of components...',
+      urls: [],
+    };
+    expect(isArticleTweet(articleByHeader)).toBe(true);
+    expect(isLongContentTweet(articleByHeader)).toBe(true);
+
+    // 3. Note tweet via length > 280
+    const longNoteTweet = {
+      tweet_id: 'note_1',
+      text: 'A'.repeat(281),
+      urls: [],
+    };
+    expect(isNoteTweet(longNoteTweet)).toBe(true);
+    expect(isLongContentTweet(longNoteTweet)).toBe(true);
+
+    // 4. Note tweet via truncation ellipsis
+    const truncatedTweet = {
+      tweet_id: 'note_2',
+      text: 'This is a truncated preview of a deep thought… https://t.co/abcXYZ',
+      urls: ['https://t.co/abcXYZ'],
+    };
+    expect(isNoteTweet(truncatedTweet)).toBe(true);
+    expect(isLongContentTweet(truncatedTweet)).toBe(true);
+
+    // 5. Normal short tweet (NOT article, NOT note)
+    const shortTweet = {
+      tweet_id: 'short_1',
+      text: 'Just had lunch! Good day everyone.',
+      urls: [],
+    };
+    expect(isArticleTweet(shortTweet)).toBe(false);
+    expect(isNoteTweet(shortTweet)).toBe(false);
+    expect(isLongContentTweet(shortTweet)).toBe(false);
   });
 });

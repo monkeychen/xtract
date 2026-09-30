@@ -106,6 +106,9 @@ export function formatTweetTextWithMarkdownUrls(
   if (!text) return '';
   let res = text;
 
+  // 0. 规范化换行符：清洗转义字符字面量 "\n" / "\r\n" 为物理真实换行符，并统一格式
+  res = res.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+
   // 1. 移除多媒体附件短链 (推特官方在正文末尾自动追加的配图/视频短链，如 " https://t.co/SqrFuDR2et")
   for (const m of mediaEntities) {
     if (m?.url) {
@@ -275,6 +278,19 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     }
   }
 
+  const isArticle = Boolean(
+    tweetResult.article?.article_results?.result ||
+      primaryUrlEntities.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u.expanded_url || u.url || '')) ||
+      (fullText && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(fullText)) ||
+      fullText.startsWith('# ')
+  );
+  const isNoteTweet = Boolean(
+    tweetResult.note_tweet?.note_tweet_results?.result ||
+      fullText.length > 280 ||
+      /…\s*https:\/\/t\.co\/\S+$/i.test(fullText) ||
+      /\.\.\.\s*https:\/\/t\.co\/\S+$/i.test(fullText)
+  );
+
   return {
     tweet_id: String(tweetResult.rest_id || ''),
     author_id: String(authorId),
@@ -296,6 +312,8 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     media_urls: mediaUrls,
     video_url: videoUrl,
     video_poster: videoPoster,
+    is_note_tweet: isNoteTweet,
+    is_article: isArticle,
   };
 }
 
@@ -535,6 +553,7 @@ export function normalizeTweetDate(rawDate?: string): string {
  */
 export function isArticleTweet(tweet: Partial<Tweet>): boolean {
   if (!tweet) return false;
+  if (tweet.is_article) return true;
   // 1. Check if urls contains an official article link
   const hasArticleUrl = Boolean(
     tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u))
@@ -543,7 +562,40 @@ export function isArticleTweet(tweet: Partial<Tweet>): boolean {
   const hasArticleInText = Boolean(
     tweet.text && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(tweet.text)
   );
-  return hasArticleUrl || hasArticleInText;
+  // 3. Check if text starts with markdown title header formatted from articleResult
+  const hasArticleTitleHeader = Boolean(tweet.text && tweet.text.startsWith('# '));
+  return hasArticleUrl || hasArticleInText || hasArticleTitleHeader;
+}
+
+/**
+ * Determines whether a tweet is a Note Tweet (long-form post > 280 chars or note_tweet payload).
+ */
+export function isNoteTweet(tweet: Partial<Tweet>): boolean {
+  if (!tweet) return false;
+  if (tweet.is_note_tweet) return true;
+  if (tweet.text && tweet.text.length > 280) return true;
+  // Check if truncated note tweet preview
+  if (tweet.text) {
+    const trimmed = tweet.text.trim();
+    if (
+      trimmed.length <= 400 &&
+      (/…\s*https:\/\/t\.co\/\S+$/i.test(trimmed) || /\.\.\.\s*https:\/\/t\.co\/\S+$/i.test(trimmed))
+    ) {
+      return true;
+    }
+  }
+  // Check official note links
+  if (tweet.urls?.some((u) => /(?:x\.com|twitter\.com)\/i\/notes\/\d+/i.test(u))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Determines whether a tweet is a long content tweet (either Note Tweet or X Article).
+ */
+export function isLongContentTweet(tweet: Partial<Tweet>): boolean {
+  return isArticleTweet(tweet) || isNoteTweet(tweet);
 }
 
 /**

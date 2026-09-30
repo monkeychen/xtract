@@ -23,6 +23,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [apiKey, setApiKey] = useState('AIzaSyDummyKeyForPrototype12345');
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
+  const [onlyLongTweets, setOnlyLongTweets] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -36,6 +37,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         setModel(cfg.llmModel || 'gemini-3.8-flash');
         setReasoningEnabled(cfg.reasoningEnabled !== false);
         setReasoningEffort(cfg.reasoningEffort || 'high');
+        setOnlyLongTweets(cfg.onlyLongTweets !== false);
       });
       setSaveSuccess(false);
     }
@@ -68,6 +70,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       LLM_MODEL: model,
       LLM_REASONING_ENABLED: String(reasoningEnabled),
       LLM_REASONING_EFFORT: reasoningEffort,
+      FETCH_ONLY_LONG_TWEETS: String(onlyLongTweets),
     });
     setIsSaving(false);
     onConfigUpdated();
@@ -245,6 +248,34 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* 抓取过滤规则 */}
+          <div style={{ marginBottom: '24px' }}>
+            <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
+              抓取过滤规则
+            </h3>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ paddingRight: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
+                    仅抓取长推文与专栏文章
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginTop: '2px', lineHeight: 1.4 }}>
+                    默认开启。自动过滤普通短推文与闲聊碎碎念，仅保留长推文 (Note Tweet) 和专栏文章 (X Article)
+                  </div>
+                </div>
+                <label className="switch" style={{ flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    id="only-long-tweets-toggle"
+                    checked={onlyLongTweets}
+                    onChange={(e) => setOnlyLongTweets(e.target.checked)}
+                  />
+                  <span className="slider" />
+                </label>
+              </div>
             </div>
           </div>
 

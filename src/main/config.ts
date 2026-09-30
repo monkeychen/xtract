@@ -129,6 +129,10 @@ export class Config {
   static get FETCH_TIMEOUT(): number {
     return parseInt(process.env.FETCH_TIMEOUT || '60', 10);
   }
+  // Crawl Filter Settings (默认仅抓取长推文 Note Tweet 与专栏文章 X Article)
+  static get FETCH_ONLY_LONG_TWEETS(): boolean {
+    return (process.env.FETCH_ONLY_LONG_TWEETS || 'true').toLowerCase().trim() !== 'false';
+  }
 
   static ensureDirs(): void {
     for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR, this.BROWSER_PROFILE_DIR]) {

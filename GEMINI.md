@@ -67,6 +67,9 @@
 18. **推文正文超链接富文本转换与媒体短链清洗（Rich Hyperlink Formatting & Clean Media T.co Stripping）**：
     - **为什么**：推特官方将外链与媒体附件全部混排包装为短链（`t.co`）。直接展示纯文本短链不仅无法点击，且丧失了原始域名的语义信息（用户不知道点进去是 Dot.com 还是钓鱼网站）；同时末尾冗余的图片短链会造成正文“乱尾”。在中文无空格环境下，若使用非空白正则还会误吞紧随其后的汉字。
     - **对用户的影响**：将推文中的外部链接自动还原为有语义的 `[display_url](expanded_url)` Markdown 格式，同时精准剔除正文末尾仅作为配图/视频展示的无意义媒体短链；前端推文详情面板将 Markdown 链接与普通 URL 渲染为支持 pointer 悬停高亮的可点击超链接，一键调起系统默认浏览器打开；配合历史数据库存量推文平滑迁移与 Markdown 导出自愈，全链路无缝体验。
+19. **长推文/专栏文章默认抓取过滤与物理换行规整（Long Content Filtering & Normalized Newlines）**：
+    - **为什么**：推特信息流中充斥大量单句闲聊、碎碎念与低信噪比水帖；同时终端参数或历史序列化转义会导致推文正文中暴露未经反转义的 `\n\n` 字面量。
+    - **对用户的影响**：在抓取链路建立默认开启的长推文（Note Tweet，字符数 > 280 或被推特截断）与专栏文章（X Article，`x.com/i/article` 或以大标题开头）过滤规则（支持设置抽屉一键开关，CLI 通过 `--all-tweets` 放开全量抓取）；并在解析、存储、渲染与 Markdown 导出四重管道统一将字面量 `\n\n` 平滑自愈为真实段落换行，阅读体验极其整洁舒适。
 
 ### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
 - **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。
@@ -149,7 +152,7 @@ xtract/
     - 按日期范围删除：`pnpm dev:cli -- --delete --since 2026-09-01 --until 2026-09-15 [-y]`
     - 按过期天数删除：`pnpm dev:cli -- --delete --older-than 30d [-y]`
     - 演练预览（不实际删除）：`pnpm dev:cli -- --delete --user <username> --dry-run`
-  - 仅抓取关注流：`pnpm dev:cli -- --fetch-only`
+  - 仅抓取关注流（默认仅长推文/专栏）：`pnpm dev:cli -- --fetch-only [--all-tweets]`
   - 仅生成今日早报：`pnpm dev:cli -- --report-only [--hours 24]`
   - 检索本地推文：`pnpm dev:cli -- --list [数量]`
 - 运行自动化测试：`pnpm test`

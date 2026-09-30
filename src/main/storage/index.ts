@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
-import { normalizeTweetDate } from '../client/parser.js';
+import { normalizeTweetDate, isArticleTweet, isNoteTweet } from '../client/parser.js';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
@@ -120,6 +120,8 @@ export class Storage {
         media_urls TEXT,
         video_url TEXT,
         video_poster TEXT,
+        is_note_tweet INTEGER DEFAULT 0,
+        is_article INTEGER DEFAULT 0,
         source_type TEXT DEFAULT 'legacy',
         list_id TEXT,
         fetched_at TEXT NOT NULL
@@ -155,6 +157,17 @@ export class Storage {
         this.db.exec(`ALTER TABLE tweets ADD COLUMN list_id TEXT`);
       }
       this.db.exec(`CREATE INDEX IF NOT EXISTS idx_list_id ON tweets(list_id)`);
+
+      const hasIsNoteTweet = columns.some((c) => c.name === 'is_note_tweet');
+      if (!hasIsNoteTweet) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN is_note_tweet INTEGER DEFAULT 0`);
+      }
+      const hasIsArticle = columns.some((c) => c.name === 'is_article');
+      if (!hasIsArticle) {
+        this.db.exec(`ALTER TABLE tweets ADD COLUMN is_article INTEGER DEFAULT 0`);
+      }
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_is_note_tweet ON tweets(is_note_tweet)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_is_article ON tweets(is_article)`);
 
       // 自动清洗并规范化存量非 ISO-8601 格式的推文时间 (如推特原生 "Wed Aug 26 ...")
       // 确保 SQLite 中字符串排序 ORDER BY created_at DESC 与物理真实时间完全一致
@@ -247,6 +260,52 @@ export class Storage {
         });
         migrateTextTx();
       }
+
+      // 自动清洗历史存量推文中残留的转义换行符字面量 (如 \\n\\n 或 \\r\\n) 还原为物理真实换行符
+      const escapedNewlineRows = this.db.prepare(`
+        SELECT tweet_id, text, quoted_text, retweeted_text FROM tweets
+        WHERE text LIKE '%\\n%' OR quoted_text LIKE '%\\n%' OR retweeted_text LIKE '%\\n%'
+      `).all() as { tweet_id: string; text: string; quoted_text?: string; retweeted_text?: string }[];
+
+      if (escapedNewlineRows.length > 0) {
+        const updateNewlineStmt = this.db.prepare(
+          'UPDATE tweets SET text = ?, quoted_text = ?, retweeted_text = ? WHERE tweet_id = ?'
+        );
+        const fixNewlineTx = this.db.transaction(() => {
+          for (const row of escapedNewlineRows) {
+            const cleanText = row.text ? row.text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n') : row.text;
+            const cleanQuoted = row.quoted_text ? row.quoted_text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n') : row.quoted_text;
+            const cleanRetweeted = row.retweeted_text ? row.retweeted_text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n') : row.retweeted_text;
+            updateNewlineStmt.run(cleanText, cleanQuoted || null, cleanRetweeted || null, row.tweet_id);
+          }
+        });
+        fixNewlineTx();
+      }
+
+      // 自动回填历史存量推文的 is_note_tweet 与 is_article 属性
+      const unclassifiedRows = this.db.prepare(`
+        SELECT tweet_id, text, urls FROM tweets
+        WHERE (is_note_tweet IS NULL OR is_note_tweet = 0)
+          AND (is_article IS NULL OR is_article = 0)
+      `).all() as { tweet_id: string; text: string; urls: string }[];
+
+      if (unclassifiedRows.length > 0) {
+        const updateClassStmt = this.db.prepare(
+          'UPDATE tweets SET is_note_tweet = ?, is_article = ? WHERE tweet_id = ?'
+        );
+        const classifyTx = this.db.transaction(() => {
+          for (const row of unclassifiedRows) {
+            let parsedUrls: string[] = [];
+            try { parsedUrls = JSON.parse(row.urls || '[]'); } catch {}
+            const art = isArticleTweet({ text: row.text, urls: parsedUrls });
+            const note = isNoteTweet({ text: row.text, urls: parsedUrls });
+            if (art || note) {
+              updateClassStmt.run(note ? 1 : 0, art ? 1 : 0, row.tweet_id);
+            }
+          }
+        });
+        classifyTx();
+      }
     } catch {
       // 忽略迁移警告
     }
@@ -266,12 +325,14 @@ export class Storage {
         tweet_id, author_id, author_name, author_username,
         text, created_at, is_retweet, retweeted_author, retweeted_text,
         is_quote, quoted_author, quoted_text, like_count, retweet_count,
-        reply_count, view_count, urls, media_urls, video_url, video_poster, source_type, list_id, fetched_at
+        reply_count, view_count, urls, media_urls, video_url, video_poster,
+        is_note_tweet, is_article, source_type, list_id, fetched_at
       ) VALUES (
         @tweet_id, @author_id, @author_name, @author_username,
         @text, @created_at, @is_retweet, @retweeted_author, @retweeted_text,
         @is_quote, @quoted_author, @quoted_text, @like_count, @retweet_count,
-        @reply_count, @view_count, @urls, @media_urls, @video_url, @video_poster, @source_type, @list_id, @fetched_at
+        @reply_count, @view_count, @urls, @media_urls, @video_url, @video_poster,
+        @is_note_tweet, @is_article, @source_type, @list_id, @fetched_at
       )
     `);
 
@@ -279,6 +340,8 @@ export class Storage {
       for (const item of items) {
         if (!item.tweet_id || !item.text) continue;
         try {
+          const isArticle = item.is_article !== undefined ? (item.is_article ? 1 : 0) : isArticleTweet(item) ? 1 : 0;
+          const isNote = item.is_note_tweet !== undefined ? (item.is_note_tweet ? 1 : 0) : isNoteTweet(item) ? 1 : 0;
           insertStmt.run({
             tweet_id: item.tweet_id,
             author_id: item.author_id || '',
@@ -300,6 +363,8 @@ export class Storage {
             media_urls: JSON.stringify(item.media_urls || []),
             video_url: item.video_url || null,
             video_poster: item.video_poster || null,
+            is_note_tweet: isNote,
+            is_article: isArticle,
             source_type: item.source_type || defaultSourceType || 'following',
             list_id: item.list_id || listId || null,
             fetched_at: item.fetched_at || nowIso,
@@ -664,7 +729,7 @@ export class Storage {
       lines.push(
         `- **发布时间**: \`${t.created_at}\` | **互动**: ❤️ \`${t.like_count}\`  🔁 \`${t.retweet_count}\`  👁️ \`${t.view_count || 0}\``
       );
-      let tweetBody = t.text;
+      let tweetBody = (t.text || '').replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
       // 1. 若正文末尾残留媒体短链且该推文含配图，安全剔除末尾多余短链
       if (t.media_urls && t.media_urls.length > 0) {
         tweetBody = tweetBody.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
@@ -959,20 +1024,30 @@ export class Storage {
     try {
       mediaUrls = JSON.parse((row.media_urls as string) || '[]');
     } catch {}
+    const rawText = String(row.text || '')
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\r\n/g, '\n');
+    const rawQuoted = row.quoted_text
+      ? String(row.quoted_text).replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n')
+      : undefined;
+    const rawRetweeted = row.retweeted_text
+      ? String(row.retweeted_text).replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n')
+      : undefined;
 
     return {
       tweet_id: String(row.tweet_id),
       author_id: (row.author_id as string) || undefined,
       author_name: String(row.author_name || 'Unknown'),
       author_username: String(row.author_username || 'unknown'),
-      text: String(row.text || ''),
+      text: rawText,
       created_at: String(row.created_at || ''),
       is_retweet: Boolean(row.is_retweet),
       retweeted_author: (row.retweeted_author as string) || undefined,
-      retweeted_text: (row.retweeted_text as string) || undefined,
+      retweeted_text: rawRetweeted,
       is_quote: Boolean(row.is_quote),
       quoted_author: (row.quoted_author as string) || undefined,
-      quoted_text: (row.quoted_text as string) || undefined,
+      quoted_text: rawQuoted,
       like_count: Number(row.like_count || 0),
       retweet_count: Number(row.retweet_count || 0),
       reply_count: Number(row.reply_count || 0),
@@ -981,6 +1056,8 @@ export class Storage {
       media_urls: mediaUrls,
       video_url: (row.video_url as string) || undefined,
       video_poster: (row.video_poster as string) || undefined,
+      is_note_tweet: Boolean(row.is_note_tweet) || rawText.length > 280,
+      is_article: Boolean(row.is_article) || isArticleTweet({ text: rawText, urls }),
       source_type: (row.source_type as any) || 'following',
       list_id: (row.list_id as string) || undefined,
       fetched_at: String(row.fetched_at || ''),
