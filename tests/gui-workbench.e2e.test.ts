@@ -423,11 +423,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     const videoItem = page.locator('.feed-item', { hasText: '体验全新视频推文' }).first();
     expect(await videoItem.isVisible()).toBe(true);
     await videoItem.click();
-    await page.waitForTimeout(300);
-
-    // 2. Video Player container should be rendered
     const videoContainer = page.locator('#tweet-detail-video');
-    expect(await videoContainer.isVisible()).toBe(true);
+    await videoContainer.waitFor({ state: 'visible', timeout: 5000 });
 
     // 3. Native video element should have src matching the MP4 URL
     const videoElement = videoContainer.locator('video');
@@ -463,15 +460,14 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     expect(await photoItem.locator('.feed-tag', { hasText: '图文' }).isVisible()).toBe(true);
 
     await photoItem.click();
-    await page.waitForTimeout(300);
 
     // 2. Photo media container should be displayed
     const mediaContainer = page.locator('#tweet-detail-media');
-    expect(await mediaContainer.isVisible()).toBe(true);
+    await mediaContainer.waitFor({ state: 'visible', timeout: 5000 });
 
     // 3. Image tag should exist with correct twimg src (NOT filtered out by mistake)
     const imgElement = mediaContainer.locator('img').first();
-    expect(await imgElement.isVisible()).toBe(true);
+    await imgElement.waitFor({ state: 'visible', timeout: 5000 });
     expect(await imgElement.getAttribute('src')).toBe('https://pbs.twimg.com/media/HTItzSHawAA59pK.png');
 
     // 4. Test clicking image to open Lightbox Modal
