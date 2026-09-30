@@ -166,7 +166,7 @@ export const TweetVideoPlayer: React.FC<TweetVideoPlayerProps> = ({
           ref={videoRef}
           controls
           playsInline
-          preload="metadata"
+          preload="none"
           poster={posterUrl}
           src={videoUrl}
           style={{
@@ -180,9 +180,20 @@ export const TweetVideoPlayer: React.FC<TweetVideoPlayerProps> = ({
             setIsPlaying(true);
             setIsBuffering(false);
           }}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => setIsPlaying(false)}
-          onWaiting={() => setIsBuffering(true)}
+          onPause={() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          }}
+          onEnded={() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          }}
+          onWaiting={() => {
+            // 仅在用户已触发播放的前提下遇到卡顿才展示缓冲转圈，避免未播放时偷跑元数据或提前转圈
+            if (isPlaying) {
+              setIsBuffering(true);
+            }
+          }}
           onPlaying={() => {
             setIsPlaying(true);
             setIsBuffering(false);
