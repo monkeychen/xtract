@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
-import { normalizeTweetDate, isArticleTweet, isNoteTweet } from '../client/parser.js';
+import { normalizeTweetDate, isArticleTweet, isNoteTweet, isLongContentTweet } from '../client/parser.js';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
@@ -831,11 +831,19 @@ export class Storage {
   }
 
   public async deleteTweets(filter: DeleteFilter): Promise<DeleteResult> {
-    const { tweetId, tweetIds, username, since, until, olderThan, dryRun } = filter;
+    const { tweetId, tweetIds, username, since, until, olderThan, onlyShortTweets, dryRun } = filter;
 
-    if (!tweetId && (!tweetIds || tweetIds.length === 0) && !username && !since && !until && !olderThan) {
+    if (
+      !tweetId &&
+      (!tweetIds || tweetIds.length === 0) &&
+      !username &&
+      !since &&
+      !until &&
+      !olderThan &&
+      !onlyShortTweets
+    ) {
       throw new Error(
-        '删除操作必须指定至少一个筛选条件（推文ID/URL、tweetIds、--user、--since、--until 或 --older-than）。'
+        '删除操作必须指定至少一个筛选条件（推文ID/URL、tweetIds、--user、--since、--until、--older-than 或 --only-short）。'
       );
     }
 
@@ -901,6 +909,10 @@ export class Storage {
           return !isNaN(time) && time <= untilTime;
         });
       }
+    }
+
+    if (onlyShortTweets) {
+      candidates = candidates.filter((t) => !isLongContentTweet(t));
     }
 
     const matchedCount = candidates.length;

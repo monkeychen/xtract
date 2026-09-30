@@ -54,6 +54,7 @@ export interface DeleteFilter {
   since?: string;
   until?: string;
   olderThan?: string;
+  onlyShortTweets?: boolean;
   dryRun?: boolean;
 }
 

@@ -40,6 +40,7 @@ if (isCLI) {
     .option('--since <date>', '起始日期过滤 (YYYY-MM-DD)')
     .option('--until <date>', '截止日期过滤 (YYYY-MM-DD)')
     .option('--older-than <duration>', '早于指定时长的推文 (例如 30d, 48h, 7d)')
+    .option('--only-short', '仅筛选/删除普通短推文（保留长推文 Note Tweet 与专栏文章 X Article）')
     .option('--dry-run', '演练预览模式，仅展示待删除列表，不执行真实删除')
     .option('-y, --yes', '跳过删除确认提示直接执行')
     .option('--export [limit]', '将已抓取的推文导出为结构化 Markdown 文档')
@@ -183,11 +184,12 @@ if (isCLI) {
         const since = options.since;
         const until = options.until;
         const olderThan = options.olderThan;
+        const onlyShortTweets = Boolean(options.onlyShort);
         const dryRun = Boolean(options.dryRun);
 
-        if (!tweetId && !username && !since && !until && !olderThan) {
+        if (!tweetId && !username && !since && !until && !olderThan && !onlyShortTweets) {
           throw new Error(
-            '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until 或 --older-than），以防误删全库。'
+            '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until、--older-than 或 --only-short），以防误删全库。'
           );
         }
 
@@ -198,6 +200,7 @@ if (isCLI) {
           since,
           until,
           olderThan,
+          onlyShortTweets,
           dryRun: true,
         });
 
@@ -262,6 +265,7 @@ if (isCLI) {
           since,
           until,
           olderThan,
+          onlyShortTweets,
           dryRun: false,
         });
 

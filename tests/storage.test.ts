@@ -712,6 +712,66 @@ describe('Storage Module', () => {
     const note = storage.getTweetById('note_flag_1');
     expect(note?.is_note_tweet).toBe(true);
   });
+
+  it('test_storage_delete_short_tweets_cascade_and_preserves_long_content', async () => {
+    // 1. Insert 1 short tweet, 1 note tweet, and 1 article
+    const shortTweet: Partial<Tweet> = {
+      tweet_id: 'short_delete_1',
+      author_name: 'Short Author',
+      author_username: 'short_author',
+      text: 'Just a casual short chat!',
+      created_at: '2026-09-30T04:00:00Z',
+    };
+    const longTweet: Partial<Tweet> = {
+      tweet_id: 'long_keep_1',
+      author_name: 'Long Author',
+      author_username: 'long_author',
+      text: 'Important deep breakdown… https://t.co/deep1',
+      urls: ['https://t.co/deep1'],
+      created_at: '2026-09-30T04:10:00Z',
+      is_note_tweet: true,
+    };
+    const articleTweet: Partial<Tweet> = {
+      tweet_id: 'article_keep_1',
+      author_name: 'Article Author',
+      author_username: 'article_author',
+      text: '# Official Architecture Document\n\nFull deep thoughts...',
+      created_at: '2026-09-30T04:20:00Z',
+      is_article: true,
+    };
+
+    storage.saveTweets([shortTweet, longTweet, articleTweet]);
+
+    // 2. Export markdown page bundle for shortTweet and longTweet
+    const { filePath: shortBundleFile } = await storage.exportSingleTweetMarkdown('short_delete_1', {
+      downloadImages: false,
+    });
+    const { filePath: longBundleFile } = await storage.exportSingleTweetMarkdown('long_keep_1', {
+      downloadImages: false,
+    });
+    expect(fs.existsSync(shortBundleFile)).toBe(true);
+    expect(fs.existsSync(longBundleFile)).toBe(true);
+
+    // 3. Dry-run delete only short tweets
+    const dryRunRes = await storage.deleteTweets({ onlyShortTweets: true, dryRun: true });
+    expect(dryRunRes.matchedCount).toBe(1);
+    expect(dryRunRes.deletedCount).toBe(0);
+    expect(dryRunRes.dryRun).toBe(true);
+
+    // 4. Actual cascade deletion
+    const deleteRes = await storage.deleteTweets({ onlyShortTweets: true, dryRun: false });
+    expect(deleteRes.matchedCount).toBe(1);
+    expect(deleteRes.deletedCount).toBe(1);
+
+    // Short tweet should be removed from database and disk
+    expect(storage.getTweetById('short_delete_1')).toBeNull();
+    expect(fs.existsSync(shortBundleFile)).toBe(false);
+
+    // Long tweet & Article should remain intact
+    expect(storage.getTweetById('long_keep_1')).not.toBeNull();
+    expect(storage.getTweetById('article_keep_1')).not.toBeNull();
+    expect(fs.existsSync(longBundleFile)).toBe(true);
+  });
 });
 
 
