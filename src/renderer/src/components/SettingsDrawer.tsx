@@ -285,7 +285,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ paddingRight: '12px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
-                    抓取作者追评与追加回复 (Author Replies & Thread)
+                    抓取作者追评与追加回复
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginTop: '2px', lineHeight: 1.4 }}>
                     单篇推文抓取时，是否一并拉取作者本人在下方追加的连续回复/长串推文（默认关闭，仅抓取推文本体）
