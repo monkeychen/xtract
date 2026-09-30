@@ -26,7 +26,8 @@ export function isTweetVideo(tweet: Partial<Tweet>): boolean {
 export function renderFormattedTweetText(
   text: string,
   urls?: string[],
-  onOpenUrl?: (url: string) => void
+  onOpenUrl?: (url: string) => void,
+  onPreviewImage?: (imgUrl: string) => void
 ): React.ReactNode {
   if (!text) return null;
 
@@ -38,10 +39,10 @@ export function renderFormattedTweetText(
     return '';
   });
 
-  // 2. 正则分词匹配 Markdown 链接 [label](url)、Twitter t.co 短链 以及 合法 ASCII 裸 URL
+  // 2. 正则分词：精准捕获 Markdown 图片、Markdown 链接、Twitter t.co 短链 以及 合法 ASCII 裸 URL
   // 必须精确限制字符集，杜绝将紧随其后的中文字符误当成 URL 截断吞噬
   const tokenRegex =
-    /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)|(https:\/\/t\.co\/[a-zA-Z0-9]+)|(https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;%=]+)/g;
+    /(!\[[^\]]*\]\((?:https?:\/\/[^\s\)]+)\)|\[[^\]]+\]\((?:https?:\/\/[^\s\)]+)\)|https:\/\/t\.co\/[a-zA-Z0-9]+|https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;%=]+)/g;
 
   const elements: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -52,37 +53,102 @@ export function renderFormattedTweetText(
       elements.push(cleanText.substring(lastIndex, match.index));
     }
 
-    if (match[1] && match[2]) {
+    const token = match[1];
+
+    if (token.startsWith('![') && token.endsWith(')')) {
+      // 命中 Markdown 图片 ![alt](imgUrl)
+      const imgMatch = token.match(/^!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)$/);
+      if (imgMatch) {
+        const altText = imgMatch[1];
+        const imgUrl = imgMatch[2];
+        elements.push(
+          <span
+            key={`md-img-${match.index}`}
+            style={{
+              margin: '14px 0',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid var(--line)',
+              background: 'var(--paper-sunken)',
+              display: 'block',
+              maxWidth: '100%',
+            }}
+          >
+            <img
+              src={imgUrl}
+              alt={altText}
+              loading="lazy"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '520px',
+                display: 'block',
+                margin: '0 auto',
+                objectFit: 'contain',
+                cursor: 'zoom-in',
+                borderRadius: '6px',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onPreviewImage) onPreviewImage(imgUrl);
+              }}
+              title={altText || '点击全屏高清预览图片'}
+            />
+            {altText && altText !== '封面图' && altText !== '配图' && (
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  color: 'var(--ink-faint)',
+                  padding: '6px 10px',
+                  textAlign: 'center',
+                  background: 'rgba(0,0,0,0.02)',
+                  borderTop: '1px solid var(--line)',
+                }}
+              >
+                {altText}
+              </span>
+            )}
+          </span>
+        );
+      } else {
+        elements.push(token);
+      }
+    } else if (token.startsWith('[') && token.endsWith(')')) {
       // 命中 Markdown 链接 [label](url)
-      const label = match[1];
-      const targetUrl = match[2];
-      elements.push(
-        <a
-          key={`md-${match.index}`}
-          href={targetUrl}
-          className="tweet-inline-link"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (onOpenUrl) onOpenUrl(targetUrl);
-          }}
-          style={{
-            color: 'var(--accent, #0284c7)',
-            textDecoration: 'none',
-            borderBottom: '1px solid var(--accent, #0284c7)',
-            cursor: 'pointer',
-            fontWeight: 500,
-            padding: '0 2px',
-            borderRadius: '2px',
-          }}
-          title={`在系统默认浏览器中打开: ${targetUrl}`}
-        >
-          {label} ↗
-        </a>
-      );
-    } else if (match[3] || match[4]) {
+      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)$/);
+      if (linkMatch) {
+        const label = linkMatch[1];
+        const targetUrl = linkMatch[2];
+        elements.push(
+          <a
+            key={`md-${match.index}`}
+            href={targetUrl}
+            className="tweet-inline-link"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onOpenUrl) onOpenUrl(targetUrl);
+            }}
+            style={{
+              color: 'var(--accent, #0284c7)',
+              textDecoration: 'none',
+              borderBottom: '1px solid var(--accent, #0284c7)',
+              cursor: 'pointer',
+              fontWeight: 500,
+              padding: '0 2px',
+              borderRadius: '2px',
+            }}
+            title={`在系统默认浏览器中打开: ${targetUrl}`}
+          >
+            {label} ↗
+          </a>
+        );
+      } else {
+        elements.push(token);
+      }
+    } else {
       // 命中裸 URL (t.co 或普通外链)
-      const rawUrl = match[3] || match[4];
+      const rawUrl = token;
       let targetUrl = rawUrl;
       let displayLabel = rawUrl;
 
@@ -96,7 +162,9 @@ export function renderFormattedTweetText(
 
       try {
         const uObj = new URL(targetUrl);
-        displayLabel = uObj.hostname.replace(/^www\./, '') + (uObj.pathname.length > 1 ? uObj.pathname.slice(0, 16) + '...' : '');
+        displayLabel =
+          uObj.hostname.replace(/^www\./, '') +
+          (uObj.pathname.length > 1 ? uObj.pathname.slice(0, 16) + '...' : '');
       } catch {
         displayLabel = targetUrl;
       }
@@ -2167,7 +2235,12 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                   wordBreak: 'break-word',
                 }}
               >
-                {renderFormattedTweetText(selectedTweet.text, selectedTweet.urls, (url) => api.openExternal(url))}
+                {renderFormattedTweetText(
+                  selectedTweet.text,
+                  selectedTweet.urls,
+                  (url) => api.openExternal(url),
+                  (img) => setPreviewImage(img)
+                )}
               </div>
 
               {/* 转推卡片 (Retweet Card) */}
@@ -2188,7 +2261,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                     {renderFormattedTweetText(
                       selectedTweet.retweeted_text || selectedTweet.text,
                       selectedTweet.urls,
-                      (url) => api.openExternal(url)
+                      (url) => api.openExternal(url),
+                      (img) => setPreviewImage(img)
                     )}
                   </div>
                 </div>
@@ -2212,7 +2286,8 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                     {renderFormattedTweetText(
                       selectedTweet.quoted_text || '',
                       selectedTweet.urls,
-                      (url) => api.openExternal(url)
+                      (url) => api.openExternal(url),
+                      (img) => setPreviewImage(img)
                     )}
                   </div>
                 </div>

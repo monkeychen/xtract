@@ -1079,7 +1079,7 @@ export class XClient {
       });
 
       process.stderr.write(`🌐 正在打开推文页面 ${targetUrl} 并获取内容...\n`);
-      await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
+      await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
 
       for (let i = 0; i < Math.max(30, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));

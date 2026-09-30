@@ -339,9 +339,9 @@ export class Storage {
     const transaction = this.db.transaction((items: Partial<Tweet>[]) => {
       for (const item of items) {
         if (!item.tweet_id || !item.text) continue;
+        const isArticle = item.is_article !== undefined ? (item.is_article ? 1 : 0) : isArticleTweet(item) ? 1 : 0;
+        const isNote = item.is_note_tweet !== undefined ? (item.is_note_tweet ? 1 : 0) : isNoteTweet(item) ? 1 : 0;
         try {
-          const isArticle = item.is_article !== undefined ? (item.is_article ? 1 : 0) : isArticleTweet(item) ? 1 : 0;
-          const isNote = item.is_note_tweet !== undefined ? (item.is_note_tweet ? 1 : 0) : isNoteTweet(item) ? 1 : 0;
           insertStmt.run({
             tweet_id: item.tweet_id,
             author_id: item.author_id || '',
@@ -397,6 +397,8 @@ export class Storage {
                   urls = CASE WHEN ? THEN ? ELSE urls END,
                   video_url = COALESCE(?, video_url),
                   video_poster = COALESCE(?, video_poster),
+                  is_note_tweet = CASE WHEN ? THEN ? ELSE is_note_tweet END,
+                  is_article = CASE WHEN ? THEN ? ELSE is_article END,
                   source_type = ?,
                   list_id = COALESCE(?, list_id),
                   like_count = ?,
@@ -416,6 +418,10 @@ export class Storage {
                   JSON.stringify(item.urls || existing.urls || []),
                   item.video_url || null,
                   item.video_poster || null,
+                  isNote ? 1 : 0,
+                  isNote,
+                  isArticle ? 1 : 0,
+                  isArticle,
                   targetSourceType,
                   item.list_id || listId || null,
                   item.like_count ?? existing.like_count,

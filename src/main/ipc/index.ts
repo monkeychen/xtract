@@ -456,6 +456,7 @@ export function registerIpcHandlers(
           await pipeline.fetchTweetAndStore(cleanId);
           tweet = storage.getTweetById(cleanId);
         } catch (err: any) {
+          process.stderr.write(`⚠️ 单篇推文在线同步未完全成功: ${err?.message || err}\n`);
           if (!tweet) throw err;
         }
       }
