@@ -13,7 +13,7 @@ Xtract 是一款面向专业技术人员与创作者的高信噪比 X (Twitter) 
 
 | 关注维度 | 权威文档 | 核心职责 |
 | :--- | :--- | :--- |
-| **产品需求与业务规格** | [`PRD.md`](file:///Users/chenzhian/workspace/ai/xtract/PRD.md) | 用户画像、核心价值、功能矩阵规格、业务硬规则与版本路线图 |
+| **产品需求与业务规格** | [`docs/prd/`](file:///Users/chenzhian/workspace/ai/xtract/docs/prd/README.md) | 产品总览、整体进度大盘、已取消功能清单与版本化 PRD (v1.0/v1.1/v1.2/v2.0) |
 | **系统总体架构 (HLD)** | [`docs/architecture.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/architecture.md) | 系统分层、数据流向、IPC 通信契约、安全隔离模型与容灾机制 |
 | **核心机制与详细设计 (LLD)** | [`docs/detailed_design.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/detailed_design.md) | 抓取早停过滤、视频代理穿透、追评受控、级联删除、7大主流模型端点规范 |
 | **研发日志与踩坑复盘** | [`docs/vibe-coding-log.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/vibe-coding-log.md) | 历史攻坚踩坑记录、技术权衡理由与设计复盘 |
@@ -40,10 +40,13 @@ Xtract 是一款面向专业技术人员与创作者的高信噪比 X (Twitter) 
 ## 4. 目录结构与数据物理映射
 ```
 xtract/
-├── PRD.md                  # 产品需求文档
-├── README.md               # 用户说明书
+├── README.md               # 外部用户说明书与快速上手
 ├── dev-workflow.md         # 研发流程与门禁规范
-├── docs/                   # 架构、详细设计与复盘沉淀
+├── docs/                   # 架构、详细设计、产品版本库与复盘沉淀
+│   ├── prd/                # 版本化 PRD 体系 (README 进度大盘, v1.0, v1.1, v1.2, v2.0)
+│   ├── architecture.md     # 高层架构 (HLD)
+│   ├── detailed_design.md  # 详细设计 (LLD)
+│   └── vibe-coding-log.md  # 研发踩坑与复盘日志
 ├── openspec/               # 增量变更规范体系
 ├── src/
 │   ├── main/               # Electron 主进程 & CLI 核心引擎 (client/storage/llm/pipeline)
