@@ -70,6 +70,12 @@
 19. **长推文/专栏文章默认抓取过滤与物理换行规整（Long Content Filtering & Normalized Newlines）**：
     - **为什么**：推特信息流中充斥大量单句闲聊、碎碎念与低信噪比水帖；同时终端参数或历史序列化转义会导致推文正文中暴露未经反转义的 `\n\n` 字面量。
     - **对用户的影响**：在抓取链路建立默认开启的长推文（Note Tweet，字符数 > 280 或被推特截断）与专栏文章（X Article，`x.com/i/article` 或以大标题开头）过滤规则（支持设置抽屉一键开关，CLI 通过 `--all-tweets` 放开全量抓取）；并在解析、存储、渲染与 Markdown 导出四重管道统一将字面量 `\n\n` 平滑自愈为真实段落换行，阅读体验极其整洁舒适。
+20. **推文详情原生 Markdown 渲染与 X Article 专栏专属排版（Rich Markdown Engine & Executive Summary Card）**：
+    - **为什么**：X Article 专栏文章是数千字的高价值研报，正文按 Markdown 规范存储大标题（`#`）、核心摘要引用块（`> **核心摘要 / 提要**:`）、中文章节与列表。若前端仅以 `pre-wrap` 纯文本呈现，暴露原始标记符号且排版粗糙。
+    - **对用户的影响**：原生定制轻量级 `TweetMarkdown` 引擎，智能识别 H1-H4 标题、段落行距、中文节次，将核心提要渲染为极具杂志质感的高光速览卡片（⚡），图片支持点击全屏灯箱缩放，外链系统浏览器直达，阅读体验如同报刊专栏。
+21. **推特视频按需流式加载与零静默流量策略（Demand-Driven Video Streaming & Zero Silent Traffic）**：
+    - **为什么**：内置播放器若使用 `preload="metadata"`，会在推文切换瞬间自动向推特视频 CDN（`video.twimg.com`）发起探测请求，遇到代理节点延迟会触发 Chromium 的 `waiting` 事件，造成未点击播放前屏幕中间就冒出缓冲转圈动画，且无故浪费代理节点流量。
+    - **对用户的影响**：将视频配置收敛为 `preload="none"` 并设置播放状态安全护栏。未播放时仅展示高清封面图（Poster）与通透的居中大播放按钮【▶】，不消耗 1KB 静默流量，彻底杜绝多余转圈焦虑；只有用户主动点击播放后才按需发起流式缓冲。
 
 ### 7 大主流模型 2026 最新版本与文档约定（全量默认开启推理/思考模式与多模态，等级为 high）
 - **Google Gemini**：默认主力 `gemini-3.8-flash`（高智商超高速，全模态，`--effort high` / `thinking_level: HIGH`），长推理 `gemini-3.1-pro`，轻量 `gemini-2.5-flash`。
@@ -113,7 +119,9 @@ xtract/
 │   │   └── index.ts        # 强类型 IPC 通信接口
 │   └── renderer/           # GUI 渲染进程前端 (SPA)
 │       ├── index.html      # 主视窗入口
-│       └── src/            # 界面视图组件 (趋势雷达/监控信箱/搜索/阅读器/设置)
+│       └── src/            # 界面视图组件
+│           ├── components/ # 独立 UI 部件 (TweetMarkdown / ThinkingBlock / SettingsDrawer 等)
+│           └── views/      # 核心工作台主视窗 (StudioView)
 ├── data/                   # 本地数据持久化（Git 忽略）
 │   ├── tweets.db           # SQLite 数据库
 │   └── auth_state.json     # X 登录持久化凭据

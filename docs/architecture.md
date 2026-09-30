@@ -33,7 +33,7 @@
 ```mermaid
 flowchart TD
     subgraph UI ["1. 交互与展示层 (Presentation Layer)"]
-        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 视频免落盘流式播放器 / 设置中心"]
+        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 零静默流量视频播放器 / 原生 TweetMarkdown 专栏排版 / 设置中心"]
         CLI["src/main/index.ts (Commander CLI & GUI 分发器)"]
         AUTH_UI["原生登录视窗 (Electron Session / 凭据自动捕获)"]
         MD_VIEW["Markdown 研报 / Page Bundle 离线推文文档"]
