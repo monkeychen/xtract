@@ -33,14 +33,16 @@
 ```mermaid
 flowchart TD
     subgraph UI ["1. 交互与展示层 (Presentation Layer)"]
+        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 视频免落盘流式播放器 / 设置中心"]
         CLI["src/main/index.ts (Commander CLI & GUI 分发器)"]
         AUTH_UI["原生登录视窗 (Electron Session / 凭据自动捕获)"]
-        MD_VIEW["Markdown 研报 / 离线推文文档"]
+        MD_VIEW["Markdown 研报 / Page Bundle 离线推文文档"]
     end
 
     subgraph ORCH ["2. 业务编排层 (Pipeline Orchestration Layer)"]
         CORE_PIPE["src/main/pipeline/index.ts\n(Fetch / Digest / Trends / Export 调度控制器)"]
         FRESH_LOCK["时效性时间锁控制器 (since: 注入 & UTC 校验)"]
+        LIMIT_CTRL["严格条数约束与提前退出控制器 (Limit & Early Stop)"]
         SERIAL_CTRL["安全串行节流控制器 (Safe Sequential Pacing)"]
     end
 
@@ -80,11 +82,11 @@ flowchart TD
 
 | 架构层级 | 核心模块 | 职责与边界 |
 | :--- | :--- | :--- |
-| **1. 交互与展示层** | `src/main/index.ts` | 双模入口分发，解析命令行指令参数，分发单篇查看、关注流抓取、全网搜索、趋势分析、推文删除等任务；提供纯 JSON 及终端进度反馈。 |
-| **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
-| **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、X 专栏长文并抽离广告。 |
+| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、全网搜索、博主追踪、X 列表四维情报；内嵌 `TweetVideoPlayer` 实现免落盘流式播放与防盗链代理穿透；<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
+| **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、严格数量约束（`--limit` 截断与提前退出）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
+| **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、视频 MP4 高清直链、X 专栏长文并抽离广告。 |
 | **4. 模型调度层** | `src/main/llm/index.ts`<br>`src/main/pipeline/summarizer.ts` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的原生流式支持，负责 Prompt 组装与研报渲染。 |
-| **5. 本地持久化层** | `src/main/storage/index.ts` | 基于 better-sqlite3 管理推文唯一索引去重，维护 Page Bundle 本地媒体资产持久化与级联删除清理。 |
+| **5. 本地持久化层** | `src/main/storage/index.ts` | 基于 better-sqlite3 管理推文唯一索引去重与视频信息自动回填迁移，维护 Page Bundle 本地媒体资产持久化与级联删除清理。 |
 
 ---
 
@@ -188,8 +190,12 @@ flowchart LR
     IsDomestic -- "是" --> DirectRoute["强制直连国内节点 (Bypass Proxy)\n直连国内云厂商节点"]
     IsDomestic -- "否" --> ProxyRoute
 ```
-- **核心收益**：根除了国内云厂商（如阿里云、智谱、Moonshot）因收到来自海外代理 IP 的请求而被 WAF 防火墙误判拦截或增加数百毫秒跨境网络延迟的问题。
+### 5.3 桌面渲染进程多媒体代理与防盗链穿透
+1. **会话级代理接通（`session.defaultSession.setProxy`）**：
+   Electron 主进程在启动时探活本地常见科学上网端口（8118/7890/7897 等），将代理直接注入 Electron 的 Chromium 全局网络会话，保证推特高清视频（`video.twimg.com`）与图片（`pbs.twimg.com`）不因直连 GFW 阻断导致媒体播放器 controls 死锁或禁用。
+2. **CDN 跨域与防盗链穿透（`webRequest.onBeforeSendHeaders`）**：
+   推特音视频 CDN 强校验请求来源。主进程拦截 `*://*.twimg.com/*`，统一动态注入 `Referer: https://x.com/` 与 `Origin: https://x.com`，彻底杜绝 403 Forbidden 导致的推特流媒体拒播问题。
 
-### 5.3 故障隔离与幂等设计
+### 5.4 故障隔离与幂等设计
 - **抓取与分析解耦**：如果大模型因网络波动或欠费中断，所有已抓取的数据均已完整落库于 `data/tweets.db`。用户只需追加 `--report-only` 即可秒级重新生成研报，无需重复消耗推特抓取配额。
 - **SQLite 主键幂等性**：使用 `tweet_id PRIMARY KEY` 约束，同一条推文多次抓取自动执行 `INSERT OR IGNORE`，不污染数据库。
