@@ -86,6 +86,21 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           video_poster: 'https://pbs.twimg.com/amplify_video_thumb/2003/img/thumb.jpg',
           source_type: 'following',
         },
+        {
+          tweet_id: '2104576109161660508',
+          author_id: '123459',
+          author_name: 'LuBtc',
+          author_username: 'LuBtc888',
+          text: '其实刘翔前些日那些事，\n\n张国伟能连发两篇爆文提醒已经算很好了 https://t.co/1LdVnJ3Lps',
+          created_at: new Date().toISOString(),
+          like_count: 360,
+          retweet_count: 45,
+          reply_count: 12,
+          view_count: 18000,
+          media_urls: ['https://pbs.twimg.com/media/HTItzSHawAA59pK.png'],
+          urls: [],
+          source_type: 'following',
+        },
       ];
 
       (window as any).xtractAPI = {
@@ -414,7 +429,57 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     expect(await videoContainer.locator('button', { hasText: '已复制直链' }).isVisible()).toBe(true);
   });
 
+  it('Flow 8: Photo Tweet Media Rendering & Lightbox Interaction', async () => {
+    // 1. Locate and click LuBtc888's photo tweet
+    const photoItem = page.locator('.feed-item', { hasText: '刘翔前些日那些事' }).first();
+    expect(await photoItem.isVisible()).toBe(true);
 
+    // Verify tag shows 📷 图文
+    expect(await photoItem.locator('.feed-tag', { hasText: '图文' }).isVisible()).toBe(true);
+
+    await photoItem.click();
+    await page.waitForTimeout(300);
+
+    // 2. Photo media container should be displayed
+    const mediaContainer = page.locator('#tweet-detail-media');
+    expect(await mediaContainer.isVisible()).toBe(true);
+
+    // 3. Image tag should exist with correct twimg src (NOT filtered out by mistake)
+    const imgElement = mediaContainer.locator('img').first();
+    expect(await imgElement.isVisible()).toBe(true);
+    expect(await imgElement.getAttribute('src')).toBe('https://pbs.twimg.com/media/HTItzSHawAA59pK.png');
+
+    // 4. Test clicking image to open Lightbox Modal
+    await imgElement.click();
+    await page.waitForTimeout(200);
+
+    const lightbox = page.locator('#image-preview-modal');
+    expect(await lightbox.isVisible()).toBe(true);
+    const lightboxImg = lightbox.locator('img');
+    expect(await lightboxImg.getAttribute('src')).toBe('https://pbs.twimg.com/media/HTItzSHawAA59pK.png');
+
+    // 5. Test close lightbox with close button
+    const closeBtn = lightbox.locator('button', { hasText: '✕' });
+    expect(await closeBtn.isVisible()).toBe(true);
+    await closeBtn.click();
+    await page.waitForTimeout(200);
+    expect(await page.locator('#image-preview-modal').isVisible()).toBe(false);
+
+    // 6. Test copy direct link in media bottom toolbar
+    const copyImgBtn = mediaContainer.locator('button', { hasText: '复制原图直链' });
+    expect(await copyImgBtn.isVisible()).toBe(true);
+    await copyImgBtn.click();
+    await page.waitForTimeout(100);
+
+    // 7. Test open image in browser
+    const openImgBtn = mediaContainer.locator('button', { hasText: '在浏览器查看 ↗' });
+    expect(await openImgBtn.isVisible()).toBe(true);
+    await openImgBtn.click();
+    await page.waitForTimeout(200);
+
+    const openedUrls = await page.evaluate(() => (window as any).__recordedCalls.openedUrls);
+    expect(openedUrls).toContain('https://pbs.twimg.com/media/HTItzSHawAA59pK.png');
+  });
 
   it('Flow 9: Preferences Settings Drawer & Deep Reasoning Effort Config', async () => {
     await page.locator('button', { hasText: '⚙️ 设置' }).click();

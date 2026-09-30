@@ -495,13 +495,19 @@ export function isArticleTweet(tweet: Partial<Tweet>): boolean {
 export function isTweetContentIncomplete(tweet: Partial<Tweet>): boolean {
   if (!tweet || !tweet.text) return true;
 
-  // 1. Truncated Note Tweet check (ends with … https://t.co/... or ... https://t.co/...)
-  const isTruncatedNote = Boolean(
-    /…\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-      /\.\.\.\s*https:\/\/t\.co\/\S+$/.test(tweet.text) ||
-      (tweet.text.length < 120 && tweet.text.includes('https://t.co/'))
-  );
-  if (isTruncatedNote) return true;
+  const trimmedText = tweet.text.trim();
+
+  // 1. Truncated Note Tweet check:
+  // Twitter truncates long-form Note Tweets (>280 chars) by inserting an ellipsis followed by a t.co link (… https://t.co/...).
+  // Only tweets within Twitter's timeline limit (<= 400 chars) can be truncated previews.
+  // Short tweets with media naturally end with a plain t.co link WITHOUT ellipsis and are complete.
+  if (trimmedText.length <= 400) {
+    const isTruncatedNote = Boolean(
+      /…\s*https:\/\/t\.co\/\S+$/i.test(trimmedText) ||
+        /\.\.\.\s*https:\/\/t\.co\/\S+$/i.test(trimmedText)
+    );
+    if (isTruncatedNote) return true;
+  }
 
   // 2. X Article incomplete check:
   // If it's an Article, but the body only contains the title and cover image without actual long-form blocks

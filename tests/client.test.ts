@@ -4,6 +4,7 @@ import {
   parseTimelineInstructions,
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
+  isTweetContentIncomplete,
 } from '../src/main/client/parser.js';
 
 describe('Client Parser Module', () => {
@@ -310,5 +311,43 @@ describe('Client Parser Module', () => {
     expect(lists.some((l) => l.id === '1827364512939')).toBe(false);
     // User authentic list must be present
     expect(lists.some((l) => l.id === '2100985900734062922')).toBe(true);
+  });
+
+  it('test_is_tweet_content_incomplete_short_media_tweet_is_complete', () => {
+    // 1. Short media tweet with t.co media link must NOT be falsely marked as incomplete
+    const completeMediaTweet = {
+      tweet_id: '2104576109161660508',
+      text: '其实刘翔前些日那些事，\n\n张国伟能连发两篇爆文提醒已经算很好了 https://t.co/1LdVnJ3Lps',
+      media_urls: ['https://pbs.twimg.com/media/HTItzSHawAA59pK.png'],
+    };
+    expect(isTweetContentIncomplete(completeMediaTweet)).toBe(false);
+
+    // 2. Normal short text tweet is complete
+    const normalTweet = {
+      tweet_id: '12345',
+      text: 'Just finished the release notes for v1.0.0!',
+    };
+    expect(isTweetContentIncomplete(normalTweet)).toBe(false);
+
+    // 3. Truncated Note Tweet ending with ellipsis + t.co link must be marked incomplete
+    const truncatedNoteTweet = {
+      tweet_id: '67890',
+      text: 'Here is our detailed analysis of the breakthrough… https://t.co/abcdef',
+    };
+    expect(isTweetContentIncomplete(truncatedNoteTweet)).toBe(true);
+
+    const truncatedNoteTweet3Dots = {
+      tweet_id: '67891',
+      text: 'Here is our detailed analysis of the breakthrough... https://t.co/abcdef',
+    };
+    expect(isTweetContentIncomplete(truncatedNoteTweet3Dots)).toBe(true);
+
+    // 4. Incomplete X Article (under 400 chars) must be marked incomplete
+    const incompleteArticle = {
+      tweet_id: '54321',
+      text: 'Comprehensive Architecture Analysis https://x.com/i/article/1892837462',
+      urls: ['https://x.com/i/article/1892837462'],
+    };
+    expect(isTweetContentIncomplete(incompleteArticle)).toBe(true);
   });
 });

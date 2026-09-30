@@ -539,6 +539,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Active Tweet Ref to guard against asynchronous detail race conditions (§3)
@@ -597,11 +598,23 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
     }
   };
 
-  // Close menus on outside click
+  // Close menus on outside click and handle Escape key for modals
   useEffect(() => {
     const handleDocClick = () => setOpenMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenMenu(null);
+        setPreviewImage(null);
+        setDeleteConfirmOpen(false);
+        setBatchDeleteConfirmOpen(false);
+      }
+    };
     document.addEventListener('click', handleDocClick);
-    return () => document.removeEventListener('click', handleDocClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleDocClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Listen to real IPC streaming progress (§2.3)
@@ -2081,12 +2094,16 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
               {(() => {
                 const isVideo = isTweetVideo(selectedTweet);
                 const videoUrl = selectedTweet.video_url || selectedTweet.media_urls?.find((m) => isVideoUrl(m));
-                const posterUrl =
-                  selectedTweet.video_poster ||
-                  selectedTweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
-                  selectedTweet.media_urls?.find((m) => !isVideoUrl(m));
+                // 只有视频推文才提取 video_poster；非视频推文 posterUrl 必须为 undefined，严禁把首张配图排挤掉
+                const posterUrl = isVideo
+                  ? selectedTweet.video_poster ||
+                    selectedTweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
+                    selectedTweet.media_urls?.find((m) => !isVideoUrl(m)) ||
+                    undefined
+                  : undefined;
+                // 非视频推文展示全部真实配图；视频推文若有 posterUrl 则在视频播放器展示封面
                 const displayImages = (selectedTweet.media_urls || []).filter(
-                  (m) => !isVideoUrl(m) && m !== posterUrl
+                  (m) => !isVideoUrl(m) && (isVideo && posterUrl ? m !== posterUrl : true)
                 );
 
                 return (
@@ -2107,27 +2124,133 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                       <div
                         id="tweet-detail-media"
                         style={{
-                          borderRadius: '8px',
-                          overflow: 'hidden',
-                          border: '1px solid var(--line)',
                           marginBottom: '24px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
                         }}
                       >
-                        {displayImages.map((img, i) => (
-                          <img
-                            key={i}
-                            src={img}
-                            style={{
-                              width: '100%',
-                              maxHeight: '420px',
-                              objectFit: 'contain',
-                              background: '#0a0a0a',
-                              display: 'block',
-                              marginBottom: i < displayImages.length - 1 ? '4px' : 0,
-                            }}
-                            alt={`Tweet media ${i + 1}`}
-                          />
-                        ))}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              displayImages.length === 1
+                                ? '1fr'
+                                : displayImages.length === 2
+                                ? '1fr 1fr'
+                                : 'repeat(2, 1fr)',
+                            gap: '8px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {displayImages.map((img, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                position: 'relative',
+                                background: 'var(--paper-sunken, #0f1419)',
+                                border: '1px solid var(--line)',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                cursor: 'zoom-in',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minHeight: displayImages.length === 1 ? '240px' : '180px',
+                                maxHeight: displayImages.length === 1 ? '520px' : '260px',
+                              }}
+                              onClick={() => setPreviewImage(img)}
+                              title="点击查看高清大图"
+                            >
+                              <img
+                                src={img}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  maxHeight: displayImages.length === 1 ? '520px' : '260px',
+                                  objectFit: displayImages.length === 1 ? 'contain' : 'cover',
+                                  display: 'block',
+                                }}
+                                alt={`Tweet media ${i + 1}`}
+                                onError={(e) => {
+                                  // 图片加载受阻时优雅兜底提示
+                                  const target = e.currentTarget;
+                                  target.style.display = 'none';
+                                  const fb = target.nextElementSibling as HTMLElement;
+                                  if (fb) fb.style.display = 'flex';
+                                }}
+                              />
+                              <div
+                                style={{
+                                  display: 'none',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '16px',
+                                  textAlign: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  height: '100%',
+                                }}
+                              >
+                                <span style={{ fontSize: '13px', color: 'var(--ink-muted)' }}>
+                                  🖼️ 推特配图加载受阻（网络或防盗链）
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    api.openExternal(img);
+                                  }}
+                                >
+                                  在浏览器中打开原图 ↗
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 配图底栏工具条 */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 12px',
+                            background: 'var(--paper-sunken)',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            color: 'var(--ink-muted)',
+                            border: '1px solid var(--line)',
+                          }}
+                        >
+                          <span>📷 包含 {displayImages.length} 张高清配图（点击可放大查看）</span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: '11px', padding: '2px 8px' }}
+                              onClick={() => {
+                                navigator.clipboard.writeText(displayImages[0]);
+                                showToast('✓ 配图直链已复制至剪贴板');
+                              }}
+                            >
+                              📋 复制原图直链
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: '11px', padding: '2px 8px' }}
+                              onClick={() => {
+                                api.openExternal(displayImages[0]);
+                              }}
+                            >
+                              🌐 在浏览器查看 ↗
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </>
@@ -2240,6 +2363,92 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                 删除
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 图片放大预览灯箱 (Lightbox Modal) */}
+      {previewImage && (
+        <div
+          id="image-preview-modal"
+          className="drawer-backdrop"
+          style={{
+            zIndex: 10000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.88)',
+            backdropFilter: 'blur(8px)',
+            cursor: 'zoom-out',
+            padding: '24px',
+          }}
+          onClick={() => setPreviewImage(null)}
+        >
+          {/* 顶部浮动工具栏 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: '24px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              zIndex: 10001,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                navigator.clipboard.writeText(previewImage);
+                showToast('✓ 图片直链已复制');
+              }}
+            >
+              📋 复制直链
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                api.openExternal(previewImage);
+              }}
+            >
+              🌐 系统浏览器打开 ↗
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setPreviewImage(null)}
+              style={{ minWidth: '32px', height: '32px', padding: '0 8px', fontSize: '16px' }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              maxWidth: '92vw',
+              maxHeight: '88vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'default',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImage}
+              alt="Tweet Preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '88vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+              }}
+            />
           </div>
         </div>
       )}
