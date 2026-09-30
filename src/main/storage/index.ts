@@ -306,6 +306,48 @@ export class Storage {
         });
         classifyTx();
       }
+
+      // 自动回填历史存量转推推文中残缺的 retweeted_text (若同博主库中存在对应的专栏长文或原推文)
+      const emptyRetweets = this.db
+        .prepare(
+          `
+        SELECT tweet_id, author_username, retweeted_author, text, urls FROM tweets
+        WHERE is_retweet = 1 AND (retweeted_text IS NULL OR length(retweeted_text) < 150 OR retweeted_text LIKE 'https://t.co/%')
+      `
+        )
+        .all() as {
+        tweet_id: string;
+        author_username: string;
+        retweeted_author: string;
+        text: string;
+        urls: string;
+      }[];
+
+      if (emptyRetweets.length > 0) {
+        const updateRtTextStmt = this.db.prepare(
+          'UPDATE tweets SET retweeted_text = ? WHERE tweet_id = ?'
+        );
+        const backfillRtTx = this.db.transaction(() => {
+          for (const rt of emptyRetweets) {
+            const author = rt.retweeted_author || rt.author_username;
+            const target = this.db
+              .prepare(
+                `
+              SELECT text FROM tweets
+              WHERE LOWER(author_username) = LOWER(?) AND is_retweet = 0 AND length(text) > 300
+              ORDER BY created_at DESC
+              LIMIT 1
+            `
+              )
+              .get(author) as { text: string } | undefined;
+
+            if (target && target.text) {
+              updateRtTextStmt.run(target.text, rt.tweet_id);
+            }
+          }
+        });
+        backfillRtTx();
+      }
     } catch {
       // 忽略迁移警告
     }
@@ -514,11 +556,20 @@ export class Storage {
       }
     }
 
-    // 3. 关键词全文模糊检索：命中正文、作者名或 Handle
+    // 3. 关键词全文模糊检索：智能命中推文 ID、URL 提取 ID、正文、作者名或 Handle
     if (options.query && options.query.trim()) {
-      const q = `%${options.query.trim().toLowerCase()}%`;
-      whereClauses.push('(LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)');
-      params.push(q, q, q);
+      const raw = options.query.trim();
+      const matchTweetId = raw.match(/status\/(\d{5,})/) || raw.match(/^(\d{5,})$/);
+      if (matchTweetId) {
+        whereClauses.push('(tweet_id = ? OR LOWER(text) LIKE ?)');
+        params.push(matchTweetId[1], `%${raw.toLowerCase()}%`);
+      } else {
+        const q = `%${raw.toLowerCase()}%`;
+        whereClauses.push(
+          '(tweet_id = ? OR LOWER(text) LIKE ? OR LOWER(author_username) LIKE ? OR LOWER(author_name) LIKE ?)'
+        );
+        params.push(raw, q, q, q);
+      }
     }
 
     return { whereClauses, params };

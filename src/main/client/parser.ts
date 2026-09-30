@@ -197,11 +197,22 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     const rtLegacy = rtResult.legacy || {};
     const rtUser = rtResult.core?.user_results?.result || {};
     retweetedAuthor = rtUser.core?.screen_name || rtUser.legacy?.screen_name || '';
-    retweetedText = rtLegacy.full_text || '';
-
     if (rtLegacy.entities?.urls) rtUrlEntities.push(...rtLegacy.entities.urls);
     if (rtLegacy.extended_entities?.media) rtMediaEntities.push(...rtLegacy.extended_entities.media);
     else if (rtLegacy.entities?.media) rtMediaEntities.push(...rtLegacy.entities.media);
+
+    // 智能提取被转推内容的专栏长文 (X Article) 或 Note Tweet
+    if (rtResult.article?.article_results?.result) {
+      const art = formatArticleContent(rtResult.article.article_results.result);
+      if (art.text) {
+        retweetedText = art.text;
+        for (const u of art.mediaUrls) {
+          if (!mediaUrls.includes(u)) mediaUrls.push(u);
+        }
+      }
+    } else if (rtResult.note_tweet?.note_tweet_results?.result?.text) {
+      retweetedText = rtResult.note_tweet.note_tweet_results.result.text;
+    }
   }
 
   // Quote info
@@ -224,6 +235,19 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
     if (qLegacy.entities?.urls) qtUrlEntities.push(...qLegacy.entities.urls);
     if (qLegacy.extended_entities?.media) qtMediaEntities.push(...qLegacy.extended_entities.media);
     else if (qLegacy.entities?.media) qtMediaEntities.push(...qLegacy.entities.media);
+
+    // 智能提取被引用内容的专栏长文 (X Article) 或 Note Tweet
+    if (qResult.article?.article_results?.result) {
+      const art = formatArticleContent(qResult.article.article_results.result);
+      if (art.text) {
+        quotedText = art.text;
+        for (const u of art.mediaUrls) {
+          if (!mediaUrls.includes(u)) mediaUrls.push(u);
+        }
+      }
+    } else if (qResult.note_tweet?.note_tweet_results?.result?.text) {
+      quotedText = qResult.note_tweet.note_tweet_results.result.text;
+    }
   }
 
   // Format texts with Markdown links and clean media attachments

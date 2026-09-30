@@ -1094,9 +1094,21 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
         insertedCount = res.inserted;
         skippedCount = res.skipped;
       } else if (source === 'search') {
-        const res = await api.searchTweets(effectiveQuery, { limit: crawlLimit, minLikes });
-        fetchedCount = res.count;
-        insertedCount = res.count;
+        const matchId = effectiveQuery.match(/status\/(\d{5,})/) || effectiveQuery.match(/^(\d{5,})$/);
+        if (matchId) {
+          const tweetId = matchId[1];
+          showToast(`正在精准同步推文【${tweetId}】完整全文...`);
+          const res = await api.viewTweet(tweetId, { forceRefresh: true, exportMd: true });
+          fetchedCount = 1;
+          insertedCount = 1;
+          if (res?.tweet) {
+            handleSelectTweet(res.tweet);
+          }
+        } else {
+          const res = await api.searchTweets(effectiveQuery, { limit: crawlLimit, minLikes });
+          fetchedCount = res.count;
+          insertedCount = res.count;
+        }
       } else if (source === 'user') {
         const handle = (overrideTarget !== undefined ? overrideTarget : userHandle).trim().replace(/^@/, '');
         const res = await api.fetchUser(handle, { limit: crawlLimit });
@@ -1523,7 +1535,7 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery = '',
                 className="text-input"
                 style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
                 type="text"
-                placeholder="输入关键词 (输入即搜本地，回车或右侧实时抓取)..."
+                placeholder="输入关键词、推文链接或 ID (回车/搜本地即查，右侧按钮实时抓取)..."
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onKeyDown={(e) => {
