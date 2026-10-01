@@ -52,7 +52,7 @@ export function getTweetListDisplayTitle(rawText: string = ''): string {
     const mdMatch = firstLine.match(/^#+\s*(.+)$/);
     if (mdMatch) return mdMatch[1].trim();
 
-    const bracketMatch = firstLine.match(/^([【\[《][^】\]》]+[】\]》])\s*(.*)$/);
+    const bracketMatch = firstLine.match(/^([【[《][^】\]》]+[】\]》])\s*(.*)$/);
     if (bracketMatch && bracketMatch[2].length > 0) {
       return `${bracketMatch[1]} ${bracketMatch[2]}`.trim();
     }
@@ -91,7 +91,7 @@ export function extractTweetTitleAndSnippet(rawText: string = ''): { title: stri
     }
 
     // 识别【主题】或《主题》
-    const bracketMatch = line0.match(/^([【\[《][^】\]》]+[】\]》])\s*(.*)$/);
+    const bracketMatch = line0.match(/^([【[《][^】\]》]+[】\]》])\s*(.*)$/);
     if (bracketMatch && bracketMatch[2].length > 0) {
       return {
         title: bracketMatch[1] + ' ' + bracketMatch[2],
@@ -114,7 +114,7 @@ export function extractTweetTitleAndSnippet(rawText: string = ''): { title: stri
   }
 
   // 1. 尝试在自然句末标点 (。！？?!;；) 断句
-  const matchSentence = single.match(/^(.{6,45}[。！？\?!;；])\s*(.*)$/);
+  const matchSentence = single.match(/^(.{6,45}[。！？?;；])\s*(.*)$/);
   if (matchSentence) {
     return {
       title: matchSentence[1].trim(),

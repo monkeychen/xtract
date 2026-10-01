@@ -844,7 +844,7 @@ export class Storage {
           } catch {
             // fallback to default
           }
-          const cleanStem = rawStem.replace(/[^\w\-_\.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
+          const cleanStem = rawStem.replace(/[^\w\-_.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
           const isPrimary = idx === 0;
           const imgFilename = isPrimary
             ? `${mIdx + 1}_${cleanStem}${ext}`

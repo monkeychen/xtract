@@ -23,7 +23,7 @@ export function renderInlineMarkdown(
 
   // 精准匹配行内标记，杜绝贪婪吞噬
   const tokenRegex =
-    /(!\[[^\]]*\]\((?:https?:\/\/[^\s\)]+|[^\s\)]+)\)|\[[^\]]+\]\((?:https?:\/\/[^\s\)]+)\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|https:\/\/t\.co\/[a-zA-Z0-9]+|https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;%=]+)/g;
+    /(!\[[^\]]*\]\((?:https?:\/\/[^\s)]+|[^\s)]+)\)|\[[^\]]+\]\((?:https?:\/\/[^\s)]+)\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|https:\/\/t\.co\/[a-zA-Z0-9]+|https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;%=]+)/g;
 
   const elements: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -40,7 +40,7 @@ export function renderInlineMarkdown(
 
     if (token.startsWith('![') && token.endsWith(')')) {
       // 命中图片 ![alt](url)
-      const imgMatch = token.match(/^!\[(.*?)\]\((https?:\/\/[^\s\)]+|[^\s\)]+)\)$/);
+      const imgMatch = token.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+|[^\s)]+)\)$/);
       if (imgMatch) {
         const altText = imgMatch[1];
         const imgUrl = imgMatch[2];
@@ -84,7 +84,7 @@ export function renderInlineMarkdown(
       }
     } else if (token.startsWith('[') && token.endsWith(')')) {
       // 命中链接 [label](url)
-      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)$/);
+      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
       if (linkMatch) {
         const label = linkMatch[1];
         const targetUrl = linkMatch[2];
@@ -162,7 +162,7 @@ export function renderInlineMarkdown(
       // 命中裸 URL (t.co 或普通外链)
       const rawUrl = token;
       let targetUrl = rawUrl;
-      let displayLabel = rawUrl;
+      let displayLabel: string;
 
       // 历史推文短链智能解绑：若匹配到 t.co 短链，且推文元数据包含真实 urls，则自动对齐真实地址
       if (rawUrl.includes('https://t.co/') && urls && urls.length > 0) {
@@ -269,7 +269,7 @@ function parseBlocks(rawText: string, urls?: string[]): BlockItem[] {
     }
 
     // 1. 水平分割线 (--- / ***)
-    if (/^(\-{3,}|\*{3,})$/.test(trimmed)) {
+    if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
       blocks.push({ type: 'divider', lines: [trimmed] });
       i++;
       continue;
@@ -343,7 +343,7 @@ function parseBlocks(rawText: string, urls?: string[]): BlockItem[] {
     }
 
     // 6. 单独成行的 Markdown 图片 ![alt](url)
-    const singleImgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s\)]+|[^\s\)]+)\)$/);
+    const singleImgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+|[^\s)]+)\)$/);
     if (singleImgMatch) {
       blocks.push({
         type: 'standalone-image',
@@ -360,7 +360,7 @@ function parseBlocks(rawText: string, urls?: string[]): BlockItem[] {
     while (i < lines.length) {
       const curTrimmed = lines[i].trim();
       if (!curTrimmed) break;
-      if (/^(\-{3,}|\*{3,})$/.test(curTrimmed)) break;
+      if (/^(-{3,}|\*{3,})$/.test(curTrimmed)) break;
       if (/^#{1,4}\s+/.test(curTrimmed)) break;
       if (curTrimmed.startsWith('>')) break;
       if (/^[-*+]\s+/.test(curTrimmed)) break;

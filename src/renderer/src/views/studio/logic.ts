@@ -32,7 +32,7 @@ export function buildQueryOptions(
   source: DataSource,
   params: BuildQueryParams
 ): { sourceType: TweetQueryOptions['sourceType']; query?: string; user?: string; listId?: string } {
-  let sourceType: TweetQueryOptions['sourceType'] = 'following';
+  let sourceType: TweetQueryOptions['sourceType'];
   let q: string | undefined = undefined;
   let u: string | undefined = undefined;
   let lId: string | undefined = undefined;

@@ -2,8 +2,7 @@ import React from 'react';
 import type { Tweet } from '../../types.js';
 import { api } from '../../services/api.js';
 import { renderFormattedTweetText } from './formatters.js';
-import { extractMedia, formatTweetDate, isTweetVideo } from './logic.js';
-import { classifyTweet } from './logic.js';
+import { classifyTweet, extractMedia, formatTweetDate } from './logic.js';
 import { formatCount } from './formatters.js';
 import { TweetVideoPlayer } from './TweetVideoPlayer.js';
 

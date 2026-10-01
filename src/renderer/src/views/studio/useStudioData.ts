@@ -3,7 +3,6 @@ import type { Tweet, XListInfo, StudioJumpAction } from '../../types.js';
 import { api } from '../../services/api.js';
 import {
   buildQueryOptions,
-  classifyTweet,
   computePages,
   extractTweetIdFromQuery,
   filterTweetsByKeyword,
@@ -709,7 +708,6 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   );
 
   // 详情栏的专栏/长推文判定（未选中推文时为 null，JSX 内以可选链消费）
-  const detailClassification = selectedTweet ? classifyTweet(selectedTweet) : null;
   return {
     dataSource, crawlLimit, openMenu, searchQuery, userHandle, userLists, selectedList,
     customListId, isSyncingLists, streamFilter, minLikes, totalDbCount, tweets, selectedTweet,

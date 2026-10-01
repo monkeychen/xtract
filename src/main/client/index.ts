@@ -164,7 +164,8 @@ export class XClient {
         if (isNetworkErr) {
           const currentProxy = Config.HTTP_PROXY || '未检测到代理';
           throw new Error(
-            `无法连接 X 官方服务器 (${msg.includes('CLOSED') ? 'ERR_CONNECTION_CLOSED' : '网络连接中断'})。当前代理: [${currentProxy}]。请检查 Clash/Surge 客户端是否运行正常并接管 X 流量。`
+            `无法连接 X 官方服务器 (${msg.includes('CLOSED') ? 'ERR_CONNECTION_CLOSED' : '网络连接中断'})。当前代理: [${currentProxy}]。请检查 Clash/Surge 客户端是否运行正常并接管 X 流量。`,
+            { cause: err }
           );
         }
         throw err;
@@ -471,7 +472,6 @@ export class XClient {
             let isDiscover = false;
             let cur: Element | null = a;
             while (cur && cur !== document.body) {
-              const text = (cur.getAttribute('aria-label') || cur.textContent || '').toLowerCase();
               if (
                 cur.matches?.('[data-testid*="discover"], [data-testid*="suggest"]') ||
                 cur.querySelector?.('h2')?.textContent?.match(/(?:discover|发现|推荐|suggested)/i)
@@ -1206,7 +1206,7 @@ export class XClient {
             const lines = text.split('\n').map((s) => s.trim()).filter((s) => s && s !== '·');
             let rank = index + 1;
             let domain = '';
-            let name = '';
+            let name: string;
             let tweetCount = '高热度讨论';
 
             let start = 0;

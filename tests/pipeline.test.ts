@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -157,7 +157,7 @@ describe('Pipeline and Summarizer Modules', () => {
     };
 
     const pipeline = new Pipeline(storage, mockClient);
-    const [fetched, inserted, skipped] = await pipeline.fetchAndStore({ limit: 20, maxPages: 1 });
+    const [fetched, inserted] = await pipeline.fetchAndStore({ limit: 20, maxPages: 1 });
 
     expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
       maxPages: 1,

@@ -1,4 +1,4 @@
-import type { XtractAPI, StreamEvent, AppConfigView, XListInfo } from '../types';
+import type { StreamEvent, AppConfigView, XListInfo } from '../types';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
 

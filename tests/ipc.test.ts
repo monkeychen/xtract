@@ -4,7 +4,7 @@ import { xtractApiImplementation } from '../src/preload/index.js';
 import { registerIpcHandlers, _resetRegisteredForTest } from '../src/main/ipc/index.js';
 
 // Mock electron
-const mockHandlers = new Map<string, Function>();
+const mockHandlers = new Map<string, (...args: any[]) => any>();
 const mockSend = vi.fn();
 
 vi.mock('electron', () => {
@@ -26,7 +26,7 @@ vi.mock('electron', () => {
       removeListener: vi.fn(),
     },
     ipcMain: {
-      handle: vi.fn((channel: string, handler: Function) => {
+      handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
         mockHandlers.set(channel, handler);
       }),
     },

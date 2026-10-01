@@ -83,7 +83,20 @@ xtract/
   - 检索本地推文：`pnpm dev:cli -- --list [数量]`
 
 ### 三大质量验收门禁 (交付必须 100% 通过)
-每一次迭代交付前，必须主动全量跑通三大门禁：
-1. **测试套件门禁**：`pnpm test`（覆盖存储、网络嗅探、大模型调度及 E2E 测试，0 Failed）；
-2. **静态类型门禁**：`npx tsc --noEmit`（强类型校验，0 Error）；
-3. **构建打包门禁**：`npx vite build`（生产环境打包验证，0 Error / 0 Warning）。
+每一次迭代交付前，必须主动全量跑通三大门禁。**统一入口是一条命令**：
+
+```bash
+pnpm verify     # 依次执行：pnpm lint && pnpm test && tsc --noEmit && vite build
+```
+
+任一环节失败即中断并返回非零退出码。三道门禁的明细：
+1. **代码风格门禁**：`pnpm lint`（ESLint 9 flat config，0 Error）；
+2. **测试套件门禁**：`pnpm test`（覆盖存储、网络嗅探、大模型调度、组件逻辑与 E2E，0 Failed）；
+3. **静态类型门禁**：`npx tsc --noEmit`（强类型校验，0 Error）；
+4. **构建打包门禁**：`npx vite build`（生产环境打包验证，0 Error / 0 Warning）。
+
+代码风格由 ESLint 门禁强制（与 Prettier 规则互斥已通过 `eslint-config-prettier` 关闭冲突项）。
+
+另提供 `pnpm format` / `pnpm format:check`（Prettier）作为**可选**工具，**不在门禁内**。
+存量代码与 Prettier 默认输出差异较大（大量内联 style 的 JSX 会被重排），
+首次全量格式化建议单独提交，不要混在功能变更里。

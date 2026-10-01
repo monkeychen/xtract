@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { Storage } from '../src/main/storage/index.js';
-import { normalizeTweetDate, isArticleTweet, isTweetContentIncomplete } from '../src/main/client/parser.js';
+import { isArticleTweet, isTweetContentIncomplete } from '../src/main/client/parser.js';
 import type { Tweet } from '../src/main/types.js';
 
 describe('Storage Module', () => {

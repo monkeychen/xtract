@@ -18,7 +18,6 @@ export const TweetVideoPlayer: React.FC<TweetVideoPlayerProps> = ({
   videoUrl,
   posterUrl,
   tweetUrl,
-  authorUsername,
   onToast,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);

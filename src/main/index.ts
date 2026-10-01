@@ -11,7 +11,6 @@ import {
 import { isTweetContentIncomplete } from './client/parser.js';
 
 // Dual-mode dispatcher: determine CLI vs GUI
-const rawArgs = process.argv.slice(2);
 const cleanArgs = process.argv.filter((arg) => arg !== '--');
 const isCLI = cleanArgs.length > 2;
 
