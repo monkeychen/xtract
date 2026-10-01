@@ -43,7 +43,7 @@ class ApiService {
       return window.xtractAPI.getConfig();
     }
     return {
-      httpProxy: 'http://127.0.0.1:7890',
+      httpProxy: 'http://127.0.0.1:8118',
       llmProvider: 'gemini',
       llmAuthMode: 'api_key',
       llmModel: 'gemini-3.8-flash',

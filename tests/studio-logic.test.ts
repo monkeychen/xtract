@@ -274,9 +274,14 @@ describe('buildQueryOptions (数据源→查询参数映射 §2.4)', () => {
     expect(r).toEqual({ sourceType: 'following', query: 'transformer' });
   });
 
-  it('should map the user source to sourceType "user" and strip the @ prefix', () => {
+  it('should map the user source to sourceType "user" and strip the @ prefix when userHandle is present', () => {
     const r = buildQueryOptions('user', { ...params, userHandle: '@karpathy' });
     expect(r).toEqual({ sourceType: 'user', user: 'karpathy' });
+  });
+
+  it('should map the user source to sourceType "all" when userHandle is blank to list all local tweets', () => {
+    const r = buildQueryOptions('user', { ...params, userHandle: '' });
+    expect(r).toEqual({ sourceType: 'all', user: undefined });
   });
 
   it('should map the lists source to sourceType "list" using the selected list id', () => {
@@ -296,7 +301,7 @@ describe('buildQueryOptions (数据源→查询参数映射 §2.4)', () => {
   it('should normalise blank inputs to undefined for every branch', () => {
     expect(buildQueryOptions('following', { ...params, streamFilter: '   ' }).query).toBeUndefined();
     expect(buildQueryOptions('search', { ...params, searchQuery: '' }).query).toBeUndefined();
-    expect(buildQueryOptions('user', { ...params, userHandle: '@' }).user).toBeUndefined();
+    expect(buildQueryOptions('user', { ...params, userHandle: '@' })).toEqual({ sourceType: 'all', user: undefined });
     expect(buildQueryOptions('lists', { ...params, selectedList: '' }).listId).toBeUndefined();
   });
 

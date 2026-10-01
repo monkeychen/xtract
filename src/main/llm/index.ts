@@ -196,9 +196,17 @@ export class OpenAICompatProvider implements BaseLLMProvider {
     this.isTokenPlan = this.providerKey === 'qwen_token_plan' || this.baseUrl.includes('token-plan');
 
     // Model name resolution
-    let targetModel = options?.modelName || Config.LLM_MODEL;
+    let targetModel = options?.modelName;
     if (!targetModel) {
-      targetModel = this.defaultModel;
+      const isGlobalProvider =
+        Config.LLM_PROVIDER &&
+        (Config.LLM_PROVIDER.toLowerCase() === rawProvider.toLowerCase() ||
+          Config.LLM_PROVIDER.toLowerCase() === this.providerKey.toLowerCase());
+      if (isGlobalProvider && Config.LLM_MODEL) {
+        targetModel = Config.LLM_MODEL;
+      } else {
+        targetModel = this.defaultModel;
+      }
     } else {
       const lower = targetModel.toLowerCase().trim();
       if (lower === 'gpt-5.6 sol' || lower === 'gpt-5.6-sol' || lower === 'gpt-5.6') {
@@ -472,7 +480,10 @@ export function getLLMProvider(
 ): BaseLLMProvider {
   const prov = (provider || Config.LLM_PROVIDER || 'gemini').toLowerCase().trim();
   const mode = (authMode || Config.LLM_AUTH_MODE || 'account').toLowerCase().trim();
-  const targetModel = model || Config.LLM_MODEL || undefined;
+  const isDefaultProvider =
+    !provider ||
+    provider.toLowerCase().trim() === (Config.LLM_PROVIDER || 'gemini').toLowerCase().trim();
+  const targetModel = model || (isDefaultProvider ? Config.LLM_MODEL : undefined) || undefined;
 
   if (mode === 'account') {
     if (prov === 'gemini' || prov === 'google') {

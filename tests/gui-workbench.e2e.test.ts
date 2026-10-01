@@ -235,7 +235,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         openLoginWindow: async () => ({ status: 'authenticated' }),
         deleteTweets: async () => ({ deletedCount: 1 }),
         getConfig: async () => ({
-          httpProxy: '127.0.0.1:7890',
+          httpProxy: 'http://127.0.0.1:8118',
           llmProvider: 'qwen-token-plan',
           llmAuthMode: 'account',
           llmModel: 'qwen3.8-flash',
@@ -255,7 +255,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         updateConfig: async (updates: any) => ({
           success: true,
           config: {
-            httpProxy: '127.0.0.1:7890',
+            httpProxy: updates?.HTTP_PROXY || 'http://127.0.0.1:8118',
             llmProvider: 'qwen-token-plan',
             llmAuthMode: 'account',
             llmModel: 'qwen3.8-flash',

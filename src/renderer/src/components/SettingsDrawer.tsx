@@ -16,7 +16,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   screenName,
 }) => {
   const [config, setConfig] = useState<AppConfigView | null>(null);
-  const [proxy, setProxy] = useState('http://127.0.0.1:7890');
+  const [proxy, setProxy] = useState('http://127.0.0.1:8118');
   const [provider, setProvider] = useState('gemini');
   const [authMode, setAuthMode] = useState<'api_key' | 'account'>('api_key');
   const [model, setModel] = useState('gemini-3.8-flash');
@@ -33,7 +33,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     if (isOpen) {
       api.getConfig().then((cfg) => {
         setConfig(cfg);
-        setProxy(cfg.httpProxy || 'http://127.0.0.1:7890');
+        setProxy(cfg.httpProxy || 'http://127.0.0.1:8118');
         setProvider(cfg.llmProvider || 'gemini');
         setAuthMode((cfg.llmAuthMode as 'api_key' | 'account') || 'api_key');
         setModel(cfg.llmModel || 'gemini-3.8-flash');

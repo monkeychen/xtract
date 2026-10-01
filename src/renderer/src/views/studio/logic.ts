@@ -38,8 +38,8 @@ export function buildQueryOptions(
   let lId: string | undefined = undefined;
 
   if (source === 'user') {
-    sourceType = 'user';
     u = (params.userParam !== undefined ? params.userParam : params.userHandle).trim().replace(/^@/, '') || undefined;
+    sourceType = u ? 'user' : 'all';
   } else if (source === 'search') {
     // 全网搜索工作台：检索本地推文库，为空时不添加任何关键词过滤（查全库），有词时全库模糊搜索
     sourceType = 'all';

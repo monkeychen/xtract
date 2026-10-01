@@ -94,9 +94,11 @@ export class Config {
     }
 
     // 2. 加载默认用户数据根目录 ~/Documents/Xtract/config.env
+    const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
     const defaultRoot = path.join(os.homedir(), 'Documents', 'Xtract');
     const defaultEnv = path.join(defaultRoot, 'config.env');
-    if (fs.existsSync(defaultEnv)) {
+    const skipDefaultRoot = isTest && Boolean(process.env.XTRACT_STORAGE_ROOT);
+    if (!skipDefaultRoot && fs.existsSync(defaultEnv)) {
       try {
         const parsed = dotenv.parse(fs.readFileSync(defaultEnv, 'utf-8'));
         for (const [k, v] of Object.entries(parsed)) {
@@ -163,10 +165,12 @@ export class Config {
       process.stderr.write(`⚠️ 写入持久化配置 ${targetFile} 失败: ${err}\n`);
     }
 
-    // 若非默认根目录，在默认根目录中写入/清理引导指针
+    const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+
+    // 若非默认根目录，在默认根目录中写入/清理引导指针 (测试环境下不写入宿主目录)
     const defaultRoot = path.join(os.homedir(), 'Documents', 'Xtract');
     const defaultEnv = path.join(defaultRoot, 'config.env');
-    if (updates.XTRACT_STORAGE_ROOT !== undefined) {
+    if (!isTest && updates.XTRACT_STORAGE_ROOT !== undefined) {
       const customRoot = updates.XTRACT_STORAGE_ROOT.trim();
       if (customRoot && targetFile !== defaultEnv) {
         try {
@@ -197,22 +201,24 @@ export class Config {
       }
     }
 
-    // 开发态同步写入根目录 .env
-    const devEnvPath = path.join(this.PROJECT_ROOT, '.env');
-    if (fs.existsSync(devEnvPath)) {
-      try {
-        let devContent = fs.readFileSync(devEnvPath, 'utf-8');
-        for (const [key, value] of Object.entries(updates)) {
-          const regex = new RegExp(`^${key}=.*$`, 'm');
-          if (regex.test(devContent)) {
-            devContent = devContent.replace(regex, `${key}=${value}`);
-          } else {
-            devContent = devContent ? `${devContent.trim()}\n${key}=${value}` : `${key}=${value}`;
+    // 开发态同步写入根目录 .env (测试环境除外)
+    if (!isTest) {
+      const devEnvPath = path.join(this.PROJECT_ROOT, '.env');
+      if (fs.existsSync(devEnvPath)) {
+        try {
+          let devContent = fs.readFileSync(devEnvPath, 'utf-8');
+          for (const [key, value] of Object.entries(updates)) {
+            const regex = new RegExp(`^${key}=.*$`, 'm');
+            if (regex.test(devContent)) {
+              devContent = devContent.replace(regex, `${key}=${value}`);
+            } else {
+              devContent = devContent ? `${devContent.trim()}\n${key}=${value}` : `${key}=${value}`;
+            }
           }
+          fs.writeFileSync(devEnvPath, devContent.trim() + '\n', 'utf-8');
+        } catch {
+          // packaged app read-only ignore
         }
-        fs.writeFileSync(devEnvPath, devContent.trim() + '\n', 'utf-8');
-      } catch {
-        // packaged app read-only ignore
       }
     }
   }
