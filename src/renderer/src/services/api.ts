@@ -54,6 +54,9 @@ class ApiService {
       xCt0Masked: 'c901••••••••55aa',
       onlyLongTweets: true,
       fetchAuthorReplies: false,
+      storageRoot: '~/Documents/Xtract',
+      dataDir: '~/Documents/Xtract/data',
+      articlesDir: '~/Documents/Xtract/articles',
     };
   }
 
@@ -63,6 +66,7 @@ class ApiService {
     }
     await new Promise((resolve) => setTimeout(resolve, 400));
     const current = await this.getConfig();
+    const newStorageRoot = updates.XTRACT_STORAGE_ROOT || current.storageRoot;
     return {
       success: true,
       config: {
@@ -75,6 +79,9 @@ class ApiService {
         httpProxy: updates.HTTP_PROXY || current.httpProxy,
         onlyLongTweets: updates.FETCH_ONLY_LONG_TWEETS !== undefined ? updates.FETCH_ONLY_LONG_TWEETS !== 'false' : current.onlyLongTweets,
         fetchAuthorReplies: updates.FETCH_AUTHOR_REPLIES !== undefined ? updates.FETCH_AUTHOR_REPLIES === 'true' : current.fetchAuthorReplies,
+        storageRoot: newStorageRoot,
+        dataDir: `${newStorageRoot}/data`,
+        articlesDir: `${newStorageRoot}/articles`,
       },
     };
   }
@@ -237,7 +244,7 @@ class ApiService {
     const tweet = MOCK_TWEETS.find((t) => t.tweet_id === cleanId) || MOCK_TWEETS[0];
     return {
       tweet,
-      exportPath: `output/${tweet.author_username}/${tweet.tweet_id}/index.md`,
+      exportPath: `articles/${tweet.author_username}/${tweet.tweet_id}/index.md`,
     };
   }
 
@@ -284,8 +291,8 @@ class ApiService {
     return {
       matchedCount: 1,
       deletedCount: filter.dryRun ? 0 : 1,
-      deletedDirs: ['output/karpathy/18888001'],
-      deletedFiles: ['output/karpathy/18888001/index.md'],
+      deletedDirs: ['articles/karpathy/18888001'],
+      deletedFiles: ['articles/karpathy/18888001/index.md'],
       dryRun: Boolean(filter.dryRun),
     };
   }
@@ -314,8 +321,8 @@ class ApiService {
     onProgress?.({ taskId, stage: 'synthesis', type: 'content', text: '# 🗞️ X 每日情报晨报\n\n## 核心热点聚焦\n今日全网核心聚焦于混合推理在开发运维工具中的落地...', progress: 90 });
     await new Promise((r) => setTimeout(r, 800));
 
-    onProgress?.({ taskId, stage: 'done', type: 'status', text: '研报生成完毕！已落盘至 output/reports/', progress: 100 });
-    return { success: true, reportPath: 'output/reports/2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
+    onProgress?.({ taskId, stage: 'done', type: 'status', text: '研报生成完毕！已落盘至 articles/reports/', progress: 100 });
+    return { success: true, reportPath: 'articles/reports/2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
   }
 
   async generateTrendsDigest(options: any, onProgress?: (event: StreamEvent) => void) {
@@ -342,7 +349,7 @@ class ApiService {
     await new Promise((r) => setTimeout(r, 1500));
 
     onProgress?.({ taskId, stage: 'done', type: 'status', text: '趋势深度研报已归档！', progress: 100 });
-    return { success: true, reportPath: 'output/reports/trends_2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
+    return { success: true, reportPath: 'articles/reports/trends_2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
   }
 
   onStreamEvent(callback: (event: StreamEvent) => void): () => void {

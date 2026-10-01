@@ -129,26 +129,36 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.fetchAuthorReplies).toBe('boolean');
     expect(config.fetchAuthorReplies).toBe(false);
     expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
+    expect(typeof config.storageRoot).toBe('string');
+    expect(typeof config.dataDir).toBe('string');
+    expect(typeof config.articlesDir).toBe('string');
+    expect(config.dataDir).toBe(`${config.storageRoot}/data`);
+    expect(config.articlesDir).toBe(`${config.storageRoot}/articles`);
   });
 
-  it('Preload updateConfig should update reasoning and fetchAuthorReplies settings', async () => {
+  it('Preload updateConfig should update reasoning, fetchAuthorReplies and storageRoot settings', async () => {
     registerIpcHandlers();
 
     const res = await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'false',
       LLM_REASONING_EFFORT: 'low',
       FETCH_AUTHOR_REPLIES: 'true',
+      XTRACT_STORAGE_ROOT: '/tmp/xtract_custom_storage',
     });
     expect(res.success).toBe(true);
     expect(res.config.reasoningEnabled).toBe(false);
     expect(res.config.reasoningEffort).toBe('low');
     expect(res.config.fetchAuthorReplies).toBe(true);
+    expect(res.config.storageRoot).toBe('/tmp/xtract_custom_storage');
+    expect(res.config.dataDir).toBe('/tmp/xtract_custom_storage/data');
+    expect(res.config.articlesDir).toBe('/tmp/xtract_custom_storage/articles');
 
     // Restore default
     await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'true',
       LLM_REASONING_EFFORT: 'high',
       FETCH_AUTHOR_REPLIES: 'false',
+      XTRACT_STORAGE_ROOT: '',
     });
   });
 

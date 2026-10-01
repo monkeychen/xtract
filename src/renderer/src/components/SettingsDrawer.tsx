@@ -25,6 +25,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
   const [onlyLongTweets, setOnlyLongTweets] = useState(true);
   const [fetchAuthorReplies, setFetchAuthorReplies] = useState(false);
+  const [storageRoot, setStorageRoot] = useState('~/Documents/Xtract');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -40,6 +41,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         setReasoningEffort(cfg.reasoningEffort || 'high');
         setOnlyLongTweets(cfg.onlyLongTweets !== false);
         setFetchAuthorReplies(cfg.fetchAuthorReplies === true);
+        setStorageRoot(cfg.storageRoot || '~/Documents/Xtract');
       });
       setSaveSuccess(false);
     }
@@ -74,6 +76,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       LLM_REASONING_EFFORT: reasoningEffort,
       FETCH_ONLY_LONG_TWEETS: String(onlyLongTweets),
       FETCH_AUTHOR_REPLIES: String(fetchAuthorReplies),
+      XTRACT_STORAGE_ROOT: storageRoot,
     });
     setIsSaving(false);
     onConfigUpdated();
@@ -300,6 +303,51 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   />
                   <span className="slider" />
                 </label>
+              </div>
+            </div>
+          </div>
+
+          {/* 本地数据与归档目录 */}
+          <div style={{ marginBottom: '24px' }}>
+            <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
+              本地数据与归档目录
+            </h3>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '8px', lineHeight: 1.5 }}>
+                指定本地数据与文章产物的存储根目录（开发与生产统一）。其下子目录固定为：
+                <br />
+                • 数据与缓存：<code>{storageRoot}/data/</code>（存放 <code>tweets.db</code> 与会话凭据）
+                <br />
+                • 文章与研报：<code>{storageRoot}/articles/</code>（存放自包含 Markdown 导出与研报）
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  id="storage-root-input"
+                  className="text-input"
+                  style={{ flex: 1, fontSize: '13px', fontFamily: 'monospace' }}
+                  type="text"
+                  value={storageRoot}
+                  onChange={(e) => setStorageRoot(e.target.value)}
+                  placeholder="~/Documents/Xtract"
+                />
+                <button
+                  type="button"
+                  className="secondary-button"
+                  style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => setStorageRoot('~/Documents/Xtract')}
+                  title="恢复默认路径 ~/Documents/Xtract"
+                >
+                  恢复默认
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => api.openPath(storageRoot)}
+                  title="在访达 (Finder) 中打开当前目录"
+                >
+                  打开目录 ↗
+                </button>
               </div>
             </div>
           </div>

@@ -88,7 +88,7 @@ export class Storage {
 
   constructor(dbPath?: string, baseOutputDir?: string) {
     this.dbPath = dbPath || Config.DB_PATH;
-    this.baseOutputDir = baseOutputDir || path.join(Config.PROJECT_ROOT, 'output');
+    this.baseOutputDir = baseOutputDir || Config.ARTICLES_DIR;
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -687,7 +687,7 @@ export class Storage {
 
     const tweets = this.getRecentTweets({ limit, minLikes, minRetweets });
     const today = new Date().toISOString().slice(0, 10);
-    const defaultFile = path.join(Config.PROJECT_ROOT, 'output', `tweets_${today}.md`);
+    const defaultFile = path.join(this.baseOutputDir, `tweets_${today}.md`);
     let filePath = options.outputFile || defaultFile;
 
     if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {

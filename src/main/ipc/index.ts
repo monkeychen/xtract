@@ -25,8 +25,8 @@ export function registerIpcHandlers(
   }
   isRegistered = true;
 
-  const storage = new Storage();
-  const pipeline = new Pipeline(storage);
+  let storage = new Storage();
+  let pipeline = new Pipeline(storage);
 
   // Helper for masking sensitive tokens
   const mask = (s: string) =>
@@ -86,6 +86,9 @@ export function registerIpcHandlers(
       xCt0Masked: mask(Config.X_CT0),
       onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
       fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+      storageRoot: Config.STORAGE_ROOT,
+      dataDir: Config.DATA_DIR,
+      articlesDir: Config.ARTICLES_DIR,
     };
   });
 
@@ -105,7 +108,23 @@ export function registerIpcHandlers(
         }
       }
 
-      fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
+      try {
+        fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
+      } catch {
+        // In packaged macOS app, project root may be read-only; silently continue
+      }
+
+      if (updates.XTRACT_STORAGE_ROOT !== undefined) {
+        const customRoot = updates.XTRACT_STORAGE_ROOT.trim();
+        if (customRoot) {
+          process.env.XTRACT_STORAGE_ROOT = customRoot;
+        } else {
+          delete process.env.XTRACT_STORAGE_ROOT;
+        }
+        Config.ensureDirectories();
+        storage = new Storage();
+        pipeline = new Pipeline(storage);
+      }
 
       if (updates.HTTP_PROXY !== undefined) {
         try {
@@ -134,10 +153,14 @@ export function registerIpcHandlers(
           xCt0Masked: mask(process.env.X_CT0 || Config.X_CT0),
           onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
           fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+          storageRoot: Config.STORAGE_ROOT,
+          dataDir: Config.DATA_DIR,
+          articlesDir: Config.ARTICLES_DIR,
         },
       };
     }
   );
+
 
   // 3. Trends & Digest
   ipcMain.handle(
@@ -478,8 +501,7 @@ export function registerIpcHandlers(
       } catch {
         // fallback to standard path
         exportPath = path.join(
-          Config.PROJECT_ROOT,
-          'output',
+          Config.ARTICLES_DIR,
           tweet.author_username || 'tweet',
           tweet.tweet_id,
           'index.md'
@@ -565,7 +587,17 @@ export function registerIpcHandlers(
     try {
       let target = itemPath;
       if (!path.isAbsolute(target)) {
-        target = path.resolve(Config.PROJECT_ROOT, target);
+        const inArticles = path.resolve(Config.ARTICLES_DIR, target);
+        if (fs.existsSync(inArticles)) {
+          target = inArticles;
+        } else {
+          const inStorage = path.resolve(Config.STORAGE_ROOT, target);
+          if (fs.existsSync(inStorage)) {
+            target = inStorage;
+          } else {
+            target = path.resolve(Config.PROJECT_ROOT, target);
+          }
+        }
       }
       if (fs.existsSync(target)) {
         shell.showItemInFolder(target);
@@ -587,7 +619,17 @@ export function registerIpcHandlers(
     try {
       let target = dirPath;
       if (!path.isAbsolute(target)) {
-        target = path.resolve(Config.PROJECT_ROOT, target);
+        const inArticles = path.resolve(Config.ARTICLES_DIR, target);
+        if (fs.existsSync(inArticles)) {
+          target = inArticles;
+        } else {
+          const inStorage = path.resolve(Config.STORAGE_ROOT, target);
+          if (fs.existsSync(inStorage)) {
+            target = inStorage;
+          } else {
+            target = path.resolve(Config.PROJECT_ROOT, target);
+          }
+        }
       }
       if (fs.existsSync(target)) {
         await shell.openPath(target);

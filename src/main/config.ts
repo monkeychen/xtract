@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import net from 'node:net';
 import dotenv from 'dotenv';
 import type { XListInfo } from './types.js';
@@ -10,14 +11,69 @@ dotenv.config({ path: path.join(projectRoot, '.env') });
 
 export class Config {
   static readonly PROJECT_ROOT = projectRoot;
-  static readonly DATA_DIR = path.join(projectRoot, 'data');
-  static readonly RAW_DIR = path.join(projectRoot, 'data', 'raw');
-  static readonly REPORTS_DIR = path.join(projectRoot, 'output', 'reports');
-  static readonly DB_PATH = path.join(projectRoot, 'data', 'tweets.db');
-  static readonly AUTH_STATE_PATH = path.join(projectRoot, 'data', 'auth_state.json');
-  static readonly AUTH_USER_PATH = path.join(projectRoot, 'data', 'auth_user.json');
-  static readonly USER_LISTS_PATH = path.join(projectRoot, 'data', 'user_lists.json');
-  static readonly BROWSER_PROFILE_DIR = path.join(projectRoot, 'data', 'browser_profile');
+
+  /**
+   * 用户数据保存根目录：
+   * 不区分开发态与生产态，统一由设置项指定 (环境变量 XTRACT_STORAGE_ROOT)，默认 ~/Documents/Xtract
+   */
+  static get STORAGE_ROOT(): string {
+    const custom = (process.env.XTRACT_STORAGE_ROOT || '').trim();
+    if (custom) {
+      if (custom.startsWith('~')) {
+        return path.join(os.homedir(), custom.slice(1));
+      }
+      return path.resolve(custom);
+    }
+    return path.join(os.homedir(), 'Documents', 'Xtract');
+  }
+
+  /** 数据与缓存固定存放于 <storageRoot>/data */
+  static get DATA_DIR(): string {
+    return path.join(this.STORAGE_ROOT, 'data');
+  }
+
+  /** 归档产物与研报固定存放于 <storageRoot>/articles */
+  static get ARTICLES_DIR(): string {
+    return path.join(this.STORAGE_ROOT, 'articles');
+  }
+
+  static get RAW_DIR(): string {
+    return path.join(this.DATA_DIR, 'raw');
+  }
+
+  static get REPORTS_DIR(): string {
+    return path.join(this.ARTICLES_DIR, 'reports');
+  }
+
+  static get DB_PATH(): string {
+    return path.join(this.DATA_DIR, 'tweets.db');
+  }
+
+  static get AUTH_STATE_PATH(): string {
+    return path.join(this.DATA_DIR, 'auth_state.json');
+  }
+
+  static get AUTH_USER_PATH(): string {
+    return path.join(this.DATA_DIR, 'auth_user.json');
+  }
+
+  static get USER_LISTS_PATH(): string {
+    return path.join(this.DATA_DIR, 'user_lists.json');
+  }
+
+  static get BROWSER_PROFILE_DIR(): string {
+    return path.join(this.DATA_DIR, 'browser_profile');
+  }
+
+  /** 自动确保根目录及固定二级子目录存在 */
+  static ensureDirectories(): void {
+    const dirs = [this.STORAGE_ROOT, this.DATA_DIR, this.ARTICLES_DIR, this.REPORTS_DIR, this.RAW_DIR];
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+  }
 
   // X Credentials (动态 getter，响应会话更新与热重载)
   static get X_AUTH_TOKEN(): string {

@@ -294,7 +294,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   const handleSelectTweet = async (tweet: Tweet) => {
     activeTweetIdRef.current = tweet.tweet_id;
     setSelectedTweet(tweet);
-    const defaultExportPath = `output/${tweet.author_username || 'tweet'}/${tweet.tweet_id}/index.md`;
+    const defaultExportPath = `articles/${tweet.author_username || 'tweet'}/${tweet.tweet_id}/index.md`;
     setExportPath(defaultExportPath);
     setIsDetailLoading(true);
 
@@ -644,7 +644,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
       const targetPath =
         res?.exportPath ||
         exportPath ||
-        `output/${selectedTweet.author_username || 'tweet'}/${selectedTweet.tweet_id}/index.md`;
+        `articles/${selectedTweet.author_username || 'tweet'}/${selectedTweet.tweet_id}/index.md`;
       if (res?.exportPath) {
         setExportPath(res.exportPath);
       }

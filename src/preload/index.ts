@@ -23,6 +23,9 @@ export interface AppConfigView {
   xCt0Masked: string;
   onlyLongTweets: boolean;
   fetchAuthorReplies: boolean;
+  storageRoot: string;
+  dataDir: string;
+  articlesDir: string;
 }
 
 export interface XtractAPI {

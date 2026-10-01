@@ -140,7 +140,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
               ...found,
               text: found.text + (opts?.forceRefresh ? '\n[Full Article Synchronized]' : ''),
             },
-            exportPath: `output/${found.author_username}/${found.tweet_id}/index.md`,
+            exportPath: `articles/${found.author_username}/${found.tweet_id}/index.md`,
           };
         },
         listTweets: async (opts: any) => {
@@ -246,6 +246,9 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           xCt0Masked: '••••••••',
           onlyLongTweets: true,
           fetchAuthorReplies: false,
+          storageRoot: '~/Documents/Xtract',
+          dataDir: '~/Documents/Xtract/data',
+          articlesDir: '~/Documents/Xtract/articles',
         }),
         updateConfig: async (updates: any) => ({
           success: true,
@@ -261,6 +264,9 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
             xCt0Masked: '••••••••',
             onlyLongTweets: true,
             fetchAuthorReplies: updates?.FETCH_AUTHOR_REPLIES === 'true',
+            storageRoot: updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract',
+            dataDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/data`,
+            articlesDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/articles`,
           },
         }),
         onStreamEvent: (callback: any) => {
@@ -417,7 +423,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     const lastRevealed = await page.evaluate(
       () => (window as any).__recordedCalls.revealedPaths.slice(-1)[0]
     );
-    expect(lastRevealed).toContain('output/');
+    expect(lastRevealed).toContain('articles/');
     expect(lastRevealed).toContain('/index.md');
 
     // 3. Click '🔄 同步全文' -> must trigger viewTweet with forceRefresh: true
@@ -574,6 +580,21 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await authorRepliesSlider.click();
     await page.waitForTimeout(100);
     expect(await authorRepliesToggle.isChecked()).toBe(false);
+
+    // Verify 本地数据与归档目录 section exists with input and reset button
+    const storageRootHeader = page.locator('div', { hasText: '本地数据与归档目录' }).first();
+    expect(await storageRootHeader.isVisible()).toBe(true);
+
+    const storageRootInput = page.locator('#storage-root-input');
+    expect(await storageRootInput.isVisible()).toBe(true);
+    expect(await storageRootInput.inputValue()).toBe('~/Documents/Xtract');
+
+    // Test editing storage root input and resetting to default
+    await storageRootInput.fill('/tmp/custom_xtract');
+    expect(await storageRootInput.inputValue()).toBe('/tmp/custom_xtract');
+
+    await page.locator('button', { hasText: '恢复默认' }).click();
+    expect(await storageRootInput.inputValue()).toBe('~/Documents/Xtract');
 
     await page.locator('button', { hasText: '保存' }).click();
     await page.waitForTimeout(800);

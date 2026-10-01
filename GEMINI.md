@@ -63,8 +63,9 @@ xtract/
 │   ├── preload/            # 安全隔离桥梁 (ContextBridge)
 │   └── renderer/           # GUI 工作台前端 (React 19 + 手写 CSS 设计令牌，无 UI 框架)
 │       └── src/views/studio/  # 工作台模块：logic/formatters/useStudioData + 6 个展示组件
-├── data/                   # 本地数据持久化（Git 忽略：tweets.db, auth_state.json）
-└── output/                 # 归档产物（reports/ 早报, {author}/{tweet_id}/ 自包含 Page Bundle）
+└── ~/Documents/Xtract/     # 用户数据存储根目录 (可在设置中自定义，开发/生产统一)
+    ├── data/               # 本地数据持久化与缓存 (tweets.db, auth_state.json, browser_profile)
+    └── articles/           # 归档产物与研报 (reports/ 研报, {author}/{tweet_id}/ 自包含 Page Bundle)
 ```
 
 ---
