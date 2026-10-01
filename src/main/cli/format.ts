@@ -1,6 +1,10 @@
 import type { Tweet, TrendTopic } from '../types.js';
 
-export function formatTweetTable(tweets: Tweet[], title: string): string {
+/**
+ * 命令前缀：打包用户没有 pnpm，提示必须是可直接复制执行的真实命令。
+ * 打包态传入 process.execPath（形如 "/Applications/Xtract.app/Contents/MacOS/Xtract"）。
+ */
+export function formatTweetTable(tweets: Tweet[], title: string, cmd = 'pnpm dev:cli --'): string {
   const lines: string[] = [];
   lines.push(`\n=== ${title} ===`);
   lines.push('─'.repeat(80));
@@ -16,13 +20,13 @@ export function formatTweetTable(tweets: Tweet[], title: string): string {
 
   lines.push('─'.repeat(80));
   lines.push('💡 提示：');
-  lines.push('• 查看单篇推文全文及多媒体：pnpm dev:cli -- --view <推文ID>');
-  lines.push('• 导出全量推文为 Markdown 查阅：pnpm dev:cli -- --export\n');
+  lines.push(`• 查看单篇推文全文及多媒体：${cmd} --view <推文ID>`);
+  lines.push(`• 导出全量推文为 Markdown 查阅：${cmd} --export\n`);
 
   return lines.join('\n');
 }
 
-export function formatTrendsTable(trends: TrendTopic[], title: string): string {
+export function formatTrendsTable(trends: TrendTopic[], title: string, cmd = 'pnpm dev:cli --'): string {
   const lines: string[] = [];
   lines.push(`\n=== ${title} ===`);
   lines.push('─'.repeat(80));
@@ -41,7 +45,7 @@ export function formatTrendsTable(trends: TrendTopic[], title: string): string {
   });
 
   lines.push('─'.repeat(80));
-  lines.push('💡 提示：可使用 `pnpm dev:cli -- --trends-digest` 全自动对上述热点生成深度研报。\n');
+  lines.push(`💡 提示：可使用 \`${cmd} --trends-digest\` 全自动对上述热点生成深度研报。\n`);
 
   return lines.join('\n');
 }

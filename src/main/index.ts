@@ -9,10 +9,46 @@ import {
   formatTweetDetail,
 } from './cli/format.js';
 import { isTweetContentIncomplete } from './client/parser.js';
+import { resolveUserArgs, resolveVersion } from './cli/argv.js';
+import { createRequire } from 'node:module';
 
 // Dual-mode dispatcher: determine CLI vs GUI
-const cleanArgs = process.argv.filter((arg) => arg !== '--');
-const isCLI = cleanArgs.length > 2;
+// 判定逻辑见 src/main/cli/argv.ts —— Electron 打包后 argv 少一层脚本路径，
+// 用数组长度判断会让 dmg 用户完全进不了 CLI。
+const nodeRequire = createRequire(import.meta.url);
+
+/** CLI 版本号：优先取 Electron 应用版本（打包后与 DMG 名一致），否则读 package.json */
+function cliVersion(): string {
+  return resolveVersion(
+    () => {
+      const electron = nodeRequire('electron');
+      return typeof electron?.app?.getVersion === 'function' ? electron.app.getVersion() : null;
+    },
+    () => {
+      // src/main/cli → src/main → src → 项目根；打包后 dist-electron/main → asar 根
+      for (const rel of ['../../../package.json', '../../package.json', '../package.json']) {
+        try {
+          return nodeRequire(rel).version ?? null;
+        } catch {
+          /* 尝试下一个候选路径 */
+        }
+      }
+      return null;
+    }
+  );
+}
+
+/**
+ * 提示里展示的命令前缀。
+ * 打包用户没有 pnpm，必须给可直接复制执行的真实可执行文件路径。
+ */
+const cmdHint = process.versions.electron ? `"${process.execPath}"` : 'pnpm dev:cli --';
+
+const userArgs = resolveUserArgs(process.argv, {
+  isElectron: Boolean(process.versions.electron),
+  isDefaultApp: Boolean(process.defaultApp),
+});
+const isCLI = userArgs.length > 0;
 
 if (isCLI) {
   const program = new Command();
@@ -20,7 +56,7 @@ if (isCLI) {
   program
     .name('xtract')
     .description('Production-grade X (Twitter) intelligence radar & AI digest.')
-    .version('1.0.0')
+    .version(cliVersion())
     // Actions & Workflows
     .option('--check-auth', '验证 X Cookie 凭证或本地会话是否有效')
     .option('--trends', '查看全网热门趋势榜单看板')
@@ -118,7 +154,7 @@ if (isCLI) {
             process.stdout.write('⚠️ 数据库中暂无符合条件的推文。\n');
           } else {
             const title = options.user ? `博主 @${options.user} 推文` : '推文列表';
-            process.stdout.write(formatTweetTable(tweets, title) + '\n');
+            process.stdout.write(formatTweetTable(tweets, title, cmdHint) + '\n');
           }
         }
         process.exit(0);
@@ -319,7 +355,7 @@ if (isCLI) {
         if (isJson) {
           process.stdout.write(JSON.stringify(trends, null, 2) + '\n');
         } else {
-          process.stdout.write(formatTrendsTable(trends, `X 全网实时趋势 (${options.category})`));
+          process.stdout.write(formatTrendsTable(trends, `X 全网实时趋势 (${options.category})`, cmdHint));
         }
         process.exit(0);
       }
@@ -357,7 +393,7 @@ if (isCLI) {
         if (isJson) {
           process.stdout.write(JSON.stringify(tweets, null, 2) + '\n');
         } else {
-          process.stdout.write(formatTweetTable(tweets, `搜索 '${options.search}' 结果`));
+          process.stdout.write(formatTweetTable(tweets, `搜索 '${options.search}' 结果`, cmdHint));
         }
         if (options.export !== undefined) {
           storage.exportMarkdown({
@@ -376,7 +412,7 @@ if (isCLI) {
         if (isJson) {
           process.stdout.write(JSON.stringify(tweets, null, 2) + '\n');
         } else {
-          process.stdout.write(formatTweetTable(tweets, `博主 @${options.user} 推文`));
+          process.stdout.write(formatTweetTable(tweets, `博主 @${options.user} 推文`, cmdHint));
         }
         process.exit(0);
       }
@@ -387,7 +423,7 @@ if (isCLI) {
         if (isJson) {
           process.stdout.write(JSON.stringify(tweets, null, 2) + '\n');
         } else {
-          process.stdout.write(formatTweetTable(tweets, `X 列表推文`));
+          process.stdout.write(formatTweetTable(tweets, `X 列表推文`, cmdHint));
         }
         process.exit(0);
       }
@@ -453,7 +489,8 @@ if (isCLI) {
   });
 
   Config.detectLocalProxy().then(() => {
-    program.parse(cleanArgs);
+    // 传数组时 commander 默认按 from:'node' 再跳过两段，与已解析的 userArgs 冲突
+    program.parse(userArgs, { from: 'user' });
   });
 } else {
   // Lazy import electron only when launching GUI

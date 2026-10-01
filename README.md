@@ -70,25 +70,64 @@ pnpm dev          # 启动桌面工作台
 pnpm dev:cli -- --help   # 查看全部命令行选项
 ```
 
+> **装的是 DMG 而不是源码？** 见下方「命令行」章节——安装后无需 pnpm，
+> 直接执行应用二进制即可：`/Applications/Xtract.app/Contents/MacOS/Xtract --help`。
+
 ---
 
-## CLI 速查
+## 命令行（CLI）
+
+Xtract 的桌面应用与命令行是**同一个程序**：
+
+- **不带参数**启动 → 打开情报工作台窗口
+- **带参数**启动 → 进入命令行模式，stdout 输出纯 JSON（加 `--json`）
+
+### 安装后用户（无 pnpm / Node）
+
+DMG 安装后即可直接使用，**不需要安装任何开发工具**：
+
+```bash
+# 先打开「终端」，再执行（下面两行按需替换为你的实际安装路径）
+XT="/Applications/Xtract.app/Contents/MacOS/Xtract"
+
+"$XT" --help            # 查看全部选项
+"$XT" --version         # 查看版本
+"$XT" --list 20         # 检索本地已抓推文
+```
+
+嫌路径太长？建一个软链，之后直接用 `xtract`：
+
+```bash
+sudo ln -sf "$XT" /usr/local/bin/xtract
+xtract --list 20
+```
+
+### 开发者（源码运行）
+
+```bash
+pnpm dev:cli -- --help
+```
+
+### 速查表
+
+下表 `XT` 代表可执行文件路径（安装用户）或 `pnpm dev:cli --`（开发者）。
 
 | 目的 | 命令 |
 | :--- | :--- |
-| 拉取关注流 + 生成早报 | `pnpm dev:cli -- --fetch-only --report-only` |
-| 关键词全网实时搜索 | `pnpm dev:cli -- --search "AI Agent" --min-likes 50` |
-| 抓取某博主全部推文 | `pnpm dev:cli -- --user karpathy` |
-| 抓取指定 X 列表 | `pnpm dev:cli -- --x-list 2100985900734062922` |
-| 查看/同步单篇推文全文 | `pnpm dev:cli -- --view <推文ID或URL>` |
-| 全网热搜趋势看板 | `pnpm dev:cli -- --trends` |
-| 全自动趋势深度研报 | `pnpm dev:cli -- --trends-digest --hours 24` |
-| 检索本地已抓推文 | `pnpm dev:cli -- --list 50` |
-| 导出 Markdown 归档 | `pnpm dev:cli -- --export <推文ID>` |
-| 级联删除（库 + 磁盘） | `pnpm dev:cli -- --delete <推文ID>` |
-| 验证会话连通性 | `pnpm dev:cli -- --check-auth` |
+| 拉取关注流 + 生成早报 | `XT --fetch-only --report-only` |
+| 关键词全网实时搜索 | `XT --search "AI Agent" --min-likes 50` |
+| 抓取某博主全部推文 | `XT --user karpathy` |
+| 抓取指定 X 列表 | `XT --x-list 2100985900734062922` |
+| 查看/同步单篇推文全文 | `XT --view <推文ID或URL>` |
+| 全网热搜趋势看板 | `XT --trends` |
+| 全自动趋势深度研报 | `XT --trends-digest --hours 24` |
+| 检索本地已抓推文 | `XT --list 50` |
+| 导出 Markdown 归档 | `XT --export <推文ID>` |
+| 级联删除（库 + 磁盘） | `XT --delete <推文ID>` |
+| 验证会话连通性 | `XT --check-auth` |
 | 导入 X 登录态 | 桌面端「设置 → X 账号 → 从 Chrome 读取登录态」 |
 
+CLI 输出的提示里会直接打印当前可用的完整命令，复制即可执行。
 全部参数、示例与工作流场景见 **[docs/cli-reference.md](docs/cli-reference.md)**。
 
 ---

@@ -273,3 +273,43 @@ describe('extractTweetTitleAndSnippet 未覆盖路径 (§1.5)', () => {
     expect(res.snippet).toBe('乙'.repeat(45));
   });
 });
+
+// ============================================================================
+// CLI 提示命令前缀（打包用户没有 pnpm，提示必须是可直接复制的真实命令）
+// 回归背景：format.ts 曾硬编码 `pnpm dev:cli --`，dmg 用户照抄必然失败
+// ============================================================================
+
+import { formatTweetTable, formatTrendsTable } from '../src/main/cli/format.js';
+
+describe('CLI 提示使用可执行命令前缀', () => {
+  const tweet = {
+    tweet_id: '1',
+    author_name: 'A',
+    author_username: 'a',
+    text: 'hello',
+    created_at: '2026-01-01T00:00:00.000Z',
+    like_count: 1,
+    retweet_count: 0,
+  } as any;
+
+  it('开发态应提示 pnpm dev:cli --', () => {
+    const out = formatTweetTable([tweet], '列表', 'pnpm dev:cli --');
+    expect(out).toContain('pnpm dev:cli -- --view');
+    expect(out).toContain('pnpm dev:cli -- --export');
+  });
+
+  it('打包态应提示真实可执行文件路径（可直接复制执行）', () => {
+    const exe = '/Applications/Xtract.app/Contents/MacOS/Xtract';
+    const out = formatTweetTable([tweet], '列表', `"${exe}"`);
+    expect(out).toContain(`"${exe}" --view`);
+    expect(out).not.toContain('pnpm');
+  });
+
+  it('趋势表的提示同样应使用传入的前缀', () => {
+    const trends = [{ rank: 1, name: 't', query: 'q', tweet_count: '1K', category: 'tech' }] as any;
+    const exe = '/Applications/Xtract.app/Contents/MacOS/Xtract';
+    const out = formatTrendsTable(trends, '趋势', `"${exe}"`);
+    expect(out).toContain(`"${exe}" --trends-digest`);
+    expect(out).not.toContain('pnpm');
+  });
+});

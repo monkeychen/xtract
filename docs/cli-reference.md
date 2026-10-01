@@ -7,7 +7,37 @@
 
 ## 4. CLI 完整命令参考手册
 
-开发态通过 `pnpm dev:cli -- [选项]` 执行，打包后直接运行 `xtract [选项]` 即可。
+## 如何启动 CLI
+
+Xtract 的桌面应用与命令行是**同一个二进制**，靠是否带参数区分：
+
+| 启动方式 | 结果 |
+| :--- | :--- |
+| 不带任何参数 | 打开情报工作台窗口（GUI） |
+| 带任意参数 | 进入命令行模式，stdout 输出纯 JSON |
+
+**安装用户（DMG，无需 pnpm / Node）：**
+
+```bash
+# 打开「终端」执行；路径按实际安装位置调整
+"/Applications/Xtract.app/Contents/MacOS/Xtract" --help
+
+# 建议建软链，之后直接用 xtract
+sudo ln -sf "/Applications/Xtract.app/Contents/MacOS/Xtract" /usr/local/bin/xtract
+xtract --help
+```
+
+> macOS 从 Finder / Dock 启动时会注入 `-psn_*` 进程序列号参数，
+> 应用已忽略该类噪声参数，不会因此误判为 CLI 模式。
+
+**开发者（源码）：**
+
+```bash
+pnpm dev:cli -- [选项]
+```
+
+下方所有示例中的 `XT` 代表可执行文件路径（安装用户）或 `pnpm dev:cli --`（开发者）。
+CLI 运行时的提示信息会直接打印当前可用的完整命令，复制即可执行。
 
 ```
 Usage: xtract [options]
