@@ -269,43 +269,92 @@ export class XClient {
     Config.ensureDirs();
 
     process.stderr.write(
-      `🚀 正在启动真实 Chrome 浏览器（超时阈值: ${timeout} 秒），请在窗口中登录 X...\n`
+      `🚀 正在启动独立登录窗口（超时阈值: ${timeout} 秒），请在窗口中登录 X...\n`
     );
 
+    // 1. 创建完全纯净的独立浏览器上下文（绝不注入任何旧 Token 或旧 storageState）
     const browser = await this.launchBrowser(false);
-    const context = await this.setupContext(browser, timeoutMs);
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 900 },
+      locale: 'zh-CN',
+      timezoneId: 'Asia/Shanghai',
+    });
+
+    await context.addInitScript(
+      'Object.defineProperty(navigator, "webdriver", { get: () => undefined });'
+    );
+    context.setDefaultNavigationTimeout(timeoutMs);
+    context.setDefaultTimeout(timeoutMs);
+
     const page = await context.newPage();
 
+    // 2. 直达 X 官方标准化登录 Flow 页面（绝不走易发生重定向死锁的旧 /login 地址）
+    const targetUrl = 'https://x.com/i/flow/login';
     try {
-      await page.goto('https://x.com/login', { waitUntil: 'commit', timeout: timeoutMs });
+      await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
     } catch (err: any) {
-      process.stderr.write(`⚠️ 页面加载中: ${err?.message || err}，请直接在窗口中操作...\n`);
+      process.stderr.write(`⚠️ 登录页面加载中: ${err?.message || err}，请直接在窗口中操作...\n`);
     }
 
     process.stderr.write(
-      '⏳ 请在浏览器窗口中完成登录。检测到成功跳转至首页后将自动保存凭证并退出...\n'
+      '⏳ 请在浏览器窗口中完成登录。检测到登录成功后将自动保存凭证并退出...\n'
     );
 
-    for (let i = 0; i < Math.max(300, timeout); i++) {
+    // 3. 智能多维检测登录成功：基于 Cookie（auth_token）+ 页面脱离登录流双重判定
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
       await new Promise((r) => setTimeout(r, 1000));
+
+      if (page.isClosed()) {
+        await browser.close().catch(() => {});
+        throw new Error('登录窗口已被用户关闭。');
+      }
+
       try {
         const url = page.url();
-        if (url.includes('x.com/home')) {
-          await new Promise((r) => setTimeout(r, 2000));
+        const cookies = await context.cookies(['https://x.com', 'https://twitter.com']);
+        const authCookie = cookies.find((c) => c.name === 'auth_token' && c.value && c.value.length > 20);
+        const ct0Cookie = cookies.find((c) => c.name === 'ct0' && c.value);
+
+        const isOutOfFlow = !url.includes('/flow/login') && !url.includes('/login');
+        const isHomeOrFeed =
+          url.includes('x.com/home') ||
+          url === 'https://x.com/' ||
+          url.startsWith('https://x.com/?');
+
+        if (authCookie && (isOutOfFlow || isHomeOrFeed)) {
+          // 缓冲 1.5 秒确保 ct0 等其余衍生 Cookie 写入完备
+          await new Promise((r) => setTimeout(r, 1500));
+          const finalCookies = await context.cookies(['https://x.com', 'https://twitter.com']);
+          const finalAuth = finalCookies.find((c) => c.name === 'auth_token')?.value || authCookie.value;
+          const finalCt0 = finalCookies.find((c) => c.name === 'ct0')?.value || ct0Cookie?.value || '';
+
+          // A. 持久化完整的 Playwright 会话存储文件
           await context.storageState({ path: Config.AUTH_STATE_PATH });
+
+          // B. 同步持久化写入 config.env 双轨配置，并更新当前进程环境变量
+          Config.savePersistentConfig({
+            X_AUTH_TOKEN: finalAuth,
+            X_CT0: finalCt0,
+          });
+          process.env.X_AUTH_TOKEN = finalAuth;
+          process.env.X_CT0 = finalCt0;
+
           process.stderr.write(
-            `🎉 登录成功！会话凭证已持久化至: ${Config.AUTH_STATE_PATH}\n`
+            `🎉 登录成功！会话凭证已持久化至: ${Config.AUTH_STATE_PATH} 及 ${Config.CONFIG_ENV_PATH}\n`
           );
-          await browser.close();
+          await browser.close().catch(() => {});
           return;
         }
       } catch {
-        // ignore navigation checks during page shifts
+        // 忽略页面跳转切换瞬态异常
       }
     }
 
-    await browser.close();
-    throw new Error('登录超时（未检测到成功进入 X 首页）。');
+    await browser.close().catch(() => {});
+    throw new Error('登录超时（未在规定时间内检测到有效的 X 登录凭证）。');
   }
 
   async verifyAuth(

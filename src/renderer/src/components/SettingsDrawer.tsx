@@ -28,6 +28,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [storageRoot, setStorageRoot] = useState('~/Documents/Xtract');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginMsg, setLoginMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -90,6 +92,29 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     onClose();
   };
 
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginMsg('正在拉起登录窗口，请在弹出的浏览器中登录...');
+    try {
+      const res = await api.login('x');
+      if (res.success) {
+        setLoginMsg('登录成功！已保存会话');
+        const cfg = await api.getConfig();
+        setConfig(cfg);
+        onConfigUpdated();
+        setTimeout(() => setLoginMsg(null), 3000);
+      } else {
+        setLoginMsg(res.error || '登录已取消');
+        setTimeout(() => setLoginMsg(null), 4000);
+      }
+    } catch (err: any) {
+      setLoginMsg(err?.message || '登录出错');
+      setTimeout(() => setLoginMsg(null), 4000);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   return (
     <div id="settings-drawer" className="drawer-backdrop" onClick={onClose}>
       <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
@@ -135,10 +160,16 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               <button
                 className="secondary-button"
                 style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => api.login('x')}
+                disabled={isLoggingIn}
+                onClick={handleLogin}
               >
-                <span>重新登录</span>
+                <span>{isLoggingIn ? '正在登录中（请在弹窗操作）...' : '重新登录'}</span>
               </button>
+              {loginMsg && (
+                <div style={{ fontSize: '11px', color: loginMsg.includes('成功') ? 'var(--green-moss)' : 'var(--amber)', marginTop: '8px', textAlign: 'center' }}>
+                  {loginMsg}
+                </div>
+              )}
             </div>
           </div>
 

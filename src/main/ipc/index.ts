@@ -60,6 +60,14 @@ export function registerIpcHandlers(
         if (service === 'x') {
           const client = new XClient();
           await client.loginInteractive(120);
+          try {
+            const user = await client.verifyAuth({ forceBrowser: false });
+            if (user) {
+              Config.setCachedUser(user);
+            }
+          } catch {
+            // ignore initial profile cache error
+          }
           return { success: true };
         }
         return {
