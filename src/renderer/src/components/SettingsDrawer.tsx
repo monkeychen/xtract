@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { AppConfigView } from '../types.js';
 import { api } from '../services/api.js';
+import { InfoTip } from './InfoTip.js';
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -167,11 +168,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   onClick={handleImportFromBrowser}
                 >
                   <span>{isImporting ? '正在读取并验证...' : '从 Chrome 读取登录态'}</span>
+                  <InfoTip text="先在日常 Chrome 中登录 x.com，再点此按钮导入完整会话（含设备指纹与 Cloudflare 凭证），无需打开开发者工具。仅 macOS 可用。" />
                 </button>
-                <div style={{ fontSize: '11px', color: 'var(--ink-faint)', marginTop: '6px', lineHeight: '1.5' }}>
-                  先在日常 Chrome 中登录 x.com，再点此按钮一键导入完整会话（含设备指纹与
-                  Cloudflare 凭证），无需打开开发者工具。仅 macOS 可用。
-                </div>
                 {importMsg && (
                   <div
                     style={{
@@ -189,7 +187,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               {/* 手动 Cookie 凭据输入（备用通道） */}
               <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--line-strong)' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-soft)', display: 'block', marginBottom: '6px' }}>
-                  手动填入 Cookie（从浏览器 DevTools 复制）
+                  手动填入 Cookie
+                  <InfoTip
+                    label="取值方法"
+                    text="在系统浏览器登录 x.com 后，打开 DevTools → Application → Cookies → https://x.com，复制 auth_token 与 ct0 填入下方，保存即生效。"
+                  />
                 </label>
                 <input
                   className="text-input"
@@ -207,9 +209,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   onChange={(e) => setXCt0(e.target.value)}
                   style={{ fontSize: '12px' }}
                 />
-                <div style={{ fontSize: '11px', color: 'var(--ink-soft)', marginTop: '6px', lineHeight: 1.4 }}>
-                  若弹窗登录被限制，可在系统浏览器登录 x.com 后，从 DevTools → Application → Cookies 复制以上两个值，点击底部「保存」即可生效。
-                </div>
               </div>
             </div>
           </div>

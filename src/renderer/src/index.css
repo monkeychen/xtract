@@ -651,3 +651,53 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(18px);
 }
+
+/* ==========================================================================
+   InfoTip — 界面克制原则的载体
+   说明性文字默认不占版面，仅在 hover / focus / 点击时浮出。
+   状态类信息（连接状态、操作结果、错误原因）不属于此范畴，必须常驻可见。
+   ========================================================================== */
+
+.info-tip-trigger {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ink-faint);
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 9px;
+  line-height: 1;
+  font-style: italic;
+  font-weight: 700;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.info-tip-trigger:hover,
+.info-tip-trigger:focus-visible {
+  color: var(--cinnabar);
+  border-color: var(--cinnabar);
+  outline: none;
+}
+
+.info-tip-bubble {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10050;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: normal;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
