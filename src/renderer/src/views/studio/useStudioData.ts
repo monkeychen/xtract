@@ -7,6 +7,7 @@ import {
   computePages,
   extractTweetIdFromQuery,
   filterTweetsByKeyword,
+  isAllSelected,
   reduceStreamEvent,
   resolveListId,
   validateCrawlTarget,
@@ -53,7 +54,6 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
 
   // Filtering & Pagination
   const [minLikes, setMinLikes] = useState<number>(0);
-  const [limit, setLimit] = useState<number>(50);
   const [totalDbCount, setTotalDbCount] = useState<number>(0);
 
   // Tweet States
@@ -239,6 +239,11 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     setDataSource(newSource);
     setStreamFilter('');
     setCheckedIds(new Set());
+    // 切源会换掉 selectedTweet，必须一并关掉悬空浮层：
+    // 否则删除确认弹窗仍开着，它确认时作用于的已是新数据源的推文。
+    setDeleteConfirmOpen(false);
+    setBatchDeleteConfirmOpen(false);
+    setPreviewImage(null);
     if (newSource === 'user') {
       loadLocalTweets(50, 'user', false, undefined, userHandle);
     } else if (newSource === 'search') {
@@ -266,11 +271,6 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   const handleUserChange = (val: string) => {
     setUserHandle(val);
     const clean = val.trim().replace(/^@/, '');
-    if (clean) {
-      try {
-        localStorage.setItem('xtract_last_user_handle', clean);
-      } catch {}
-    }
     if (userDebounceRef.current) clearTimeout(userDebounceRef.current);
     userDebounceRef.current = setTimeout(() => {
       loadLocalTweets(50, 'user', false, undefined, clean);
@@ -595,9 +595,45 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     }
   };
 
+  // 逐篇触发真实的 Page Bundle 落盘导出（viewTweet 内部会生成
+  // output/{author}/{tweet_id}/index.md 并下载配图），而不是仅弹个 toast。
   const handleBatchExport = async () => {
-    showToast(`已将选中 ${checkedIds.size} 篇推文导出为结构化 Markdown`);
-    setCheckedIds(new Set());
+    const ids = Array.from(checkedIds);
+    if (ids.length === 0) return;
+    setIsLoading(true);
+    try {
+      const paths: string[] = [];
+      const failed: string[] = [];
+      for (const id of ids) {
+        try {
+          const res = await api.viewTweet(id, { exportMd: true });
+          if (res?.exportPath) paths.push(res.exportPath);
+        } catch {
+          failed.push(id);
+        }
+      }
+      if (paths.length > 0) {
+        // 定位到首个导出包所在的作者目录，方便用户一次看到全部产物
+        const firstDir = paths[0].replace(/[\\/][^/\\]+$/, '');
+        try {
+          await api.showItemInFolder(firstDir);
+        } catch {
+          // 定位失败不影响导出结果本身
+        }
+      }
+      showToast(
+        failed.length === 0
+          ? `已导出 ${paths.length} 篇推文为 Markdown 归档`
+          : `已导出 ${paths.length} 篇，${failed.length} 篇失败`
+      );
+      if (failed.length === 0) {
+        setCheckedIds(new Set());
+      }
+    } catch (err: any) {
+      showToast(`批量导出失败: ${err?.message || String(err)}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRevealInFinder = async () => {
@@ -667,7 +703,10 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   // Instant In-Memory Filter
   const filteredTweets = filterTweetsByKeyword(tweets, streamFilter);
 
-  const allChecked = filteredTweets.length > 0 && checkedIds.size === filteredTweets.length;
+  const allChecked = isAllSelected(
+    filteredTweets.map((t) => t.tweet_id),
+    checkedIds
+  );
 
   // 详情栏的专栏/长推文判定（未选中推文时为 null，JSX 内以可选链消费）
   const detailClassification = selectedTweet ? classifyTweet(selectedTweet) : null;

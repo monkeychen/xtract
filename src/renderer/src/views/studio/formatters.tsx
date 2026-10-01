@@ -59,11 +59,7 @@ export function getTweetListDisplayTitle(rawText: string = ''): string {
     return firstLine;
   }
 
-  const matchSentence = text.match(/^(.{6,45}[。！？\?!;；])/);
-  if (matchSentence) {
-    return matchSentence[1].trim();
-  }
-
+  // 注：非空 text 必然切出至少一个非空行，故此处不存在可达的断句兜底分支。
   return text;
 }
 

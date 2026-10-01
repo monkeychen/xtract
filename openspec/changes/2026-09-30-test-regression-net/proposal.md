@@ -47,7 +47,7 @@
 | 7 | `exportPath` 渲染处 fallback 缺兜底 | 2046 | 无 `\|\| 'tweet'`，`author_username` 为空时产出 `output/undefined/...`，与 853/1169 不一致 |
 | 8 | `SettingsDrawer` 硬编码假凭据 | 23 | `apiKey` 初始值 `'AIzaSyDummyKeyForPrototype12345'`；另有 `api.ts` 的 `MOCK_TWEETS` / `MOCK_REPORTS` / `MOCK_TRENDS` 与 `App.tsx` 写死的 `@cza55008` / `127.0.0.1:7890`，与工程宪法红线第 3 条冲突 |
 
-处理方式：对缺陷 1、2、3，补测试时以 `it.todo()` 标注并写明期望语义，不写会通过当前实现的断言；缺陷 4-7 记录在本文档即可；缺陷 8 另立变更处理。
+**处理结果（已全部修复）**：8 项缺陷均已修复并转为真实回归断言，见 `tests/known-defects.test.ts` 与 `tests/studio-selection.test.ts`。修复过程还额外暴露一个原先未登记的问题——批量导出定位目录的正则 `/\/[^/\\]+$/` 只匹配正斜杠，在反斜杠路径上不生效，已一并修正为 `/[\\/][^/\\]+$/`。
 
 ## Capabilities
 

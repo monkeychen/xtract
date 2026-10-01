@@ -20,7 +20,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [provider, setProvider] = useState('gemini');
   const [authMode, setAuthMode] = useState<'api_key' | 'account'>('api_key');
   const [model, setModel] = useState('gemini-3.8-flash');
-  const [apiKey, setApiKey] = useState('AIzaSyDummyKeyForPrototype12345');
+  const [apiKey, setApiKey] = useState('');
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
   const [onlyLongTweets, setOnlyLongTweets] = useState(true);
@@ -120,7 +120,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                 </span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '12px' }}>
-                @{screenName || 'cza55008'}
+                {screenName ? `@${screenName}` : '未检测到 X 会话'}
               </div>
               <button
                 className="secondary-button"

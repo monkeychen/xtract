@@ -252,3 +252,19 @@ export function validateCrawlTarget(
   }
   return { ok: true };
 }
+
+// ============================================================================
+// 列表选择状态
+// ============================================================================
+
+/**
+ * 判断当前可见的推文是否已被全部勾选。
+ *
+ * 必须按「每一项是否都在勾选集合中」判断，不能比较两个集合的大小：
+ * 当关键词过滤让可见项变少时，勾选集合中仍可能残留被过滤掉的 id，
+ * 大小相等会因此误判为「未全选」。
+ */
+export function isAllSelected(visibleIds: string[], checkedIds: Set<string>): boolean {
+  if (visibleIds.length === 0) return false;
+  return visibleIds.every((id) => checkedIds.has(id));
+}

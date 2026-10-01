@@ -31,6 +31,18 @@ export interface ReportJumpAction {
   timestamp: number;
 }
 
+// ============================================================================
+// ⚠️ 浏览器降级演示数据 (Fallback Demo Datasets)
+//
+// 下列数据集仅供 `pnpm dev:web`（裸浏览器、未注入 window.xtractAPI）预览界面
+// 布局时使用；桌面端真实运行时永远不会读取它们。
+//
+// 依据工程宪法红线第 3 条「严禁硬编码不存在的假用户或假数据」：
+//   - 严禁把它们并入桌面端代码路径；
+//   - 严禁在演示模式下静默呈现 —— App.tsx 会在顶部显示醒目的降级提示条；
+//   - 新增示例数据时必须保证其显式可辨识为示例，不得伪装成真实情报。
+// ============================================================================
+
 // Mock datasets for standalone prototype preview
 export const MOCK_REPORTS: ReportItem[] = [
   {

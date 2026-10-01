@@ -7,15 +7,26 @@ class ApiService {
     return typeof window !== 'undefined' && Boolean(window.xtractAPI);
   }
 
+  /**
+   * 是否处于「浏览器降级演示模式」。
+   *
+   * 仅当页面在裸浏览器中打开（如 `pnpm dev:web`，未经过 Electron 注入
+   * window.xtractAPI）时为 true。此时所有数据来自 types.ts 中的示例数据集，
+   * UI 必须显式提示用户当前非真实运行，避免把演示数据误认为真实情报。
+   */
+  get isFallbackMode(): boolean {
+    return !this.hasNativeApi();
+  }
+
   async checkAuth() {
     if (this.hasNativeApi()) {
       return window.xtractAPI.checkAuth();
     }
     return {
-      isValid: true,
-      info: '@cza55008',
-      screenName: 'cza55008',
-      proxy: '127.0.0.1:7890 (Proxy Direct)',
+      isValid: false,
+      info: undefined,
+      screenName: undefined,
+      proxy: undefined,
     };
   }
 

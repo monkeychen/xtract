@@ -179,7 +179,7 @@ export const TweetDetailPane: React.FC<TweetDetailPaneProps> = ({
               <div style={{ color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '520px' }}>
                 <span style={{ fontWeight: 600, color: 'var(--ink)' }}>📁 归档包: </span>
                 <code style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>
-                  {exportPath || `output/${selectedTweet.author_username}/${selectedTweet.tweet_id}/index.md`}
+                  {exportPath || `output/${selectedTweet.author_username || 'tweet'}/${selectedTweet.tweet_id}/index.md`}
                 </code>
               </div>
               <button
