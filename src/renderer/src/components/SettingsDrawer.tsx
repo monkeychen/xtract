@@ -30,6 +30,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginMsg, setLoginMsg] = useState<string | null>(null);
+  const [xAuthToken, setXAuthToken] = useState('');
+  const [xCt0, setXCt0] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -76,7 +78,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
 
   const handleSave = async () => {
     setIsSaving(true);
-    await api.updateConfig({
+    const updates: Record<string, string> = {
       HTTP_PROXY: proxy,
       LLM_PROVIDER: provider,
       LLM_AUTH_MODE: authMode,
@@ -86,7 +88,14 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       FETCH_ONLY_LONG_TWEETS: String(onlyLongTweets),
       FETCH_AUTHOR_REPLIES: String(fetchAuthorReplies),
       XTRACT_STORAGE_ROOT: storageRoot,
-    });
+    };
+    if (xAuthToken.trim()) {
+      updates.X_AUTH_TOKEN = xAuthToken.trim();
+    }
+    if (xCt0.trim()) {
+      updates.X_CT0 = xCt0.trim();
+    }
+    await api.updateConfig(updates);
     setIsSaving(false);
     onConfigUpdated();
     onClose();
@@ -170,6 +179,32 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   {loginMsg}
                 </div>
               )}
+
+              {/* 手动 Cookie 凭据输入（备用通道） */}
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--line-strong)' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-soft)', display: 'block', marginBottom: '6px' }}>
+                  手动填入 Cookie（从浏览器 DevTools 复制）
+                </label>
+                <input
+                  className="text-input"
+                  type="password"
+                  placeholder="auth_token"
+                  value={xAuthToken}
+                  onChange={(e) => setXAuthToken(e.target.value)}
+                  style={{ marginBottom: '6px', fontSize: '12px' }}
+                />
+                <input
+                  className="text-input"
+                  type="password"
+                  placeholder="ct0"
+                  value={xCt0}
+                  onChange={(e) => setXCt0(e.target.value)}
+                  style={{ fontSize: '12px' }}
+                />
+                <div style={{ fontSize: '11px', color: 'var(--ink-soft)', marginTop: '6px', lineHeight: 1.4 }}>
+                  若弹窗登录被限制，可在系统浏览器登录 x.com 后，从 DevTools → Application → Cookies 复制以上两个值，点击底部「保存」即可生效。
+                </div>
+              </div>
             </div>
           </div>
 

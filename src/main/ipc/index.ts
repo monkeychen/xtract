@@ -127,6 +127,25 @@ export function registerIpcHandlers(
         pipeline = new Pipeline(storage);
       }
 
+      if (updates.X_AUTH_TOKEN !== undefined || updates.X_CT0 !== undefined) {
+        if (fs.existsSync(Config.AUTH_STATE_PATH)) {
+          try {
+            fs.unlinkSync(Config.AUTH_STATE_PATH);
+          } catch {
+            // ignore
+          }
+        }
+        try {
+          const client = new XClient();
+          const user = await client.verifyAuth({ forceBrowser: false });
+          if (user) {
+            Config.setCachedUser(user);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (updates.HTTP_PROXY !== undefined) {
         try {
           const { session } = await import('electron');
