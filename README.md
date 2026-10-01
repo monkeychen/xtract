@@ -122,8 +122,9 @@ pnpm dev:cli -- --help
 | 全网热搜趋势看板 | `XT --trends` |
 | 全自动趋势深度研报 | `XT --trends-digest --hours 24` |
 | 检索本地已抓推文 | `XT --list 50` |
-| 导出 Markdown 归档 | `XT --export <推文ID>` |
-| 级联删除（库 + 磁盘） | `XT --delete <推文ID>` |
+| 导出 Markdown 清单归档 | `XT --export 50` |
+| 按 ID 批量导出独立归档 | `XT --export-ids <ID1> <ID2>` |
+| 级联删除（库 + 磁盘，可批量） | `XT --delete <ID1> <ID2>` |
 | 验证会话连通性 | `XT --check-auth` |
 | 导入 X 登录态 | 桌面端「设置 → X 账号 → 从 Chrome 读取登录态」 |
 
@@ -169,12 +170,20 @@ output/
 ## 开发与质量门禁
 
 ```bash
-pnpm test            # 单元 + 集成 + E2E 自动化测试
-npx tsc --noEmit     # 静态类型门禁
-npx vite build       # 生产构建门禁
+pnpm verify          # 一键门禁：lint + test + tsc + build + 打包 smoke
 ```
 
-三项门禁全绿方可交付。当前覆盖 200+ 用例，含 18 个真实浏览器 Playwright 流程（启动真实 Vite + Chrome，注入 mock IPC 桥，断言真实 DOM 契约）。
+门禁明细：
+
+```bash
+pnpm lint            # 代码风格门禁
+pnpm test            # 单元 + 集成 + E2E 自动化测试
+npx tsc --noEmit     # 静态类型门禁
+pnpm build           # 生产构建门禁（vite + Electron 主进程/预加载编译）
+pnpm pack:dir && pnpm smoke  # 打包门禁：对真实 Xtract.app 产物验证 GUI/CLI 三种启动形态
+```
+
+全部门禁全绿方可交付。当前覆盖 280+ 用例，含 18 个真实浏览器 Playwright 流程（启动真实 Vite + Chrome，注入 mock IPC 桥，断言真实 DOM 契约）。
 
 ---
 

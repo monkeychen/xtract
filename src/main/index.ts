@@ -9,7 +9,7 @@ import {
   formatTweetDetail,
 } from './cli/format.js';
 import { isTweetContentIncomplete } from './client/parser.js';
-import { resolveUserArgs, resolveVersion } from './cli/argv.js';
+import { resolveUserArgs, resolveVersion, normalizeTweetIdInputs } from './cli/argv.js';
 import { createRequire } from 'node:module';
 
 // Dual-mode dispatcher: determine CLI vs GUI
@@ -70,7 +70,7 @@ if (isCLI) {
     .option('--list [limit]', '查看已抓取推文列表 (默认 20 条)')
     .option('--view <tweetId>', '查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档')
     .option('--no-export-md', '查看单篇推文时关闭自动导出 Markdown')
-    .option('--delete [tweetId]', '删除已获取的推文/文章（同时清理数据库记录及本地文件）')
+    .option('--delete [tweetIds...]', '级联删除推文及本地文件：可传多个 ID/URL 批量删除，也可仅搭配 --user/--since 等筛选条件')
     .option('--since <date>', '起始日期过滤 (YYYY-MM-DD)')
     .option('--until <date>', '截止日期过滤 (YYYY-MM-DD)')
     .option('--older-than <duration>', '早于指定时长的推文 (例如 30d, 48h, 7d)')
@@ -78,6 +78,7 @@ if (isCLI) {
     .option('--dry-run', '演练预览模式，仅展示待删除列表，不执行真实删除')
     .option('-y, --yes', '跳过删除确认提示直接执行')
     .option('--export [limit]', '将已抓取的推文导出为结构化 Markdown 文档')
+    .option('--export-ids <tweetIds...>', '按 ID/URL 批量导出为独立 Markdown 归档（本地缺失的推文先尝试在线抓取）')
     .option('-o, --output <path>', '自定义导出 Markdown 文件的路径或目标目录')
     // Filtering & Pacing Options
     .option('-c, --category <category>', '趋势分类主题 (tech, all, business, news, entertainment, sports)', 'tech')
@@ -219,9 +220,10 @@ if (isCLI) {
         process.exit(0);
       }
 
-      // 4.5 Delete tweets
+      // 4.5 Delete tweets (single / batch by IDs / filter-based)
       if (options.delete !== undefined) {
-        const tweetId = typeof options.delete === 'string' ? options.delete : undefined;
+        const rawDelete = options.delete;
+        const ids = normalizeTweetIdInputs(typeof rawDelete === 'string' ? [rawDelete] : Array.isArray(rawDelete) ? rawDelete : []);
         const username = options.user;
         const since = options.since;
         const until = options.until;
@@ -229,20 +231,24 @@ if (isCLI) {
         const onlyShortTweets = Boolean(options.onlyShort);
         const dryRun = Boolean(options.dryRun);
 
-        if (!tweetId && !username && !since && !until && !olderThan && !onlyShortTweets) {
+        if (ids.length === 0 && !username && !since && !until && !olderThan && !onlyShortTweets) {
           throw new Error(
             '删除操作必须指定至少一个筛选条件（推文ID/URL、--user、--since、--until、--older-than 或 --only-short），以防误删全库。'
           );
         }
 
-        // Preview matches first
-        const preview = await storage.deleteTweets({
-          tweetId,
+        const deleteFilter = {
+          tweetIds: ids.length > 0 ? ids : undefined,
           username,
           since,
           until,
           olderThan,
           onlyShortTweets,
+        };
+
+        // Preview matches first
+        const preview = await storage.deleteTweets({
+          ...deleteFilter,
           dryRun: true,
         });
 
@@ -302,12 +308,7 @@ if (isCLI) {
         }
 
         const result = await storage.deleteTweets({
-          tweetId,
-          username,
-          since,
-          until,
-          olderThan,
-          onlyShortTweets,
+          ...deleteFilter,
           dryRun: false,
         });
 
@@ -319,6 +320,40 @@ if (isCLI) {
           );
         }
         process.exit(0);
+      }
+
+      // 4.8 Batch export by IDs (Page Bundle per tweet, mirrors GUI 批量导出)
+      if (options.exportIds) {
+        const ids = normalizeTweetIdInputs(options.exportIds);
+        if (ids.length === 0) {
+          throw new Error('--export-ids 需要至少一个有效的推文 ID 或 URL。');
+        }
+        if (options.output) {
+          throw new Error(
+            '--export-ids 每篇会生成独立归档目录，不支持 -o 指定单一输出路径；如需自定义路径请对单篇使用 --view <ID> -o <path>。'
+          );
+        }
+
+        const result = await pipeline.exportTweetsByIds(ids, { timeout, fetchAuthorReplies });
+
+        if (isJson) {
+          process.stdout.write(JSON.stringify({ status: 'ok', ...result }, null, 2) + '\n');
+        } else {
+          for (const item of result.exported) {
+            process.stdout.write(`✅ 已导出 [${item.tweetId}] → ${item.filePath}\n`);
+          }
+          for (const f of result.failed) {
+            process.stderr.write(`❌ 导出失败 [${f.tweetId}]: ${f.error}\n`);
+          }
+          if (result.failed.length > 0) {
+            process.stdout.write(
+              `⚠️ 批量导出完成：成功 ${result.exported.length} 篇，失败 ${result.failed.length} 篇（共 ${ids.length} 篇）。\n`
+            );
+          } else {
+            process.stdout.write(`🎉 批量导出完成：成功导出 ${result.exported.length} 篇推文。\n`);
+          }
+        }
+        process.exit(result.exported.length === 0 && result.failed.length > 0 ? 1 : 0);
       }
 
       // 5. Standalone export

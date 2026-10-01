@@ -58,13 +58,14 @@ Options:
   --list [limit]                        查看已抓取推文列表 (默认 20 条)
   --view <tweetId>                      查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档
   --no-export-md                        查看单篇推文时关闭自动导出 Markdown
-  --delete [tweetId]                    删除已获取的推文/文章（同时清理数据库记录及本地文件）
+  --delete [tweetIds...]                级联删除推文及本地文件：可传多个 ID/URL 批量删除，也可仅搭配 --user/--since 等筛选条件
   --since <date>                        起始日期过滤 (YYYY-MM-DD)
   --until <date>                        截止日期过滤 (YYYY-MM-DD)
   --older-than <duration>               早于指定时长的推文 (例如 30d, 48h, 7d)
   --dry-run                             演练预览模式，仅展示待删除列表，不执行真实删除
   -y, --yes                             跳过删除确认提示直接执行
   --export [limit]                      将已抓取的推文导出为结构化 Markdown 文档
+  --export-ids <tweetIds...>            按 ID/URL 批量导出为独立 Markdown 归档（本地缺失的推文先尝试在线抓取）
   -o, --output <path>                   自定义导出 Markdown 文件的路径或目标目录
   -c, --category <category>             趋势分类主题 (tech, all, business, news, entertainment, sports) (default: "tech")
   --top <n>                             趋势榜单展示或研报挖掘的前 N 个热点话题 (default: "10")
@@ -260,6 +261,22 @@ Options:
   ```
 * **参数选项**：
   * `--min-likes <N>`：按点赞量门槛过滤导出推文。
+
+### 4.7 按 ID 批量导出独立归档 (`--export-ids`)
+与 GUI 工作台「勾选批量导出」完全对齐：为每篇推文生成独立的自包含 Page Bundle（`output/{author}/{tweet_id}/index.md` 并下载配图）。本地缺失或长文未展开的推文会先尝试在线抓取。
+
+* **基本语法**：
+  ```bash
+  # 批量导出多篇（空格分隔，支持完整 URL，自动去重）
+  pnpm dev:cli -- --export-ids 2094624092015992854 2094123456789012345
+
+  # 逗号分隔与 URL 混合输入均可
+  pnpm dev:cli -- --export-ids 2094624092015992854,https://x.com/dotey/status/2094123456789012345
+  ```
+* **行为约定**：
+  * 逐条容错：单篇抓取或导出失败仅记入失败清单，不中断批次；全部失败时退出码为 1；
+  * 不支持 `-o`：每篇生成独立归档目录，如需自定义路径请对单篇使用 `--view <ID> -o <path>`；
+  * `--json` 输出 `{ status, exported: [{ tweetId, filePath }], failed: [{ tweetId, error }] }`，便于 Agent 管道消费。
   * `--min-retweets <N>`：按转推量门槛过滤导出推文。
 * **导出文件路径**：
   * 默认路径：`output/tweets_YYYY-MM-DD.md`
@@ -272,7 +289,7 @@ Options:
 
 ---
 
-### 4.7 获取与检索指定博主推文 (`--user`)
+### 4.8 获取与检索指定博主推文 (`--user`)
 专门针对某位高价值博主（如行业大佬、研究机构、核心关注人），定向获取或快速检索其近期推文。系统提供**在线实时抓取**与**离线秒级检索**双模式：
 
 #### 模式 A：在线实时抓取博主主页推文
@@ -317,7 +334,7 @@ Options:
 
 ---
 
-### 4.8 获取指定 X 列表最新推文 (`--x-list`)
+### 4.9 获取指定 X 列表最新推文 (`--x-list`)
 用于跟踪特定主题的精选推文池（如「独立开发者」、「AI 专家」等 X Lists）。系统支持直接传入列表的完整 URL 或纯数字 List ID 进行精准无损拉取，并增量持久化到本地 SQLite。
 
 * **为什么需要传入列表 URL 或数字 ID**：
@@ -340,7 +357,7 @@ Options:
 
 ---
 
-### 4.9 关键词/高级语法实时搜索 (`--search`)
+### 4.10 关键词/高级语法实时搜索 (`--search`)
 支持全网关键词与原生高级语法主动侦测，驱动原生浏览器访问 X 搜索页面并监听底层 `SearchTimeline` GraphQL 接口，自动解析推文与富媒体并增量持久化落库。
 
 * **基本语法**：
@@ -368,7 +385,7 @@ Options:
 
 ---
 
-### 4.10 互动信噪比门槛过滤 (`--min-likes`, `--min-retweets`)
+### 4.11 互动信噪比门槛过滤 (`--min-likes`, `--min-retweets`)
 推特海量信息流中充斥大量低质水帖、自言自语或噪音。通过设置点赞数（`--min-likes`）与转发数（`--min-retweets`）阈值，可在**数据抓取、本地查阅、早报生成、Markdown 导出**全流程实现高价值情报过滤：
 
 * **1. 在搜索抓取时过滤（入库前初筛）**：
@@ -397,7 +414,7 @@ Options:
 
 ---
 
-### 4.11 ~~交互式免查 Cookie 浏览器登录 (`--login`)~~（已移除）
+### 4.12 ~~交互式免查 Cookie 浏览器登录 (`--login`)~~（已移除）
 
 > **该命令已下线。** 实测证明：X 会对自动化浏览器的登录动作持续限流，在用户尚未输入
 > 任何凭据时即返回「我们已临时限制你的登录」。与 X 的 bot 检测对抗不具备可持续性。
@@ -408,7 +425,7 @@ Options:
 
 ---
 
-### 4.12 验证账号会话连通性 (`--check-auth`)
+### 4.13 验证账号会话连通性 (`--check-auth`)
 测试当前 `.env` 或 `data/auth_state.json` 中的凭证和网络代理是否能成功与 X 建立合法会话。
 
 * **基本语法**：
@@ -429,7 +446,7 @@ Options:
 
 ---
 
-### 4.13 全网热搜与趋势看板（模式 1：`--trends`）
+### 4.14 全网热搜与趋势看板（模式 1：`--trends`）
 **解决用户「在没有预设关键词」时的信息盲区**。底层直接拦截 X 官方 `ExplorePage` 与 `GenericTimelineById` GraphQL 协议，自动清洗推广广告，以结构化富文本表格呈现当前全网热搜与分类趋势榜单。
 
 * **基本语法**：
@@ -461,7 +478,7 @@ Options:
 
 ---
 
-### 4.14 全自动趋势深度研报（模式 2：`--trends-digest`）
+### 4.15 全自动趋势深度研报（模式 2：`--trends-digest`）
 **从「热搜榜单」到「深度分析研报」的全自动闭环**：
 1. 自动截获当前分类下的热门趋势；
 2. **AI 智能提炼核心搜索词**：由大模型自动将长新闻长句/冗长标题提炼为 2~4 个高命中推特发帖实体词，大幅提升命中率与推文丰富度；
@@ -492,7 +509,7 @@ Options:
 
 ---
 
-### 4.15 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
+### 4.16 多大模型与双轨认证参数 (`--provider`, `--auth-mode`, `--model`)
 任何总结任务（`--report-only`、`--trends-digest` 或默认每日流水线）均支持自由切换 7 大主流厂商大模型与双轨认证机制：
 
 * **支持的 7 大主流厂商 (`--provider`) 与 2026 最新官方模型（全量默认启用深度思考/推理模式与多模态，等级为 high）**：
@@ -547,7 +564,7 @@ Options:
 
 ---
 
-### 4.16 级联删除推文与本地文件 (`--delete`)
+### 4.17 级联删除推文与本地文件 (`--delete`)
 支持按单篇推文 ID/URL、指定博主用户名、日期范围（`--since` / `--until`）或留存时长（`--older-than`）执行删除。
 该操作保证 SQLite 数据库与本地文件强一致级联清理：同步物理删除对应推文的 `output/{author}/{tweet_id}/` 目录，若作者目录为空则顺带修剪空目录。
 
@@ -556,6 +573,10 @@ Options:
   # 按单篇推文 ID 或 URL 删除
   pnpm dev:cli -- --delete 2094624092015992854 -y
   pnpm dev:cli -- --delete https://x.com/dotey/status/2094624092015992854 -y
+
+  # 按 ID 批量删除（空格或逗号分隔，与 GUI 勾选批量删除对齐）
+  pnpm dev:cli -- --delete 2094624092015992854 2094123456789012345 -y
+  pnpm dev:cli -- --delete 2094624092015992854,2094123456789012345 --dry-run
 
   # 按博主批量删除推文及本地目录
   pnpm dev:cli -- --delete --user dotey -y

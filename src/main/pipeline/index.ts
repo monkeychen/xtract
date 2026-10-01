@@ -43,6 +43,16 @@ export interface RunTrendsDigestOptions {
   onProgress?: (event: PipelineProgressEvent) => void;
 }
 
+export interface BatchExportItem {
+  tweetId: string;
+  filePath: string;
+}
+
+export interface BatchExportResult {
+  exported: BatchExportItem[];
+  failed: Array<{ tweetId: string; error: string }>;
+}
+
 export function isTweetWithinHours(tweet: Tweet, hours: number): boolean {
   if (!tweet.created_at) return true;
   try {
@@ -193,6 +203,34 @@ export class Pipeline {
       );
     }
     return tweets;
+  }
+
+  /**
+   * 批量导出为独立 Markdown Page Bundle（与 GUI 勾选批量导出行为对齐）。
+   * 本地缺失的推文先尝试在线抓取；单条失败仅记入 failed，不中断批次。
+   */
+  async exportTweetsByIds(
+    tweetIds: string[],
+    options?: { timeout?: number; fetchAuthorReplies?: boolean }
+  ): Promise<BatchExportResult> {
+    const exported: BatchExportItem[] = [];
+    const failed: Array<{ tweetId: string; error: string }> = [];
+
+    for (const tweetId of tweetIds) {
+      try {
+        if (!this.storage.getTweetById(tweetId)) {
+          await this.fetchTweetAndStore(tweetId, options);
+        }
+        const { filePath } = await this.storage.exportSingleTweetMarkdown(tweetId, {
+          downloadImages: true,
+          fetchAuthorReplies: options?.fetchAuthorReplies,
+        });
+        exported.push({ tweetId, filePath });
+      } catch (err: any) {
+        failed.push({ tweetId, error: err?.message || String(err) });
+      }
+    }
+    return { exported, failed };
   }
 
   async fetchSearchAndStore(

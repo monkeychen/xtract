@@ -10,11 +10,13 @@
     "dev:cli": "tsx src/main/index.ts",
     "build": "vite build && tsx scripts/build.ts",
     "build:app": "vite build && tsx scripts/build.ts && electron-builder",
+    "pack:dir": "electron-builder --dir --publish never",
+    "smoke": "tsx scripts/smoke-packaged.ts",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
-    "verify": "pnpm lint && pnpm test && tsc --noEmit && vite build"
+    "verify": "pnpm lint && pnpm test && tsc --noEmit && pnpm build && pnpm pack:dir && pnpm smoke"
   },
   "keywords": [
     "twitter",
