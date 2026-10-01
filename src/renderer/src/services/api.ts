@@ -30,14 +30,6 @@ class ApiService {
     };
   }
 
-  async login(service: 'x' | 'openai' | 'gemini' = 'x') {
-    if (this.hasNativeApi()) {
-      return window.xtractAPI.login(service);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    return { success: true };
-  }
-
   /** 从用户日常浏览器读取既有 X 登录态（macOS 专用）。浏览器降级模式下不可用。 */
   async importFromBrowser() {
     if (this.hasNativeApi()) {

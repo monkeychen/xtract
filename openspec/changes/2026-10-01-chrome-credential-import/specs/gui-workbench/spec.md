@@ -42,10 +42,12 @@
 ## MODIFIED Requirements
 
 ### Requirement: 全局设置与原生免 Cookie 捕获
-#### Scenario: 免 Cookie 弹窗登录捕获
-- **WHEN** 用户点击设置抽屉中的「重新登录」按钮
-- **THEN** 系统拉起原生隔离会话窗口供用户登录 X
-- **AND** 系统 MUST 提示该方式在 X 的自动化风控下可能失败，推荐改用「从 Chrome 读取登录态」
+#### Scenario: 自动化登录入口已下线
+- **GIVEN** 早期的「重新登录」按钮与 CLI `--login` 命令在自动化浏览器中执行 X 登录
+- **WHEN** 实施本变更后的实机验证
+- **THEN** 该方式 MUST 被**完全移除**（UI 入口、IPC 通道、CLI 选项与底层实现一并删除），而非保留为无效按钮
+- **AND** 系统中 MUST NOT 再存在任何引导用户使用自动化登录的文案或错误提示
+- **AND** 取而代之的唯一推荐路径 MUST 是「从 Chrome 读取登录态」
 
 #### Scenario: 浏览器降级演示模式的显式标识
 （保持不变）

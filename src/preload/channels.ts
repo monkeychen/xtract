@@ -4,7 +4,6 @@
 export const IPC_CHANNELS = {
   // Auth & Session
   AUTH_CHECK: 'auth:check',
-  AUTH_LOGIN: 'auth:login',
 
   // Configuration
   CONFIG_GET: 'config:get',

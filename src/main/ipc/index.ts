@@ -55,33 +55,6 @@ export function registerIpcHandlers(
     }
   });
 
-  ipcMain.handle(
-    IPC_CHANNELS.AUTH_LOGIN,
-    async (_event, service: 'x' | 'openai' | 'gemini' = 'x') => {
-      try {
-        if (service === 'x') {
-          const client = new XClient();
-          await client.loginInteractive(120);
-          try {
-            const user = await client.verifyAuth({ forceBrowser: false });
-            if (user) {
-              Config.setCachedUser(user);
-            }
-          } catch {
-            // ignore initial profile cache error
-          }
-          return { success: true };
-        }
-        return {
-          success: false,
-          error: `登录目标服务【${service}】当前可通过终端快速完成捕获`,
-        };
-      } catch (err: any) {
-        return { success: false, error: err?.message || String(err) };
-      }
-    }
-  );
-
   // 从用户日常浏览器读取既有 X 登录态（macOS 专用）
   // 设计约束：不执行任何自动化登录，只读取用户在真实浏览器中已建立的会话。
   ipcMain.handle(IPC_CHANNELS.AUTH_IMPORT_FROM_BROWSER, async (): Promise<BrowserImportResult> => {

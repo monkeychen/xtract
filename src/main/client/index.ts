@@ -266,104 +266,14 @@ export class XClient {
     }
   }
 
-  async loginInteractive(timeoutSeconds?: number): Promise<void> {
-    const timeout = timeoutSeconds || this.timeoutSeconds;
-    const timeoutMs = timeout * 1000;
-    Config.ensureDirs();
-
-    process.stderr.write(
-      `🚀 正在启动独立登录窗口（超时阈值: ${timeout} 秒），请在窗口中登录 X...\n`
-    );
-
-    // 1. 创建完全纯净的独立浏览器上下文（绝不注入任何旧 Token 或旧 storageState）
-    const browser = await this.launchBrowser(false);
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 900 },
-      locale: 'zh-CN',
-      timezoneId: 'Asia/Shanghai',
-    });
-
-    await context.addInitScript(
-      'Object.defineProperty(navigator, "webdriver", { get: () => undefined });'
-    );
-    context.setDefaultNavigationTimeout(timeoutMs);
-    context.setDefaultTimeout(timeoutMs);
-
-    const page = await context.newPage();
-
-    // 2. 直达 X 官方标准化登录 Flow 页面（绝不走易发生重定向死锁的旧 /login 地址）
-    const targetUrl = 'https://x.com/i/flow/login';
-    try {
-      await page.goto(targetUrl, { waitUntil: 'commit', timeout: timeoutMs });
-    } catch (err: any) {
-      process.stderr.write(`⚠️ 登录页面加载中: ${err?.message || err}，请直接在窗口中操作...\n`);
-    }
-
-    process.stderr.write(
-      '⏳ 请在浏览器窗口中完成登录。检测到登录成功后将自动保存凭证并退出...\n'
-    );
-
-    // 3. 智能多维检测登录成功：基于 Cookie（auth_token）+ 页面脱离登录流双重判定
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-      await new Promise((r) => setTimeout(r, 1000));
-
-      if (page.isClosed()) {
-        await browser.close().catch(() => {});
-        throw new Error('登录窗口已被用户关闭。');
-      }
-
-      try {
-        const url = page.url();
-        const cookies = await context.cookies(['https://x.com', 'https://twitter.com']);
-        const authCookie = cookies.find((c) => c.name === 'auth_token' && c.value && c.value.length > 20);
-        const ct0Cookie = cookies.find((c) => c.name === 'ct0' && c.value);
-
-        const isOutOfFlow = !url.includes('/flow/login') && !url.includes('/login');
-        const isHomeOrFeed =
-          url.includes('x.com/home') ||
-          url === 'https://x.com/' ||
-          url.startsWith('https://x.com/?');
-
-        if (authCookie && (isOutOfFlow || isHomeOrFeed)) {
-          // 缓冲 1.5 秒确保 ct0 等其余衍生 Cookie 写入完备
-          await new Promise((r) => setTimeout(r, 1500));
-          const finalCookies = await context.cookies(['https://x.com', 'https://twitter.com']);
-          const finalAuth = finalCookies.find((c) => c.name === 'auth_token')?.value || authCookie.value;
-          const finalCt0 = finalCookies.find((c) => c.name === 'ct0')?.value || ct0Cookie?.value || '';
-
-          // A. 持久化完整的 Playwright 会话存储文件
-          await context.storageState({ path: Config.AUTH_STATE_PATH });
-
-          // B. 同步持久化写入 config.env 双轨配置，并更新当前进程环境变量
-          Config.savePersistentConfig({
-            X_AUTH_TOKEN: finalAuth,
-            X_CT0: finalCt0,
-          });
-          process.env.X_AUTH_TOKEN = finalAuth;
-          process.env.X_CT0 = finalCt0;
-
-          process.stderr.write(
-            `🎉 登录成功！会话凭证已持久化至: ${Config.AUTH_STATE_PATH} 及 ${Config.CONFIG_ENV_PATH}\n`
-          );
-          await browser.close().catch(() => {});
-          return;
-        }
-      } catch {
-        // 忽略页面跳转切换瞬态异常
-      }
-    }
-
-    await browser.close().catch(() => {});
-    throw new Error('登录超时（未在规定时间内检测到有效的 X 登录凭证）。');
-  }
 
   async verifyAuth(
     options?: { forceBrowser?: boolean; timeoutSeconds?: number } | number
   ): Promise<{ id: string; name: string; screen_name: string }> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -572,7 +482,8 @@ export class XClient {
   async fetchFollowingTimeline(options?: FetchTimelineOptions): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -717,7 +628,8 @@ export class XClient {
   async fetchUserTimeline(username: string, options?: FetchUserOptions): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -841,7 +753,8 @@ export class XClient {
   async fetchListTimeline(listIdOrUrl: string, options?: FetchUserOptions): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -992,7 +905,8 @@ export class XClient {
   async fetchSearchTimeline(query: string, options?: FetchSearchOptions): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -1086,7 +1000,8 @@ export class XClient {
   ): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 
@@ -1181,7 +1096,8 @@ export class XClient {
   }): Promise<TrendTopic[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
-        '未配置认证信息：请在 .env 中填写 X_AUTH_TOKEN，或运行 pnpm dev:cli -- --login 登录。'
+        '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
+        + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
 

@@ -16,7 +16,6 @@ Production-grade X (Twitter) intelligence radar & AI digest.
 
 Options:
   -V, --version                         output the version number
-  --login [service]                     打开可视化浏览器登录并自动截获保存凭据 (x, openai, gemini)
   --check-auth                          验证 X Cookie 凭证或本地会话是否有效
   --trends                              查看全网热门趋势榜单看板
   --trends-digest                       全自动趋势研报（抓取热榜、主动挖掘代表性讨论并生成研报）
@@ -368,27 +367,14 @@ Options:
 
 ---
 
-### 4.11 交互式免查 Cookie 浏览器登录 (`--login`)
-弹出原生可视化 Chrome 窗口进行交互式登录，系统在后台自动截获并持久化保存 Session 凭据，**彻底告别手动打开开发者工具查 Cookie**：
+### 4.11 ~~交互式免查 Cookie 浏览器登录 (`--login`)~~（已移除）
 
-* **基本语法**：
-  ```bash
-  # 登录 X (Twitter) 并持久化保存凭据（默认）
-  pnpm dev:cli -- --login
-  pnpm dev:cli -- --login x
-
-  # 登录 OpenAI / ChatGPT Plus（用于无 API Key 费用白嫖订阅配额）
-  pnpm dev:cli -- --login openai
-
-  # 登录 Google Gemini
-  pnpm dev:cli -- --login gemini
-  ```
-* **参数选项**：
-  * `--timeout <N>`：浏览器登录窗口等待超时阈值（秒，默认 120 秒）。
-* **凭据持久化位置**：
-  * X 会话：`data/auth_state.json`
-  * OpenAI 会话：`data/chatgpt_auth.json`
-  * Gemini 会话：`data/gemini_auth.json`
+> **该命令已下线。** 实测证明：X 会对自动化浏览器的登录动作持续限流，在用户尚未输入
+> 任何凭据时即返回「我们已临时限制你的登录」。与 X 的 bot 检测对抗不具备可持续性。
+>
+> **替代方案**：在桌面端「设置 → X 账号 → 从 Chrome 读取登录态」一键导入。
+> 登录动作由你在自己的 Chrome 中完成，应用只读取既有会话。详见
+> [configuration.md](configuration.md#32-从浏览器读取登录态最省心)。
 
 ---
 
@@ -485,7 +471,7 @@ Options:
      - 认证支持：账号订阅免 Key 模式（走本地 `agy`，0 API 账单）或官方 API Key
   2. **OpenAI (`openai` / `gpt`)**：
      - 最新主力：`gpt-5.6-sol`（默认，GPT-5.6 Sol 旗舰全模态推理，默认 `reasoning_effort: "high"`，亦兼容 `gpt-5.6` 别名）、`gpt-4o`、`o3-mini`、`o1`
-     - 认证支持：账号订阅模式（通过 `--login openai` 捕获 Plus 会话）或官方 API Key
+     - 认证支持：官方 API Key 模式（账号订阅免 Key 通道需在设置中配置）
   3. **DeepSeek (`deepseek`)**：
      - 最新主力：`deepseek-flash`（默认，最新 DeepSeek-V4.1-Flash，1M 超长上下文，原生多模态，默认携带 `thinking: {"type": "enabled"}` 与 `reasoning_effort: "high"`）、`deepseek-v4-pro`
      - ⚠️ **模型升级警示**：旧版 `deepseek-chat` 与 `deepseek-reasoner` 别名已于 2026 年 7 月正式下线停运，系统已全面切至 `deepseek-flash`

@@ -43,7 +43,7 @@
 
 ## Non-goals
 
-- **不做自动化登录**。探针已证明与 X 的 bot 检测对抗不可持续，本变更不引入任何自动化登录路径。现有 `--login` 保留但不作为推荐路径。
+- **不做自动化登录**。探针已证明与 X 的 bot 检测对抗不可持续。实施中已确认：既有的「重新登录」按钮与 `--login` 命令**一并彻底删除**，不留无效入口。
 - **不做 Windows 支持**。Windows 的 Chrome cookie 受 DPAPI + app-bound encryption 双重保护，实现复杂度与风险远高于 macOS。本变更仅支持 macOS，其他平台在 UI 上明确提示。
 - **不读取非 x.com 域的 cookie**。SQL 查询层即限定 `host_key LIKE '%x.com%'`，其余域不进入内存。
 

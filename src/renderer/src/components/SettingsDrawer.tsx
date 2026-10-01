@@ -28,10 +28,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [storageRoot, setStorageRoot] = useState('~/Documents/Xtract');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string>('');
-  const [loginMsg, setLoginMsg] = useState<string | null>(null);
   const [xAuthToken, setXAuthToken] = useState('');
   const [xCt0, setXCt0] = useState('');
 
@@ -117,29 +115,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     }
   };
 
-  const handleLogin = async () => {
-    setIsLoggingIn(true);
-    setLoginMsg('正在拉起登录窗口，请在弹出的浏览器中登录...');
-    try {
-      const res = await api.login('x');
-      if (res.success) {
-        setLoginMsg('登录成功！已保存会话');
-        const cfg = await api.getConfig();
-        setConfig(cfg);
-        onConfigUpdated();
-        setTimeout(() => setLoginMsg(null), 3000);
-      } else {
-        setLoginMsg(res.error || '登录已取消');
-        setTimeout(() => setLoginMsg(null), 4000);
-      }
-    } catch (err: any) {
-      setLoginMsg(err?.message || '登录出错');
-      setTimeout(() => setLoginMsg(null), 4000);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
   return (
     <div id="settings-drawer" className="drawer-backdrop" onClick={onClose}>
       <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
@@ -182,30 +157,19 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '12px' }}>
                 {screenName ? `@${screenName}` : '未检测到 X 会话'}
               </div>
-              <button
-                className="secondary-button"
-                style={{ width: '100%', justifyContent: 'center' }}
-                disabled={isLoggingIn}
-                onClick={handleLogin}
-              >
-                <span>{isLoggingIn ? '正在登录中（请在弹窗操作）...' : '重新登录'}</span>
-              </button>
-              <div style={{ fontSize: '11px', color: 'var(--ink-faint)', marginTop: '6px', lineHeight: '1.5' }}>
-                该方式在弹出的自动化浏览器中完成登录，X 可能会将其判定为机器人而拒绝。
-                若失败，请改用上方「从 Chrome 读取登录态」。
-              </div>
-              {/* 从日常浏览器读取登录态（推荐通道：登录动作由真实浏览器完成，不与 X 的自动化风控对抗） */}
-              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--line-strong)' }}>
+              {/* 从日常浏览器读取登录态。登录动作由真实浏览器完成，应用只读取既有会话，
+                  不与 X 的自动化风控对抗——自动化登录已实测不可行。 */}
+              <div style={{ marginTop: '4px' }}>
                 <button
                   className="cta-button"
                   style={{ width: '100%', justifyContent: 'center' }}
-                  disabled={isImporting || isLoggingIn}
+                  disabled={isImporting}
                   onClick={handleImportFromBrowser}
                 >
                   <span>{isImporting ? '正在读取并验证...' : '从 Chrome 读取登录态'}</span>
                 </button>
                 <div style={{ fontSize: '11px', color: 'var(--ink-faint)', marginTop: '6px', lineHeight: '1.5' }}>
-                  推荐方式。先在日常 Chrome 中登录 x.com，再点此按钮一键导入完整会话（含设备指纹与
+                  先在日常 Chrome 中登录 x.com，再点此按钮一键导入完整会话（含设备指纹与
                   Cloudflare 凭证），无需打开开发者工具。仅 macOS 可用。
                 </div>
                 {importMsg && (
@@ -221,12 +185,6 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   </div>
                 )}
               </div>
-
-              {loginMsg && (
-                <div style={{ fontSize: '11px', color: loginMsg.includes('成功') ? 'var(--green-moss)' : 'var(--amber)', marginTop: '8px', textAlign: 'center' }}>
-                  {loginMsg}
-                </div>
-              )}
 
               {/* 手动 Cookie 凭据输入（备用通道） */}
               <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--line-strong)' }}>

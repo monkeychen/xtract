@@ -78,7 +78,6 @@ describe('Preload & IPC Communication Bridge', () => {
 
     // Auth
     expect(typeof api.checkAuth).toBe('function');
-    expect(typeof api.login).toBe('function');
 
     // Config
     expect(typeof api.getConfig).toBe('function');
@@ -111,7 +110,6 @@ describe('Preload & IPC Communication Bridge', () => {
 
     // Verify key channels are registered in ipcMain
     expect(mockHandlers.has(IPC_CHANNELS.AUTH_CHECK)).toBe(true);
-    expect(mockHandlers.has(IPC_CHANNELS.AUTH_LOGIN)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.CONFIG_GET)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.CONFIG_UPDATE)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.TRENDS_FETCH)).toBe(true);

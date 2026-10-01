@@ -19,7 +19,6 @@ cp .env.example .env
 # 1. X (Twitter) 会话认证凭据
 # ==========================================
 # 方式 A（推荐交互式登录，免查 Cookie）：
-# 运行 pnpm dev:cli -- --login 弹出浏览器窗口直接登录并自动保存
 # 方式 B（手动填入已有 Cookie）：
 X_AUTH_TOKEN=你的auth_token
 X_CT0=你的ct0
@@ -80,10 +79,21 @@ MOONSHOT_BASE_URL=
 
 ---
 
-### 3.2 免查 Cookie 一键登录（最省心）
-项目支持通过可视化交互式窗口一键捕获合法凭据，**彻底告别手动打开 F12 查 Cookie**：
-- **X 账号登录**：`pnpm dev:cli -- --login x`（或直接使用桌面端原生窗口）
-- **OpenAI / ChatGPT Plus 会话凭据**：`pnpm dev:cli -- --login openai`
-- **Google Gemini 账号凭据**：`pnpm dev:cli -- --login gemini`
+### 3.2 从浏览器读取登录态（最省心）
+
+> 原 `--login` 自动化登录命令已下线：X 会对自动化浏览器的登录动作持续限流，
+> 在用户输入任何凭据前即拦截。该对抗不具备可持续性。
+
+**推荐做法**：先在日常 Chrome 中登录 `x.com`，再在桌面端
+「设置 → X 账号 → **从 Chrome 读取登录态**」一键导入。
+
+- 登录动作 100% 由你在真实浏览器中完成，应用不执行任何自动化登录；
+- 导入的是**完整会话**（含 `kdt` 设备指纹、`cf_clearance` Cloudflare 凭证），
+  而非仅 `auth_token` + `ct0`——这些字段都参与 X 的风控判定；
+- 无需打开开发者工具手工复制；
+- **仅 macOS 可用**。其他平台请使用下方的 `.env` 手工填入通道。
+
+导入成功后，凭据写入 `<storageRoot>/config.env` 并注入项目的持久化浏览器 profile，
+之后所有抓取直接复用，不会再次失效。
 
 ---

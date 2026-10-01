@@ -137,28 +137,39 @@ flowchart TD
 sequenceDiagram
     autonumber
     actor User as 用户
-    participant Auth as AuthManager
+    participant Auth as 认证模块 (auth/)
+    participant KC as macOS 钥匙串
+    participant DB as Chrome Cookie 库
     participant PW as Playwright (有头窗口)
-    participant FS as 磁盘 (data/auth_state.json)
+    participant FS as 磁盘 (browser_profile)
 
-    User->>Auth: xtract --login x
-    Auth->>PW: 启动可见 Chromium 窗口 (headless=False)
-    PW->>PW: 导航至 https://x.com/login
-    Auth-->>User: 终端提示："请在弹出的浏览器中完成登录..."
-    
-    loop 每 1 秒轮询上下文 Cookie
-        Auth->>PW: 获取 context.cookies()
-        Note over Auth: 检查是否同时存在 "auth_token" 与 "ct0"
-    end
+    Note over User,PW: 前置：用户已在**日常 Chrome** 中自行登录 x.com
+    User->>Auth: 设置中心点击「从 Chrome 读取登录态」
+    Auth->>Auth: 平台校验（非 macOS 直接返回降级提示）
+    Auth->>KC: security find-generic-password -s "Chrome Safe Storage" -w
+    KC-->>Auth: 密码（仅内存，PBKDF2-SHA1/1003 派生 16B 密钥）
+    Auth->>DB: 复制 cookie 库到临时目录（只读副本）
+    DB-->>Auth: x.com 域 cookie（其余域 SQL 层即过滤，不进内存）
+    Auth->>Auth: AES-128-CBC 逐条解密 → 清洗 → SQL 侧换算过期时间
+    Note over Auth: expires_utc 是微秒且超出 2^53，换算必须在 SQL 侧
+    Auth->>Auth: 校验 auth_token 为合法 hex，不合法则中止
 
-    User->>PW: 完成账号密码/2FA登录
-    PW-->>Auth: 探测到 auth_token 与 ct0 凭据已写入
-    Auth->>PW: context.storageState({ path: "data/auth_state.json" })
-    PW->>FS: 持久化保存完整 Cookie、LocalStorage 与 Session
-    Auth->>PW: 关闭浏览器
-    Auth-->>User: 终端高亮提示："✅ X 登录成功，凭据已安全保存！"
+    Auth->>PW: 启动持久化 profile（headless=False，挂载代理）
+    Auth->>PW: addCookies(含 expires，避免退化为 session cookie)
+    PW->>PW: 访问 https://x.com/home
+    PW-->>Auth: HTTP 200 + 主界面渲染（无登录入口）
+    Note over Auth,PW: headless 会被 Cloudflare 拦截，必须有头
+    Auth->>FS: 等待刷盘后关闭，cookie 持久化
+    Auth->>FS: 同步写入 config.env（验证通过后才写）
+    Auth-->>User: 返回导入数量与账号名（绝不含 cookie 明文）
 ```
 
+> **注意**：本流程**不包含任何登录动作**。早期的「自动化登录」机制已下线，
+> 原因见 [PRD v0.1.0 §5.6](prd/v0.1.0.md)。严禁重新引入。
+
+---
+
+### 2.3 机制 3
 ---
 
 ### 2.3 机制 3：时效性双重过滤架构 (Multi-Layer Freshness Guarantee)

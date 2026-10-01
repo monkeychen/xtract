@@ -87,6 +87,7 @@ pnpm dev:cli -- --help   # 查看全部命令行选项
 | 导出 Markdown 归档 | `pnpm dev:cli -- --export <推文ID>` |
 | 级联删除（库 + 磁盘） | `pnpm dev:cli -- --delete <推文ID>` |
 | 验证会话连通性 | `pnpm dev:cli -- --check-auth` |
+| 导入 X 登录态 | 桌面端「设置 → X 账号 → 从 Chrome 读取登录态」 |
 
 全部参数、示例与工作流场景见 **[docs/cli-reference.md](docs/cli-reference.md)**。
 

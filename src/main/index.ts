@@ -22,7 +22,6 @@ if (isCLI) {
     .description('Production-grade X (Twitter) intelligence radar & AI digest.')
     .version('1.0.0')
     // Actions & Workflows
-    .option('--login [service]', '打开可视化浏览器登录并自动截获保存凭据 (x, openai, gemini)')
     .option('--check-auth', '验证 X Cookie 凭证或本地会话是否有效')
     .option('--trends', '查看全网热门趋势榜单看板')
     .option('--trends-digest', '全自动趋势研报（抓取热榜、主动挖掘代表性讨论并生成研报）')
@@ -92,21 +91,7 @@ if (isCLI) {
     const pipeline = new Pipeline(storage, client);
 
     try {
-      // 1. Interactive login
-      if (options.login) {
-        const target = typeof options.login === 'string' ? options.login : 'x';
-        if (target === 'x') {
-          await client.loginInteractive(timeout);
-        } else {
-          process.stderr.write(`暂不支持通过 CLI 登录 ${target}，请使用 --auth-mode api_key 配置密钥。\n`);
-        }
-        if (isJson) {
-          process.stdout.write(JSON.stringify({ status: 'ok', service: target }) + '\n');
-        }
-        process.exit(0);
-      }
-
-      // 2. Auth verification
+      // 1. Auth verification
       if (options.checkAuth) {
         const auth = await client.verifyAuth(timeout);
         if (isJson) {
