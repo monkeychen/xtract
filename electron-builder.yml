@@ -1,0 +1,47 @@
+appId: com.xtract.app
+productName: Xtract
+copyright: "Copyright © 2026 chenzhian"
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - "dist/**/*"
+  - "dist-electron/**/*"
+  - "package.json"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/build/Release/*.node"
+  - "**/node_modules/better-sqlite3/**/*"
+
+npmRebuild: true
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  darkModeSupport: true
+  minimumSystemVersion: "12.0.0"
+
+dmg:
+  title: "Xtract ${version}"
+  icon: build/icon.icns
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380

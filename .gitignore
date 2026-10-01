@@ -58,7 +58,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-build/
+build/*
+!build/icon.*
 dist/
 downloads/
 eggs/

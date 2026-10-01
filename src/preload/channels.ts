@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   SHELL_OPEN_EXTERNAL: 'shell:open-external',
   SHELL_SHOW_ITEM_IN_FOLDER: 'shell:show-item-in-folder',
   SHELL_OPEN_PATH: 'shell:open-path',
+  DIALOG_SELECT_DIRECTORY: 'dialog:select-directory',
 
   // Real-time Event Streaming (Main -> Renderer)
   STREAM_EVENT: 'stream:event',

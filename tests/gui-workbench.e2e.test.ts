@@ -273,6 +273,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
             configEnvPath: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/config.env`,
           },
         }),
+        selectDirectory: async () => '/tmp/custom_xtract',
         onStreamEvent: (callback: any) => {
           (window as any).__streamCallback = callback;
           return () => {};
@@ -585,16 +586,19 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(100);
     expect(await authorRepliesToggle.isChecked()).toBe(false);
 
-    // Verify 本地数据与归档目录 section exists with input and reset button
-    const storageRootHeader = page.locator('div', { hasText: '本地数据与归档目录' }).first();
+    // Verify 数据存储位置 section exists with directory picker and reset button
+    const storageRootHeader = page.locator('div', { hasText: '数据存储位置' }).first();
     expect(await storageRootHeader.isVisible()).toBe(true);
 
     const storageRootInput = page.locator('#storage-root-input');
     expect(await storageRootInput.isVisible()).toBe(true);
     expect(await storageRootInput.inputValue()).toBe('~/Documents/Xtract');
 
-    // Test editing storage root input and resetting to default
-    await storageRootInput.fill('/tmp/custom_xtract');
+    // Test directory picker button
+    const selectDirBtn = page.locator('#select-dir-btn');
+    expect(await selectDirBtn.isVisible()).toBe(true);
+    await selectDirBtn.click();
+    await page.waitForTimeout(100);
     expect(await storageRootInput.inputValue()).toBe('/tmp/custom_xtract');
 
     await page.locator('button', { hasText: '恢复默认' }).click();

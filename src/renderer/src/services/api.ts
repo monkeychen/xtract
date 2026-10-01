@@ -274,6 +274,13 @@ class ApiService {
     return { success: true, path: dirPath };
   }
 
+  async selectDirectory(defaultPath?: string): Promise<string | null> {
+    if (this.hasNativeApi() && window.xtractAPI.selectDirectory) {
+      return window.xtractAPI.selectDirectory(defaultPath);
+    }
+    return null;
+  }
+
   async searchTweets(query: string, options: { searchType?: 'live' | 'top'; limit?: number; minLikes?: number } = {}) {
     if (this.hasNativeApi()) {
       return window.xtractAPI.searchTweets(query, options);

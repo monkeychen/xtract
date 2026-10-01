@@ -65,6 +65,13 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     }
   };
 
+  const handleSelectDirectory = async () => {
+    const selected = await api.selectDirectory(storageRoot);
+    if (selected) {
+      setStorageRoot(selected);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     await api.updateConfig({
@@ -307,52 +314,82 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             </div>
           </div>
 
-          {/* 本地数据与归档目录 */}
+          {/* 数据存储位置 */}
           <div style={{ marginBottom: '24px' }}>
-            <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
-              本地数据与归档目录
-            </h3>
-            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
-              <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '8px', lineHeight: 1.5 }}>
-                指定本地数据、文章与研报的存储根目录（开发与生产统一）。其下子目录固定为：
-                <br />
-                • 数据与缓存：<code>{storageRoot}/data/</code>（存放 <code>tweets.db</code> 与会话凭据）
-                <br />
-                • 文章产物：<code>{storageRoot}/articles/</code>（存放自包含 Markdown 导出）
-                <br />
-                • 研报中心：<code>{storageRoot}/reports/</code>（存放每日早报与趋势研报）
-                <br />
-                • 配置文件：<code>{storageRoot}/config.env</code>（持久化保存 Key 与设置项）
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  id="storage-root-input"
-                  className="text-input"
-                  style={{ flex: 1, fontSize: '13px', fontFamily: 'monospace' }}
-                  type="text"
-                  value={storageRoot}
-                  onChange={(e) => setStorageRoot(e.target.value)}
-                  placeholder="~/Documents/Xtract"
-                />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h3 className="serif-title" style={{ fontSize: '15px', margin: 0, color: 'var(--ink)' }}>
+                数据存储位置
+              </h3>
+              {storageRoot !== '~/Documents/Xtract' && (
                 <button
                   type="button"
                   className="secondary-button"
-                  style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                  style={{ fontSize: '11px', padding: '2px 8px', height: '22px' }}
                   onClick={() => setStorageRoot('~/Documents/Xtract')}
                   title="恢复默认路径 ~/Documents/Xtract"
                 >
                   恢复默认
                 </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                  onClick={() => api.openPath(storageRoot)}
-                  title="在访达 (Finder) 中打开当前目录"
-                >
-                  打开目录 ↗
-                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div
+                id="storage-root-picker"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'var(--paper)',
+                  border: '1px solid var(--line)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  minWidth: 0,
+                }}
+                onClick={handleSelectDirectory}
+                title="点击选择存储目录"
+              >
+                <span style={{ fontSize: '14px', flexShrink: 0 }}>📁</span>
+                <input
+                  id="storage-root-input"
+                  className="text-input"
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    padding: 0,
+                    margin: 0,
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: 'var(--ink)',
+                    outline: 'none',
+                  }}
+                  type="text"
+                  value={storageRoot}
+                  readOnly
+                  placeholder="~/Documents/Xtract"
+                />
               </div>
+              <button
+                type="button"
+                id="select-dir-btn"
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                onClick={handleSelectDirectory}
+              >
+                选择目录...
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => api.openPath(storageRoot)}
+                title="在访达 (Finder) 中打开当前目录"
+              >
+                打开 ↗
+              </button>
             </div>
           </div>
 

@@ -41,11 +41,15 @@ vi.mock('electron', () => {
         isMaximized: vi.fn(() => false),
         close: vi.fn(),
       })),
+      getFocusedWindow: vi.fn(() => null),
     },
     app: {
       whenReady: vi.fn().mockResolvedValue(undefined),
       quit: vi.fn(),
       on: vi.fn(),
+    },
+    dialog: {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['/Users/test/SelectedDirectory'] })),
     },
   };
 });
@@ -185,5 +189,12 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(res.length).toBe(0);
     expect(res.fromCache).toBe(true);
     expect(res.updatedAt).toBeNull();
+  });
+
+  it('Preload selectDirectory should invoke DIALOG_SELECT_DIRECTORY and return chosen path', async () => {
+    registerIpcHandlers();
+
+    const res = await xtractApiImplementation.selectDirectory('/tmp');
+    expect(res).toBe('/Users/test/SelectedDirectory');
   });
 });

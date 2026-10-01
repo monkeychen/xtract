@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { ipcMain, BrowserWindow, shell, dialog } from 'electron';
 import { IPC_CHANNELS } from '../../preload/channels.js';
 import type { StreamEvent, AppConfigView } from '../../preload/index.js';
 import { Config } from '../config.js';
@@ -635,4 +635,37 @@ export function registerIpcHandlers(
       return { success: false, error: err?.message || String(err) };
     }
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.DIALOG_SELECT_DIRECTORY,
+    async (_event, defaultPath?: string): Promise<string | null> => {
+      try {
+        let initialPath = defaultPath ? defaultPath.trim() : '';
+        if (initialPath.startsWith('~')) {
+          const os = await import('node:os');
+          initialPath = path.join(os.homedir(), initialPath.slice(1));
+        }
+        if (!initialPath || !fs.existsSync(initialPath)) {
+          initialPath = Config.STORAGE_ROOT;
+        }
+        const win = mainWindow || (typeof BrowserWindow?.getFocusedWindow === 'function' ? BrowserWindow.getFocusedWindow() : null);
+        const opts = {
+          title: '选择数据存储位置',
+          defaultPath: initialPath,
+          properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
+        };
+        const result = win
+          ? await dialog.showOpenDialog(win, opts)
+          : await dialog.showOpenDialog(opts);
+
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+          return null;
+        }
+        return result.filePaths[0];
+      } catch (err) {
+        process.stderr.write(`⚠️ 打开目录选择弹窗失败: ${err}\n`);
+        return null;
+      }
+    }
+  );
 }

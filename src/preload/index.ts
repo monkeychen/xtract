@@ -104,6 +104,7 @@ export interface XtractAPI {
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
   showItemInFolder: (itemPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   openPath: (dirPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+  selectDirectory: (defaultPath?: string) => Promise<string | null>;
 
   // Real-time Event Streaming
   onStreamEvent: (callback: (event: StreamEvent) => void) => () => void;
@@ -151,6 +152,8 @@ export const xtractApiImplementation: XtractAPI = {
   showItemInFolder: (itemPath) =>
     ipcRenderer.invoke(IPC_CHANNELS.SHELL_SHOW_ITEM_IN_FOLDER, itemPath),
   openPath: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, dirPath),
+  selectDirectory: (defaultPath) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_DIRECTORY, defaultPath),
 
   onStreamEvent: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, data: StreamEvent) => {
