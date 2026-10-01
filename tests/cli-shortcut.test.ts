@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -162,6 +162,16 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
 
 describe('createCliShortcut（win32 编排，PowerShell 注入 stub）', () => {
   const scripts: string[] = [];
+
+  // darwin 上 path.win32.join 会把 posix 临时路径转成「反斜杠相对路径」，
+  // fs 写入会落在项目根下的字面量目录——测试结束后必须清理，否则污染仓库
+  afterAll(() => {
+    for (const name of fs.readdirSync(process.cwd())) {
+      if (name.startsWith('\\') && name.includes('xtract-shortcut')) {
+        fs.rmSync(path.join(process.cwd(), name), { recursive: true, force: true });
+      }
+    }
+  });
 
   function winDeps(home: string, failPowerShell = false): ShortcutDeps {
     return makeDeps(
