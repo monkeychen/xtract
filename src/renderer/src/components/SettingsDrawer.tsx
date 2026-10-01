@@ -314,11 +314,15 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             </h3>
             <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginBottom: '8px', lineHeight: 1.5 }}>
-                指定本地数据与文章产物的存储根目录（开发与生产统一）。其下子目录固定为：
+                指定本地数据、文章与研报的存储根目录（开发与生产统一）。其下子目录固定为：
                 <br />
                 • 数据与缓存：<code>{storageRoot}/data/</code>（存放 <code>tweets.db</code> 与会话凭据）
                 <br />
-                • 文章与研报：<code>{storageRoot}/articles/</code>（存放自包含 Markdown 导出与研报）
+                • 文章产物：<code>{storageRoot}/articles/</code>（存放自包含 Markdown 导出）
+                <br />
+                • 研报中心：<code>{storageRoot}/reports/</code>（存放每日早报与趋势研报）
+                <br />
+                • 配置文件：<code>{storageRoot}/config.env</code>（持久化保存 Key 与设置项）
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <input

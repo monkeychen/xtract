@@ -249,6 +249,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           storageRoot: '~/Documents/Xtract',
           dataDir: '~/Documents/Xtract/data',
           articlesDir: '~/Documents/Xtract/articles',
+          reportsDir: '~/Documents/Xtract/reports',
+          configEnvPath: '~/Documents/Xtract/config.env',
         }),
         updateConfig: async (updates: any) => ({
           success: true,
@@ -267,6 +269,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
             storageRoot: updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract',
             dataDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/data`,
             articlesDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/articles`,
+            reportsDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/reports`,
+            configEnvPath: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/config.env`,
           },
         }),
         onStreamEvent: (callback: any) => {

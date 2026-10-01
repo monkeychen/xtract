@@ -57,6 +57,8 @@ class ApiService {
       storageRoot: '~/Documents/Xtract',
       dataDir: '~/Documents/Xtract/data',
       articlesDir: '~/Documents/Xtract/articles',
+      reportsDir: '~/Documents/Xtract/reports',
+      configEnvPath: '~/Documents/Xtract/config.env',
     };
   }
 
@@ -82,6 +84,8 @@ class ApiService {
         storageRoot: newStorageRoot,
         dataDir: `${newStorageRoot}/data`,
         articlesDir: `${newStorageRoot}/articles`,
+        reportsDir: `${newStorageRoot}/reports`,
+        configEnvPath: `${newStorageRoot}/config.env`,
       },
     };
   }
@@ -321,8 +325,8 @@ class ApiService {
     onProgress?.({ taskId, stage: 'synthesis', type: 'content', text: '# 🗞️ X 每日情报晨报\n\n## 核心热点聚焦\n今日全网核心聚焦于混合推理在开发运维工具中的落地...', progress: 90 });
     await new Promise((r) => setTimeout(r, 800));
 
-    onProgress?.({ taskId, stage: 'done', type: 'status', text: '研报生成完毕！已落盘至 articles/reports/', progress: 100 });
-    return { success: true, reportPath: 'articles/reports/2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
+    onProgress?.({ taskId, stage: 'done', type: 'status', text: '研报生成完毕！已落盘至 reports/', progress: 100 });
+    return { success: true, reportPath: 'reports/2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
   }
 
   async generateTrendsDigest(options: any, onProgress?: (event: StreamEvent) => void) {
@@ -349,7 +353,7 @@ class ApiService {
     await new Promise((r) => setTimeout(r, 1500));
 
     onProgress?.({ taskId, stage: 'done', type: 'status', text: '趋势深度研报已归档！', progress: 100 });
-    return { success: true, reportPath: 'articles/reports/trends_2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
+    return { success: true, reportPath: 'reports/trends_2026-09-27.md', content: MOCK_REPORTS[0].markdownContent };
   }
 
   onStreamEvent(callback: (event: StreamEvent) => void): () => void {

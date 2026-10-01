@@ -89,29 +89,16 @@ export function registerIpcHandlers(
       storageRoot: Config.STORAGE_ROOT,
       dataDir: Config.DATA_DIR,
       articlesDir: Config.ARTICLES_DIR,
+      reportsDir: Config.REPORTS_DIR,
+      configEnvPath: Config.CONFIG_ENV_PATH,
     };
   });
 
   ipcMain.handle(
     IPC_CHANNELS.CONFIG_UPDATE,
     async (_event, updates: Record<string, string>) => {
-      const envPath = path.join(Config.PROJECT_ROOT, '.env');
-      let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-
       for (const [key, value] of Object.entries(updates)) {
         process.env[key] = value;
-        const regex = new RegExp(`^${key}=.*$`, 'm');
-        if (regex.test(envContent)) {
-          envContent = envContent.replace(regex, `${key}=${value}`);
-        } else {
-          envContent += `\n${key}=${value}`;
-        }
-      }
-
-      try {
-        fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
-      } catch {
-        // In packaged macOS app, project root may be read-only; silently continue
       }
 
       if (updates.XTRACT_STORAGE_ROOT !== undefined) {
@@ -121,7 +108,13 @@ export function registerIpcHandlers(
         } else {
           delete process.env.XTRACT_STORAGE_ROOT;
         }
-        Config.ensureDirectories();
+      }
+
+      // 确保目录结构存在并持久化写入 <storageRoot>/config.env
+      Config.ensureDirectories();
+      Config.savePersistentConfig(updates);
+
+      if (updates.XTRACT_STORAGE_ROOT !== undefined) {
         storage = new Storage();
         pipeline = new Pipeline(storage);
       }
@@ -156,6 +149,8 @@ export function registerIpcHandlers(
           storageRoot: Config.STORAGE_ROOT,
           dataDir: Config.DATA_DIR,
           articlesDir: Config.ARTICLES_DIR,
+          reportsDir: Config.REPORTS_DIR,
+          configEnvPath: Config.CONFIG_ENV_PATH,
         },
       };
     }

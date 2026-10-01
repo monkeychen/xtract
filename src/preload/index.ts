@@ -26,6 +26,8 @@ export interface AppConfigView {
   storageRoot: string;
   dataDir: string;
   articlesDir: string;
+  reportsDir: string;
+  configEnvPath: string;
 }
 
 export interface XtractAPI {

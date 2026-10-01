@@ -64,8 +64,10 @@ xtract/
 │   └── renderer/           # GUI 工作台前端 (React 19 + 手写 CSS 设计令牌，无 UI 框架)
 │       └── src/views/studio/  # 工作台模块：logic/formatters/useStudioData + 6 个展示组件
 └── ~/Documents/Xtract/     # 用户数据存储根目录 (可在设置中自定义，开发/生产统一)
+    ├── config.env          # 持久化环境变量与设置配置 (模型 Key、代理、思考链等)
     ├── data/               # 本地数据持久化与缓存 (tweets.db, auth_state.json, browser_profile)
-    └── articles/           # 归档产物与研报 (reports/ 研报, {author}/{tweet_id}/ 自包含 Page Bundle)
+    ├── articles/           # 单推自包含 Page Bundle ({author}/{tweet_id}/index.md)
+    └── reports/            # 研报与早报中心 (YYYY-MM-DD.md, trends_YYYY-MM-DD.md)
 ```
 
 ---

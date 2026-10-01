@@ -132,8 +132,12 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.storageRoot).toBe('string');
     expect(typeof config.dataDir).toBe('string');
     expect(typeof config.articlesDir).toBe('string');
+    expect(typeof config.reportsDir).toBe('string');
+    expect(typeof config.configEnvPath).toBe('string');
     expect(config.dataDir).toBe(`${config.storageRoot}/data`);
     expect(config.articlesDir).toBe(`${config.storageRoot}/articles`);
+    expect(config.reportsDir).toBe(`${config.storageRoot}/reports`);
+    expect(config.configEnvPath).toBe(`${config.storageRoot}/config.env`);
   });
 
   it('Preload updateConfig should update reasoning, fetchAuthorReplies and storageRoot settings', async () => {
@@ -152,6 +156,8 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(res.config.storageRoot).toBe('/tmp/xtract_custom_storage');
     expect(res.config.dataDir).toBe('/tmp/xtract_custom_storage/data');
     expect(res.config.articlesDir).toBe('/tmp/xtract_custom_storage/articles');
+    expect(res.config.reportsDir).toBe('/tmp/xtract_custom_storage/reports');
+    expect(res.config.configEnvPath).toBe('/tmp/xtract_custom_storage/config.env');
 
     // Restore default
     await xtractApiImplementation.updateConfig({

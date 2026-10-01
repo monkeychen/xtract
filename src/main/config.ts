@@ -5,9 +5,8 @@ import net from 'node:net';
 import dotenv from 'dotenv';
 import type { XListInfo } from './types.js';
 
-// Load .env
+// Initialize project root
 const projectRoot = process.cwd();
-dotenv.config({ path: path.join(projectRoot, '.env') });
 
 export class Config {
   static readonly PROJECT_ROOT = projectRoot;
@@ -41,8 +40,14 @@ export class Config {
     return path.join(this.DATA_DIR, 'raw');
   }
 
+  /** 研报与早报固定存放于 <storageRoot>/reports */
   static get REPORTS_DIR(): string {
-    return path.join(this.ARTICLES_DIR, 'reports');
+    return path.join(this.STORAGE_ROOT, 'reports');
+  }
+
+  /** 持久化配置固定存放于 <storageRoot>/config.env */
+  static get CONFIG_ENV_PATH(): string {
+    return path.join(this.STORAGE_ROOT, 'config.env');
   }
 
   static get DB_PATH(): string {
@@ -71,6 +76,143 @@ export class Config {
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+  }
+
+  /**
+   * 双轨级联加载持久化环境变量：
+   * 1. 加载源码目录 .env（开发态兜底）
+   * 2. 加载默认用户数据根目录 ~/Documents/Xtract/config.env
+   * 3. 若配置了自定义存储根目录，加载对应 <storageRoot>/config.env（覆盖同名配置）
+   */
+  static loadPersistentConfig(): void {
+    // 1. 加载开发态根目录 .env
+    const rootEnv = path.join(this.PROJECT_ROOT, '.env');
+    if (fs.existsSync(rootEnv)) {
+      dotenv.config({ path: rootEnv });
+    }
+
+    // 2. 加载默认用户数据根目录 ~/Documents/Xtract/config.env
+    const defaultRoot = path.join(os.homedir(), 'Documents', 'Xtract');
+    const defaultEnv = path.join(defaultRoot, 'config.env');
+    if (fs.existsSync(defaultEnv)) {
+      try {
+        const parsed = dotenv.parse(fs.readFileSync(defaultEnv, 'utf-8'));
+        for (const [k, v] of Object.entries(parsed)) {
+          if (k === 'XTRACT_STORAGE_ROOT' && !v.trim()) {
+            continue;
+          }
+          process.env[k] = v;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. 若配置了非默认存储根目录，加载自定义目录下的 config.env
+    const currentEnv = this.CONFIG_ENV_PATH;
+    if (currentEnv !== defaultEnv && fs.existsSync(currentEnv)) {
+      try {
+        const parsed = dotenv.parse(fs.readFileSync(currentEnv, 'utf-8'));
+        for (const [k, v] of Object.entries(parsed)) {
+          process.env[k] = v;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * 持久化配置保存：
+   * 1. 增量写入当前存储根目录下的 <storageRoot>/config.env
+   * 2. 若使用自定义存储根目录，在默认根目录中记录 XTRACT_STORAGE_ROOT 引导指针
+   * 3. 在开发态若工程根目录存在 .env 则同步更新
+   */
+  static savePersistentConfig(updates: Record<string, string>): void {
+    this.ensureDirectories();
+
+    const targetFile = this.CONFIG_ENV_PATH;
+    let content = '';
+    if (fs.existsSync(targetFile)) {
+      try {
+        content = fs.readFileSync(targetFile, 'utf-8');
+      } catch {
+        content = '';
+      }
+    }
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'XTRACT_STORAGE_ROOT' && !value.trim()) {
+        const regex = new RegExp(`^${key}=.*$\\n?`, 'm');
+        content = content.replace(regex, '');
+        continue;
+      }
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${value}`);
+      } else {
+        content = content ? `${content.trim()}\n${key}=${value}` : `${key}=${value}`;
+      }
+    }
+
+    try {
+      fs.writeFileSync(targetFile, content.trim() + '\n', 'utf-8');
+    } catch (err) {
+      process.stderr.write(`⚠️ 写入持久化配置 ${targetFile} 失败: ${err}\n`);
+    }
+
+    // 若非默认根目录，在默认根目录中写入/清理引导指针
+    const defaultRoot = path.join(os.homedir(), 'Documents', 'Xtract');
+    const defaultEnv = path.join(defaultRoot, 'config.env');
+    if (updates.XTRACT_STORAGE_ROOT !== undefined) {
+      const customRoot = updates.XTRACT_STORAGE_ROOT.trim();
+      if (customRoot && targetFile !== defaultEnv) {
+        try {
+          if (!fs.existsSync(defaultRoot)) {
+            fs.mkdirSync(defaultRoot, { recursive: true });
+          }
+          let defContent = fs.existsSync(defaultEnv) ? fs.readFileSync(defaultEnv, 'utf-8') : '';
+          const regex = /^XTRACT_STORAGE_ROOT=.*$/m;
+          if (regex.test(defContent)) {
+            defContent = defContent.replace(regex, `XTRACT_STORAGE_ROOT=${customRoot}`);
+          } else {
+            defContent = defContent
+              ? `${defContent.trim()}\nXTRACT_STORAGE_ROOT=${customRoot}`
+              : `XTRACT_STORAGE_ROOT=${customRoot}`;
+          }
+          fs.writeFileSync(defaultEnv, defContent.trim() + '\n', 'utf-8');
+        } catch {
+          // ignore
+        }
+      } else if (!customRoot && fs.existsSync(defaultEnv)) {
+        try {
+          let defContent = fs.readFileSync(defaultEnv, 'utf-8');
+          defContent = defContent.replace(/^XTRACT_STORAGE_ROOT=.*$\n?/m, '');
+          fs.writeFileSync(defaultEnv, defContent.trim() + '\n', 'utf-8');
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 开发态同步写入根目录 .env
+    const devEnvPath = path.join(this.PROJECT_ROOT, '.env');
+    if (fs.existsSync(devEnvPath)) {
+      try {
+        let devContent = fs.readFileSync(devEnvPath, 'utf-8');
+        for (const [key, value] of Object.entries(updates)) {
+          const regex = new RegExp(`^${key}=.*$`, 'm');
+          if (regex.test(devContent)) {
+            devContent = devContent.replace(regex, `${key}=${value}`);
+          } else {
+            devContent = devContent ? `${devContent.trim()}\n${key}=${value}` : `${key}=${value}`;
+          }
+        }
+        fs.writeFileSync(devEnvPath, devContent.trim() + '\n', 'utf-8');
+      } catch {
+        // packaged app read-only ignore
       }
     }
   }
@@ -282,3 +424,7 @@ export class Config {
     }
   }
 }
+
+// 自动加载持久化配置（级联 .env 与 <storageRoot>/config.env）
+Config.loadPersistentConfig();
+
