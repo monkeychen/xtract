@@ -18,6 +18,20 @@ function isNoiseArg(arg: string): boolean {
 }
 
 /**
+ * Electron/Chromium 运行时调试开关：属于浏览器内核而非用户命令。
+ * 若不忽略，CDP 调试（--remote-debugging-port）与 Playwright Electron 驱动
+ * （--remote-debugging-pipe / --inspect*）会把应用拽进 CLI 模式，
+ * 随即以 unknown option 报错退出，GUI 完全无法启动。
+ */
+function isChromiumSwitch(arg: string): boolean {
+  return (
+    arg.startsWith('--remote-debugging') ||
+    arg.startsWith('--remote-allow-origins') ||
+    arg.startsWith('--inspect')
+  );
+}
+
+/**
  * 从 process.argv 中提取用户实际传入的参数。
  *
  * 三种运行形态的 argv 布局：
@@ -31,7 +45,7 @@ function isNoiseArg(arg: string): boolean {
 export function resolveUserArgs(argv: string[], ctx: ArgvContext): string[] {
   const hasScriptSlot = !ctx.isElectron || ctx.isDefaultApp;
   const userArgs = hasScriptSlot ? argv.slice(2) : argv.slice(1);
-  return userArgs.filter((a) => !isNoiseArg(a));
+  return userArgs.filter((a) => !isNoiseArg(a) && !isChromiumSwitch(a));
 }
 
 /**

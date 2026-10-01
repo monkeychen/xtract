@@ -43,6 +43,16 @@ describe('resolveUserArgs / isCliMode（三种运行形态）', () => {
     expect(resolveUserArgs(['Xtract', '-psn_0_12345', '--list'], ELECTRON_PACKED)).toEqual(['--list']);
   });
 
+  it('忽略 Electron/Chromium 运行时调试开关（非用户命令，不得拽进 CLI）', () => {
+    // CDP 调试与 Playwright Electron 驱动会注入这些开关；误判为用户参数
+    // 会进 CLI 模式并以 unknown option 报错退出，GUI 完全无法启动
+    expect(resolveUserArgs(['Xtract', '--remote-debugging-port=9222'], ELECTRON_PACKED)).toEqual([]);
+    expect(resolveUserArgs(['Xtract', '--remote-debugging-pipe'], ELECTRON_PACKED)).toEqual([]);
+    expect(resolveUserArgs(['Xtract', '--inspect=9229'], ELECTRON_PACKED)).toEqual([]);
+    expect(isCliMode(['Xtract', '--remote-debugging-port=9222'], ELECTRON_PACKED)).toBe(false);
+    expect(resolveUserArgs(['Xtract', '--remote-allow-origins=*', '--list'], ELECTRON_PACKED)).toEqual(['--list']);
+  });
+
   it('忽略裸 -- 分隔符', () => {
     expect(resolveUserArgs(['Xtract', '--'], ELECTRON_PACKED)).toEqual([]);
     expect(resolveUserArgs(['node', 'index.ts', '--', '--list'], NODE)).toEqual(['--list']);
