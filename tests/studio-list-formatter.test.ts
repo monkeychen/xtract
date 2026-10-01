@@ -5,9 +5,8 @@ import {
   extractTweetTitleAndSnippet,
   formatRelativeTime,
   formatCount,
-  isVideoUrl,
-  isTweetVideo,
-} from '../src/renderer/src/views/StudioView.js';
+} from '../src/renderer/src/views/studio/formatters.js';
+import { isVideoUrl, isTweetVideo } from '../src/renderer/src/views/studio/logic.js';
 
 describe('StudioView List Display Title (getTweetListDisplayTitle §1)', () => {
   it('should extract explicit markdown title if first line starts with #', () => {

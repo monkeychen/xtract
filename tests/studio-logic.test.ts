@@ -4,7 +4,7 @@ import {
   classifyTweet,
   extractMedia,
   filterTweetsByKeyword,
-} from '../src/renderer/src/views/StudioView.js';
+} from '../src/renderer/src/views/studio/logic.js';
 
 const base = {
   tweet_id: '1',
@@ -244,7 +244,7 @@ import {
   reduceStreamEvent,
   formatTweetDate,
   type CrawlProgress,
-} from '../src/renderer/src/views/StudioView.js';
+} from '../src/renderer/src/views/studio/logic.js';
 
 // ============================================================================
 // buildQueryOptions — 抽离 729-746 的四分支数据源→查询映射

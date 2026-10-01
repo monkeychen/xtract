@@ -4,7 +4,7 @@ import {
   extractTweetIdFromQuery,
   resolveListId,
   validateCrawlTarget,
-} from '../src/renderer/src/views/StudioView.js';
+} from '../src/renderer/src/views/studio/logic.js';
 
 // ============================================================================
 // 抓取前置守卫与入参计算

@@ -55,7 +55,7 @@ xtract/
 ├── src/
 │   ├── main/               # Electron 主进程 & CLI 核心引擎 (client/storage/llm/pipeline)
 │   ├── preload/            # 安全隔离桥梁 (ContextBridge)
-│   └── renderer/           # GUI 工作台前端 (React + Tailwind CSS)
+│   └── renderer/           # GUI 工作台前端 (React 19 + 手写 CSS 设计令牌，无 UI 框架)
 ├── data/                   # 本地数据持久化（Git 忽略：tweets.db, auth_state.json）
 └── output/                 # 归档产物（reports/ 早报, {author}/{tweet_id}/ 自包含 Page Bundle）
 ```
