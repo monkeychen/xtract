@@ -10,5 +10,9 @@ export default defineConfig({
   test: {
     root: path.resolve(__dirname),
     include: ['tests/**/*.test.ts'],
+    // 慢环境（CI runner 冷启动、Windows 文件系统）下默认 5s 会误杀重 IO 用例：
+    // 真实发生过 storage 级联删除、locale 首次格式化在 windows-latest 上超时
+    testTimeout: 20_000,
+    hookTimeout: 30_000,
   },
 });
