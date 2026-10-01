@@ -52,19 +52,6 @@ jobs:
           pnpm verify
           pnpm exec electron-builder --mac --arm64 --publish never
 
-      # 临时诊断：smoke 失败时裸跑 CLI 取证（定位后移除）
-      - name: Debug packaged CLI
-        if: runner.os == 'macOS' && always()
-        run: |
-          BIN="release/mac-arm64/Xtract.app/Contents/MacOS/Xtract"
-          ls -la "$BIN" || true
-          "$BIN" --version; echo "version_exit=$?"
-          "$BIN" --help > /tmp/help.out 2> /tmp/help.err; echo "help_exit=$?"
-          head -3 /tmp/help.out; head -3 /tmp/help.err
-          "$BIN" --list 1 > /tmp/list.out 2> /tmp/list.err; echo "list_exit=$?"
-          echo "--- list stdout ---"; cat /tmp/list.out
-          echo "--- list stderr ---"; cat /tmp/list.err
-
       # Windows：出 NSIS 安装包（同时产出 win-unpacked 目录），随后对真实 exe 做 smoke
       - name: Package (Windows)
         if: runner.os == 'Windows'
