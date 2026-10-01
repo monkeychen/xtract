@@ -50,16 +50,18 @@ export function getShortcutSpec(input: {
   shell?: string;
 }): ShortcutSpec | null {
   if (input.platform === 'darwin') {
-    const binDir = path.join(input.homeDir, 'bin');
+    // 固定 posix 语义：符号链接与 shell rc 的路径永远按 macOS 约定解释，
+    // 与生成 spec 的运行平台无关（Windows CI 上同样可测 darwin 行为）
+    const binDir = path.posix.join(input.homeDir, 'bin');
     const shell = (input.shell || '').toLowerCase();
     const rcFile = shell.includes('zsh')
-      ? path.join(input.homeDir, '.zshrc')
+      ? path.posix.join(input.homeDir, '.zshrc')
       : shell.includes('bash')
-      ? path.join(input.homeDir, '.bashrc')
+      ? path.posix.join(input.homeDir, '.bashrc')
       : null;
     return {
       binDir,
-      linkPath: path.join(binDir, 'xtract'),
+      linkPath: path.posix.join(binDir, 'xtract'),
       targetPath: input.execPath,
       rcFile,
       pathEntry: RC_ENTRY,
@@ -87,9 +89,11 @@ export function buildCmdShim(targetPath: string): string {
   return `@echo off\r\n"${targetPath}" %*\r\n`;
 }
 
-/** rc 文件是否需要追加 PATH：已含 ~ 写法、$HOME 写法或展开绝对路径时视为已配置 */
+/** rc 文件是否需要追加 PATH：已含 ~ 写法、$HOME 写法或展开绝对路径时视为已配置（rc 内容恒为 posix 风格） */
 export function rcNeedsPathFix(rcContent: string, homeDir: string): boolean {
-  return !rcContent.includes('$HOME/bin') && !rcContent.includes('~/bin') && !rcContent.includes(path.join(homeDir, 'bin'));
+  return (
+    !rcContent.includes('$HOME/bin') && !rcContent.includes('~/bin') && !rcContent.includes(path.posix.join(homeDir, 'bin'))
+  );
 }
 
 export async function createCliShortcut(deps: ShortcutDeps): Promise<CliShortcutResult> {

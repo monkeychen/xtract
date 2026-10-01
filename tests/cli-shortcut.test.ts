@@ -37,6 +37,10 @@ function tmpHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'xtract-shortcut-'));
 }
 
+// darwin 符号链接编排依赖 POSIX symlink 特权，Windows（尤其无开发者模式的 CI）无法模拟；
+// 这些行为只会在 macOS 上真实发生，标记为 mac 专属
+const itMacOnly = process.platform === 'win32' ? it.skip : it;
+
 describe('getShortcutSpec（平台差异纯函数）', () => {
   it('darwin：软链到 ~/bin/xtract，zsh 对应 ~/.zshrc', () => {
     const spec = getShortcutSpec({ platform: 'darwin', execPath: MAC_EXE, homeDir: '/Users/a', shell: '/bin/zsh' });
@@ -95,6 +99,7 @@ describe('rcNeedsPathFix（幂等判定）', () => {
 
 describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () => {
   it('开发态应拒绝并提示仅安装版可用', async () => {
+    // 不涉及 symlink，全平台可跑
     const home = tmpHome();
     const res = await createCliShortcut(makeDeps({ isPackaged: false }, home));
     expect(res.ok).toBe(false);
@@ -102,7 +107,7 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('成功创建软链并写入 PATH 到 ~/.zshrc', async () => {
+  itMacOnly('成功创建软链并写入 PATH 到 ~/.zshrc', async () => {
     const home = tmpHome();
     const res = await createCliShortcut(makeDeps({}, home));
     expect(res.ok).toBe(true);
@@ -116,7 +121,7 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('重复点击应幂等（alreadyExists 且不重复追加 rc）', async () => {
+  itMacOnly('重复点击应幂等（alreadyExists 且不重复追加 rc）', async () => {
     const home = tmpHome();
     await createCliShortcut(makeDeps({}, home));
     const res2 = await createCliShortcut(makeDeps({}, home));
@@ -128,7 +133,7 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('链接已被其他目标占用时应报冲突而非覆盖', async () => {
+  itMacOnly('链接已被其他目标占用时应报冲突而非覆盖', async () => {
     const home = tmpHome();
     const bin = path.join(home, 'bin');
     fs.mkdirSync(bin, { recursive: true });
@@ -140,7 +145,7 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('rc 已含 PATH 条目时不再追加（pathFixed=false）', async () => {
+  itMacOnly('rc 已含 PATH 条目时不再追加（pathFixed=false）', async () => {
     const home = tmpHome();
     fs.writeFileSync(path.join(home, '.zshrc'), 'export PATH="$HOME/bin:$PATH"\n');
     const res = await createCliShortcut(makeDeps({}, home));
@@ -149,7 +154,7 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('未知 shell 不自动改写，返回手动指引 hint', async () => {
+  itMacOnly('未知 shell 不自动改写，返回手动指引 hint', async () => {
     const home = tmpHome();
     const res = await createCliShortcut(makeDeps({ shell: '/usr/bin/fish' }, home));
     expect(res.ok).toBe(true);

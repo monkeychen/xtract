@@ -7,9 +7,12 @@ import { Storage } from '../src/main/storage/index.js';
 function runCli(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const entry = path.resolve('src/main/index.ts');
+    // Windows 上 pnpm 是 .cmd 脚本，execFile 直接调用会被拒（Node 禁止无 shell 执行 .cmd），
+    // 必须经 cmd /c 中转；POSIX 平台保持原样
+    const isWin = process.platform === 'win32';
     execFile(
-      'pnpm',
-      ['exec', 'tsx', entry, '--', ...args],
+      isWin ? 'cmd' : 'pnpm',
+      isWin ? ['/c', 'pnpm', 'exec', 'tsx', entry, '--', ...args] : ['exec', 'tsx', entry, '--', ...args],
       {
         cwd: process.cwd(),
         env: { ...process.env, NODE_ENV: 'test' },

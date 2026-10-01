@@ -130,3 +130,31 @@ xtract/
 - **设计特性**：系统在解析 GraphQL 响应时，已自动基于 `entryId` 特征将带有 `promoted-tweet` 的广告全部剥离，仅保留你关注的博主的真实内容。
 
 ---
+
+## 10. 发版流程 (Release Process)
+
+v0.1.0 起为双平台发布（macOS arm64 DMG + Windows x64 NSIS），由 GitHub Actions 矩阵构建。
+
+### 标准流程
+
+1. **确认门禁本地全绿**：`pnpm verify`（五道门禁，含打包 smoke）；
+2. **提交并推送 main**；
+3. **打 tag 并推送**：`git tag v0.1.0 && git push origin v0.1.0`；
+4. **CI 自动执行**（`.github/workflows/release.yml`）：
+   - `macos-latest` 与 `windows-latest` 两个 job 各自跑：全量测试 → tsc → build → electron-builder → 打包 smoke；
+   - 两平台全绿后 `release` job 自动创建 GitHub Release，挂载 `*.dmg` 与 `*.exe`；
+5. **人工验收**（CI 覆盖不到的部分）：
+   - macOS：安装 DMG → 设置页「从 Chrome 读取登录态」→「创建命令行快捷方式」→ 新终端执行 `xtract --list`；
+   - Windows：安装 Setup → 设置页「手动填入 Cookie」→「创建命令行快捷方式」→ 新开 PowerShell 执行 `xtract --list`（验证 shim 与用户 PATH 注册表生效）。
+
+### 关键配置备忘
+
+- **双平台产物同源于 `win-unpacked/` 与 `mac-arm64/Xtract.app/`**，打包 smoke 对这两个目录的可执行文件做真实启动验证；
+- **`npmRebuild` 必须为 `false`**：better-sqlite3 v13 自带全平台 prebuilds，开启会触发 node-gyp 交叉编译并失败；
+- **Windows 产物必须显式 `--x64`**：mac 上 cross-build 默认取宿主架构 arm64，而 prebuilds 没有 win32-arm64；
+- **macOS 图标用 `.icns`、Windows 由 `build/icon.png`（≥256px）自动转换 `.ico`**；
+- 未代码签名：mac Gatekeeper「右键 → 打开」，Windows SmartScreen「更多信息 → 仍要运行」，安装文档需说明。
+
+### 发版前演练
+
+不推 tag 也可验证流水线：GitHub → Actions → Release → Run workflow（`workflow_dispatch`），两平台构建与 smoke 全绿后再打正式 tag。

@@ -72,6 +72,9 @@ describe('Configurable Storage Root & Fixed Subdirectories (TDD)', () => {
     const expectedFile = path.join(testRoot, 'articles', 'test_user', '9901', 'index.md');
     expect(filePath).toBe(expectedFile);
     expect(fs.existsSync(expectedFile)).toBe(true);
+
+    // Windows 强制文件锁：不关闭 SQLite 句柄会导致 afterEach 清理目录 EPERM
+    storage.close();
   });
 
   it('5. Persistent config.env should be saved to <storageRoot>/config.env and loaded into process.env', () => {

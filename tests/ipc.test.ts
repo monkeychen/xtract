@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import path from 'node:path';
+import os from 'node:os';
 import { IPC_CHANNELS } from '../src/preload/channels.js';
 import { xtractApiImplementation } from '../src/preload/index.js';
 import { registerIpcHandlers, _resetRegisteredForTest } from '../src/main/ipc/index.js';
@@ -136,30 +138,34 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.articlesDir).toBe('string');
     expect(typeof config.reportsDir).toBe('string');
     expect(typeof config.configEnvPath).toBe('string');
-    expect(config.dataDir).toBe(`${config.storageRoot}/data`);
-    expect(config.articlesDir).toBe(`${config.storageRoot}/articles`);
-    expect(config.reportsDir).toBe(`${config.storageRoot}/reports`);
-    expect(config.configEnvPath).toBe(`${config.storageRoot}/config.env`);
+    // 子目录由 path.join 生成，Windows 上是反斜杠——断言必须用同源构造而非字面斜杠模板串
+    expect(config.dataDir).toBe(path.join(config.storageRoot, 'data'));
+    expect(config.articlesDir).toBe(path.join(config.storageRoot, 'articles'));
+    expect(config.reportsDir).toBe(path.join(config.storageRoot, 'reports'));
+    expect(config.configEnvPath).toBe(path.join(config.storageRoot, 'config.env'));
   });
 
   it('Preload updateConfig should update reasoning, fetchAuthorReplies and storageRoot settings', async () => {
     registerIpcHandlers();
 
+    // 用当前平台 tmpdir 动态构造，硬编码 '/tmp/...' 字面量在 Windows 会被解析到当前盘符根
+    const customRoot = path.join(os.tmpdir(), 'xtract_custom_storage');
+
     const res = await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'false',
       LLM_REASONING_EFFORT: 'low',
       FETCH_AUTHOR_REPLIES: 'true',
-      XTRACT_STORAGE_ROOT: '/tmp/xtract_custom_storage',
+      XTRACT_STORAGE_ROOT: customRoot,
     });
     expect(res.success).toBe(true);
     expect(res.config.reasoningEnabled).toBe(false);
     expect(res.config.reasoningEffort).toBe('low');
     expect(res.config.fetchAuthorReplies).toBe(true);
-    expect(res.config.storageRoot).toBe('/tmp/xtract_custom_storage');
-    expect(res.config.dataDir).toBe('/tmp/xtract_custom_storage/data');
-    expect(res.config.articlesDir).toBe('/tmp/xtract_custom_storage/articles');
-    expect(res.config.reportsDir).toBe('/tmp/xtract_custom_storage/reports');
-    expect(res.config.configEnvPath).toBe('/tmp/xtract_custom_storage/config.env');
+    expect(res.config.storageRoot).toBe(customRoot);
+    expect(res.config.dataDir).toBe(path.join(customRoot, 'data'));
+    expect(res.config.articlesDir).toBe(path.join(customRoot, 'articles'));
+    expect(res.config.reportsDir).toBe(path.join(customRoot, 'reports'));
+    expect(res.config.configEnvPath).toBe(path.join(customRoot, 'config.env'));
 
     // Restore default
     await xtractApiImplementation.updateConfig({

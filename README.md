@@ -31,7 +31,22 @@
 
 ---
 
-## 5 分钟快速开始
+## 下载安装（推荐）
+
+从 [GitHub Releases](https://github.com/monkeychen/xtract/releases/latest) 下载对应平台的安装包：
+
+| 平台 | 产物 | 说明 |
+| :--- | :--- | :--- |
+| macOS (Apple Silicon) | `Xtract-x.x.x-arm64.dmg` | 首次打开若被 Gatekeeper 拦截：右键 → 打开 |
+| Windows x64 | `Xtract-Setup-x.x.x.exe` | 无代码签名，SmartScreen 拦截时点「更多信息 → 仍要运行」 |
+
+安装后：打开应用 → ⚙️ 设置 → 「从 Chrome 读取登录态」（macOS）配置凭据 → 「命令行」区一键创建 `xtract` 命令。完整说明见下方「安装后用户」章节。
+
+> 平台能力差异：浏览器登录态导入仅支持 macOS；Windows 用户请用设置里的「手动填入 Cookie」。Windows 支持随 v0.1.0 首发，安装/快捷方式链路欢迎反馈问题。
+
+---
+
+## 5 分钟快速开始（开发者）
 
 **前置**：Node.js ≥ 22、已安装 Chrome、本地可用的网络代理（抓取 X 必需）。
 
