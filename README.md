@@ -1,5 +1,6 @@
 # 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
 
+[![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](docs/prd/v0.1.0.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -119,7 +120,7 @@ output/
 | [docs/detailed_design.md](docs/detailed_design.md) | 详细设计：接口契约、防抖状态机、免 Token 会话捕获、模型端点字典 |
 | [docs/vibe-coding-log.md](docs/vibe-coding-log.md) | 开发演进复盘与真实踩坑记录 |
 | [docs/design-system.md](docs/design-system.md) | 暖色编辑杂志风 UI 设计系统（可移植到其他项目） |
-| [docs/prd/](docs/prd/) | 版本化产品需求：v1.0 MVP / v1.1 工作台 / v1.2 纯阅读 / v2.0 路线图 |
+| [docs/prd/](docs/prd/) | 版本化产品需求：v0.1.0 已交付规格 / v0.2.0 演进路线图 |
 
 参与开发前，请先阅读 [CLAUDE.md](CLAUDE.md)（工程宪法与 AI 协同基线）。
 

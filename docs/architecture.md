@@ -1,7 +1,8 @@
 # Xtract 系统总体架构设计文档 (System Architecture Document)
 
-> **文档版本**：v1.0.0  
-> **更新时间**：2026-09-27  
+> **文档修订**：r2（本文档自身修订号，与产品版本相互独立）  
+> **对齐产品版本**：v0.1.0  
+> **更新时间**：2026-10-01  
 > **项目定位**：Xtract - 基于真实浏览器透明网络流拦截的高保真 X（Twitter）全景情报自动化挖掘与多大模型结构化研报系统。
 
 ---
@@ -33,7 +34,7 @@
 ```mermaid
 flowchart TD
     subgraph UI ["1. 交互与展示层 (Presentation Layer)"]
-        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 零静默流量视频播放器 / 原生 TweetMarkdown 专栏排版 / 设置中心"]
+        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 零静默流量视频播放器 / 原生 TweetMarkdown 专栏排版 / 设置中心\n(views/studio/ 下按职责拆分为纯函数层 + 编排 hook + 6 个展示组件)"]
         CLI["src/main/index.ts (Commander CLI & GUI 分发器)"]
         AUTH_UI["原生登录视窗 (Electron Session / 凭据自动捕获)"]
         MD_VIEW["Markdown 研报 / Page Bundle 离线推文文档"]
@@ -82,7 +83,7 @@ flowchart TD
 
 | 架构层级 | 核心模块 | 职责与边界 |
 | :--- | :--- | :--- |
-| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、全网搜索、博主追踪、X 列表四维情报；内嵌 `TweetVideoPlayer` 实现免落盘流式播放与防盗链代理穿透；<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
+| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`（纯布局容器，158 行）<br>`src/renderer/src/views/studio/`（9 个职责单一模块）<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、全网搜索、博主追踪、X 列表四维情报。<br>**模块划分**：`logic.ts`（纯函数层，禁止 React 依赖）、`formatters.tsx`（展示格式化）、`useStudioData.ts`（状态与业务编排）、`StudioDataSourceBar` / `TweetListPane` / `TweetDetailPane` / `TweetVideoPlayer` / `BatchActions` / `ImageLightbox`（展示组件）。<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
 | **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、严格数量约束（`--limit` 截断与提前退出）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
 | **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、视频 MP4 高清直链、X 专栏长文并抽离广告。 |
 | **4. 模型调度层** | `src/main/llm/index.ts`<br>`src/main/pipeline/summarizer.ts` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的原生流式支持，负责 Prompt 组装与研报渲染。 |

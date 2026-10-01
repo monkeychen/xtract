@@ -1,6 +1,6 @@
 {
   "name": "xtract",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Production-grade X (Twitter) intelligence radar & AI digest.",
   "main": "dist-electron/main/index.js",
   "type": "module",

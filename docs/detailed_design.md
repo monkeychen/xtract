@@ -1,7 +1,8 @@
 # Xtract 系统详细设计与核心机制文档 (Detailed Design Document)
 
-> **文档版本**：v1.0.0  
-> **更新时间**：2026-09-27  
+> **文档修订**：r2（本文档自身修订号，与产品版本相互独立）  
+> **对齐产品版本**：v0.1.0  
+> **更新时间**：2026-10-01  
 > **面向对象**：核心开发人员、系统维护者与扩展接入者。
 
 ---
@@ -370,7 +371,7 @@ CREATE INDEX IF NOT EXISTS idx_tweets_list_id ON tweets(list_id);
    - 提取推文 payload 中的 `entities.urls`（包含 `url`、`expanded_url`、`display_url`）与 `entities.media`（包含附件媒体短链）；
    - 正文尾缀媒体短链剔除：使用严格正则 `/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g` 自动修剪仅作为媒体展示的末尾无意义链接；
    - 严格边界外链替换：针对正文中夹杂在汉字、英文之间的外部短链，使用无侵蚀正则将 `https://t.co/xxx` 转换为 `[display_url](expanded_url)` Markdown 标准格式，杜绝 `\S+` 贪婪匹配误吞中文后续文字；
-2. **渲染与交互层 (`StudioView.tsx`)**：
+2. **渲染与交互层 (`views/studio/formatters.tsx` + `TweetDetailPane.tsx`)**：
    - 实现 `renderFormattedTweetText` 富文本分词器，优先捕获 Markdown 链接 `[label](url)`，其次捕获标准 HTTP/HTTPS 裸 URL；
    - 渲染为具有现代毛玻璃对比度的超链接胶囊/文字，支持鼠标 hover 悬停下划线与 `↗` 标识，点击无缝调用 `api.openExternal(url)` 唤起系统浏览器；
 3. **数据库存储与导出层 (`storage/index.ts`)**：
