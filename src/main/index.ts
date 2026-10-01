@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, CommanderError } from 'commander';
 import { Config } from './config.js';
 import { Storage } from './storage/index.js';
 import { XClient } from './client/index.js';
@@ -57,6 +57,10 @@ if (isCLI) {
     .name('xtract')
     .description('Production-grade X (Twitter) intelligence radar & AI digest.')
     .version(cliVersion())
+    // 显式控制流：version/help/选项错误以异常形式交回我们处理，
+    // 不依赖 process.exit 的隐式终止（CI 上实测存在 exit 不生效的环境，
+    // 曾导致 `--version` 输出后继续执行 default 抓取流水线）
+    .exitOverride()
     // Actions & Workflows
     .option('--check-auth', '验证 X Cookie 凭证或本地会话是否有效')
     .option('--trends', '查看全网热门趋势榜单看板')
@@ -127,6 +131,15 @@ if (isCLI) {
     const client = new XClient(timeout);
     const pipeline = new Pipeline(storage, client);
 
+    // 统一收尾：设置退出码 → 给异步 stdout/stderr 一个 flush 窗口 → 强制退出。
+    // 不裸调 process.exit（隐式终止不可靠），也不纯靠事件循环排空（keepalive 句柄可能挂住）。
+    const finish = (code: number) => {
+      process.exitCode = code;
+      const t = setTimeout(() => process.exit(code), 50);
+      // 若事件循环已排空则自然退出，timer 不阻止进程结束
+      (t as any).unref?.();
+    };
+
     try {
       // 1. Auth verification
       if (options.checkAuth) {
@@ -138,7 +151,8 @@ if (isCLI) {
             `🎉 认证成功！会话有效：${auth.name} (@${auth.screen_name})\n`
           );
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 3. List stored tweets
@@ -158,7 +172,8 @@ if (isCLI) {
             process.stdout.write(formatTweetTable(tweets, title, cmdHint) + '\n');
           }
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 4. View single tweet
@@ -217,7 +232,8 @@ if (isCLI) {
             );
           }
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 4.5 Delete tweets (single / batch by IDs / filter-based)
@@ -265,7 +281,8 @@ if (isCLI) {
           } else {
             process.stdout.write('🔍 未检索到符合条件的推文，无需删除。\n');
           }
-          process.exit(0);
+          finish(0);
+        return;
         }
 
         if (dryRun) {
@@ -287,7 +304,8 @@ if (isCLI) {
             }
             process.stdout.write('ℹ️ 演练模式未执行实际删除。添加 -y 可直接执行删除。\n');
           }
-          process.exit(0);
+          finish(0);
+        return;
         }
 
         // Confirmation if not -y and interactive
@@ -303,7 +321,8 @@ if (isCLI) {
           rl.close();
           if (answer.trim().toLowerCase() !== 'y') {
             process.stdout.write('🚫 操作已取消。\n');
-            process.exit(0);
+            finish(0);
+        return;
           }
         }
 
@@ -319,7 +338,8 @@ if (isCLI) {
             `✅ 成功删除 ${result.deletedCount} 篇推文记录，清理了 ${result.deletedDirs.length} 个本地目录与 ${result.deletedFiles.length} 个文件。\n`
           );
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 4.8 Batch export by IDs (Page Bundle per tweet, mirrors GUI 批量导出)
@@ -353,7 +373,8 @@ if (isCLI) {
             process.stdout.write(`🎉 批量导出完成：成功导出 ${result.exported.length} 篇推文。\n`);
           }
         }
-        process.exit(result.exported.length === 0 && result.failed.length > 0 ? 1 : 0);
+        finish(result.exported.length === 0 && result.failed.length > 0 ? 1 : 0);
+        return;
       }
 
       // 5. Standalone export
@@ -377,7 +398,8 @@ if (isCLI) {
         } else {
           process.stdout.write(`🎉 推文清单已导出为 Markdown 文档: ${filePath}\n`);
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 6. Trends radar
@@ -392,7 +414,8 @@ if (isCLI) {
         } else {
           process.stdout.write(formatTrendsTable(trends, `X 全网实时趋势 (${options.category})`, cmdHint));
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 7. Trends digest
@@ -413,7 +436,8 @@ if (isCLI) {
         } else if (reportFile) {
           process.stdout.write(`🎉 全网趋势深度研报已生成: ${reportFile}\n`);
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 8. Search
@@ -438,7 +462,8 @@ if (isCLI) {
             minRetweets,
           });
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 9. User timeline
@@ -449,7 +474,8 @@ if (isCLI) {
         } else {
           process.stdout.write(formatTweetTable(tweets, `博主 @${options.user} 推文`, cmdHint));
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 10. List timeline
@@ -460,7 +486,8 @@ if (isCLI) {
         } else {
           process.stdout.write(formatTweetTable(tweets, `X 列表推文`, cmdHint));
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 11. Fetch only
@@ -475,7 +502,8 @@ if (isCLI) {
         } else {
           process.stdout.write(`✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条\n`);
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 12. Report only
@@ -493,7 +521,8 @@ if (isCLI) {
         } else if (reportFile) {
           process.stdout.write(`🎉 早报已生成: ${reportFile}\n`);
         }
-        process.exit(0);
+        finish(0);
+        return;
       }
 
       // 13. Default: Full daily workflow (Fetch -> Store -> Summarize)
@@ -512,20 +541,34 @@ if (isCLI) {
       } else if (reportFile) {
         process.stdout.write(`🎉 早报已生成: ${reportFile}\n`);
       }
-      process.exit(0);
+      finish(0);
+        return;
     } catch (err: any) {
       if (isJson) {
         process.stdout.write(JSON.stringify({ status: 'error', error: err?.message || String(err) }) + '\n');
       } else {
         process.stderr.write(`❌ 执行出错: ${err?.message || err}\n`);
       }
-      process.exit(1);
+      finish(1);
+        return;
     }
   });
 
   Config.detectLocalProxy().then(() => {
     // 传数组时 commander 默认按 from:'node' 再跳过两段，与已解析的 userArgs 冲突
-    program.parse(userArgs, { from: 'user' });
+    try {
+      program.parse(userArgs, { from: 'user' });
+    } catch (err) {
+      if (err instanceof CommanderError) {
+        // exitOverride 生效：--version / --help 已输出到 stdout，选项错误已输出到 stderr，
+        // 按 commander 给定的退出码显式收尾（不隐式依赖 process.exit）
+        process.exitCode = err.exitCode;
+        const t = setTimeout(() => process.exit(err.exitCode), 50);
+        (t as any).unref?.();
+        return;
+      }
+      throw err;
+    }
   });
 } else {
   // Lazy import electron only when launching GUI
