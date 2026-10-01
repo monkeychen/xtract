@@ -3,8 +3,9 @@ import { createServer, type ViteDevServer } from 'vite';
 import { chromium, type Browser, type Page } from 'playwright-core';
 
 // E2E 启动真实 Vite + Chrome，冷启动（尤其 CI runner）远慢于本地：
-// 默认 5s 的 testTimeout 在 CI 上会误杀重交互 Flow（真实发生过），放宽到 20s
-vi.setConfig({ testTimeout: 20_000, hookTimeout: 60_000 });
+// 默认 5s 的 testTimeout 在 CI 上会误杀重交互 Flow（真实发生过），放宽到 20s；
+// beforeAll 里 Vite dev server + Chrome 冷启动在 Windows runner 上可达 60s+
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 120_000 });
 
 describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', () => {
   let server: ViteDevServer;
