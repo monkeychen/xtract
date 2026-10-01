@@ -189,7 +189,13 @@ async function main(): Promise<void> {
       record('无参启动 GUI', false, String(e?.message || e));
     }
   } finally {
-    fs.rmSync(isolatedRoot, { recursive: true, force: true });
+    // Windows 强制文件锁：GUI 的 SQLite 句柄在进程被杀后延迟释放，删除需重试；
+    // 清理失败不影响 smoke 结论（临时目录由操作系统回收）
+    try {
+      fs.rmSync(isolatedRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    } catch {
+      /* ignore */
+    }
   }
 
   const failed = results.filter((r) => !r.ok);

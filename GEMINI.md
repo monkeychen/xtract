@@ -101,7 +101,7 @@ pnpm verify     # 依次执行：pnpm lint && pnpm test && tsc --noEmit && pnpm 
 
 任一环节失败即中断并返回非零退出码。五道门禁的明细：
 1. **代码风格门禁**：`pnpm lint`（ESLint 9 flat config，0 Error）；
-2. **测试套件门禁**：`pnpm test`（覆盖存储、网络嗅探、大模型调度、组件逻辑与 E2E，0 Failed）；
+2. **测试套件门禁**：`pnpm test`（覆盖存储、网络嗅探、大模型调度、组件逻辑与 E2E，0 Failed）；其中 GUI E2E 依赖真实 Vite+Chrome，仅在本地执行（CI 自动排除），CI 上为纯单元/集成门禁；
 3. **静态类型门禁**：`npx tsc --noEmit`（强类型校验，0 Error）；
 4. **构建打包门禁**：`pnpm build`（vite 生产构建 + Electron 主进程/预加载编译，0 Error）；
 5. **打包产物 Smoke 门禁**：`pnpm pack:dir && pnpm smoke`（对真实 Xtract.app 产物验证三种启动形态：无参 GUI 存活、`--version`/`--help` 输出正确、`--list` 打包态读 SQLite；全部子进程注入隔离临时数据目录，绝不触碰用户真实数据）。
