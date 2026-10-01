@@ -16,7 +16,9 @@ asarUnpack:
   - "**/node_modules/better-sqlite3/build/Release/*.node"
   - "**/node_modules/better-sqlite3/**/*"
 
-npmRebuild: true
+# better-sqlite3 v13 在 npm 包内自带全平台 prebuilds（darwin-arm64/x64、win32-x64），
+# 运行时按平台加载，无需 rebuild；开启 npmRebuild 反而会触发 node-gyp 交叉编译并失败
+npmRebuild: false
 
 mac:
   category: public.app-category.productivity
@@ -30,6 +32,22 @@ mac:
   gatekeeperAssess: false
   darkModeSupport: true
   minimumSystemVersion: "12.0.0"
+
+win:
+  # build/icon.png（1024px）由 electron-builder 自动转换为 .ico
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  # 非一键安装：允许用户自选安装目录（per-user 安装无需管理员权限）
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Xtract-Setup-${version}.${ext}
+  createDesktopShortcut: always
 
 dmg:
   title: "Xtract ${version}"

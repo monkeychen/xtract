@@ -1,5 +1,5 @@
 /**
- * 打包后 Smoke Test：对 electron-builder 产物直接做真实启动验证。
+ * 打包后 Smoke Test：对 electron-builder 产物直接做真实启动验证（macOS / Windows）。
  *
  * 回归背景：CLI 进 GUI 的模式判定依赖 argv 结构，开发态测试全部通过也拦不住
  * 「打包后 argv 少一层脚本路径」这类形态差异——只有对真实产物启动才能发现。
@@ -8,6 +8,10 @@
  *   1. 无参           → GUI 进程必须存活（不得误入 CLI、不得崩溃退出）
  *   2. --version/--help → 正确输出版本号与选项清单
  *   3. --list          → 打包态读取 SQLite 成功
+ *
+ * 按当前运行平台自动探测对应产物：
+ *   darwin → release/mac[-arm64]/Xtract.app/Contents/MacOS/Xtract
+ *   win32  → release/win-unpacked/Xtract.exe（NSIS 安装包产出的同源解包目录）
  *
  * 所有子进程均注入隔离的 XTRACT_STORAGE_ROOT 临时目录，绝不触碰用户真实数据。
  */
@@ -30,15 +34,20 @@ interface RunResult {
 const results: Array<{ name: string; ok: boolean; detail: string }> = [];
 
 function findPackagedBinary(): string | null {
-  const candidates = [
-    'release/mac-arm64/Xtract.app/Contents/MacOS/Xtract',
-    'release/mac/Xtract.app/Contents/MacOS/Xtract',
-  ];
+  const candidates =
+    process.platform === 'win32'
+      ? ['release/win-unpacked/Xtract.exe']
+      : ['release/mac-arm64/Xtract.app/Contents/MacOS/Xtract', 'release/mac/Xtract.app/Contents/MacOS/Xtract'];
   for (const rel of candidates) {
     const abs = path.join(projectRoot, rel);
     if (fs.existsSync(abs)) return abs;
   }
   return null;
+}
+
+/** 产物缺失时给出与当前平台匹配的构建指引 */
+function packagingHint(): string {
+  return process.platform === 'win32' ? 'pnpm exec electron-builder --win --publish never' : 'pnpm pack:dir';
 }
 
 function makeIsolatedRoot(): string {
@@ -126,18 +135,18 @@ function record(name: string, ok: boolean, detail: string): void {
 }
 
 async function main(): Promise<void> {
-  if (process.platform !== 'darwin') {
-    process.stdout.write(`⏭️ 非 macOS 平台跳过打包 smoke (platform=${process.platform})\n`);
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    process.stdout.write(`⏭️ 平台暂未支持打包 smoke (platform=${process.platform})\n`);
     process.exit(0);
   }
 
   const pkgVersion = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf-8')).version;
   const binary = findPackagedBinary();
   if (!binary) {
-    process.stdout.write('❌ 未找到打包产物 Xtract.app，请先执行: pnpm pack:dir\n');
+    process.stdout.write(`❌ 未找到打包产物，请先执行: ${packagingHint()}\n`);
     process.exit(1);
   }
-  process.stdout.write(`🧪 打包 Smoke Test → ${binary}\n`);
+  process.stdout.write(`🧪 打包 Smoke Test [${process.platform}] → ${binary}\n`);
 
   const env = { ...process.env };
   delete env.VITE_DEV_SERVER_URL;

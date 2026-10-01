@@ -1,0 +1,86 @@
+name: Release
+
+# 推 v* tag 触发双平台构建并发 GitHub Release；
+# workflow_dispatch 供发版前手动验证流水线（不创建 Release）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # 一个平台失败不取消另一个，便于对照日志
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本取自 package.json 的 packageManager 字段（pnpm@12.6.0），与本地锁文件同源
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 跨平台测试网：Windows 上暴露平台敏感断言，红了必须修，不得跳过
+      - name: Run tests
+        run: pnpm test
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build renderer & electron bundles
+        run: pnpm build
+
+      # macOS：verify 已含 lint/test/tsc/build + pack:dir + smoke，这里再出 DMG 产物
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pnpm verify
+          pnpm exec electron-builder --mac --arm64 --publish never
+
+      # Windows：出 NSIS 安装包（同时产出 win-unpacked 目录），随后对真实 exe 做 smoke
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pnpm exec electron-builder --win --x64 --publish never
+          pnpm smoke
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.exe
+          if-no-files-found: error
+
+  release:
+    # 仅 tag 推送时发布；workflow_dispatch 只做流水线演练
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
