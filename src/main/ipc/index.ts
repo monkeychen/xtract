@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ipcMain, BrowserWindow, shell, dialog } from 'electron';
+import { ipcMain, BrowserWindow, shell, dialog, app } from 'electron';
 import { IPC_CHANNELS } from '../../preload/channels.js';
 import type { StreamEvent, AppConfigView } from '../../preload/index.js';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
 import { importXCredentialsFromBrowser } from '../auth/index.js';
+import { createCliShortcut, runPowerShellForReal } from '../cli/shortcut.js';
+import os from 'node:os';
 import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
 import { isTweetContentIncomplete } from '../client/parser.js';
@@ -63,6 +65,19 @@ export function registerIpcHandlers(
     } catch (err: any) {
       return { success: false, message: `导入登录态时发生意外错误：${err?.message || String(err)}` };
     }
+  });
+
+  // 在 ~/bin 创建 xtract 命令入口（macOS 符号链接 / Windows .cmd shim）。
+  // 仅安装版可用：开发态 execPath 指向 electron 二进制，链接无意义。
+  ipcMain.handle(IPC_CHANNELS.CLI_CREATE_SHORTCUT, async () => {
+    return createCliShortcut({
+      platform: process.platform,
+      execPath: process.execPath,
+      homeDir: os.homedir(),
+      isPackaged: app.isPackaged,
+      shell: process.env.SHELL || '',
+      runPowerShell: runPowerShellForReal,
+    });
   });
 
   // 2. Configuration

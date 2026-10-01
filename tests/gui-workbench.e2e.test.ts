@@ -41,6 +41,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         fetchListCalls: [] as any[],
         searchTweetsCalls: [] as any[],
         savedUserLists: [] as any[],
+        shortcutCalls: [] as any[],
       };
 
       const mockDbTweets = [
@@ -233,6 +234,15 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         ],
         checkAuth: async () => ({ status: 'authenticated', name: 'Developer', screen_name: 'dev' }),
         openLoginWindow: async () => ({ status: 'authenticated' }),
+        createCliShortcut: async () => {
+          (window as any).__recordedCalls.shortcutCalls.push(true);
+          return {
+            ok: true,
+            pathFixed: true,
+            linkPath: '/Users/dev/bin/xtract',
+            message: '已创建命令：/Users/dev/bin/xtract；PATH 已写入 /Users/dev/.zshrc；新开一个终端窗口即可使用 xtract 命令。',
+          };
+        },
         deleteTweets: async () => ({ deletedCount: 1 }),
         getConfig: async () => ({
           httpProxy: 'http://127.0.0.1:8118',
@@ -893,5 +903,30 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.locator('#image-preview-modal').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await page.locator('#image-preview-modal').waitFor({ state: 'hidden' });
+  });
+
+  it('Flow 19: Settings Drawer CLI Shortcut Creation Feedback (§4.7.2)', async () => {
+    await page.locator('button', { hasText: '⚙️ 设置' }).click();
+    await page.waitForTimeout(300);
+
+    // 命令行区块与创建按钮可见
+    const createBtn = page.locator('button', { hasText: '创建命令行快捷方式' });
+    await createBtn.waitFor({ state: 'visible' });
+
+    await createBtn.click();
+
+    // 按钮进入 loading 态
+    await page.waitForTimeout(150);
+
+    // 状态反馈常驻渲染（成功文案包含命令路径与下一步指引）
+    const feedback = page.locator('#settings-drawer div', { hasText: '已创建命令：/Users/dev/bin/xtract' }).last();
+    await feedback.waitFor({ state: 'visible' });
+
+    const shortcutCalls = await page.evaluate(() => (window as any).__recordedCalls.shortcutCalls);
+    expect(shortcutCalls).toHaveLength(1);
+
+    await page.locator('#settings-drawer .secondary-button').first().click();
+    await page.waitForTimeout(300);
+    expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
   });
 });

@@ -27,6 +27,9 @@ export const IPC_CHANNELS = {
 
   AUTH_IMPORT_FROM_BROWSER: 'auth:import-from-browser',
 
+  // CLI Shortcut
+  CLI_CREATE_SHORTCUT: 'cli:create-shortcut',
+
   // Lists Management
   LISTS_GET_USER_LISTS: 'lists:get-user-lists',
   LISTS_SAVE_USER_LIST: 'lists:save-user-list',

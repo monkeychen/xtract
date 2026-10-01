@@ -18,13 +18,15 @@ Xtract 的桌面应用与命令行是**同一个二进制**，靠是否带参数
 
 **安装用户（DMG，无需 pnpm / Node）：**
 
+推荐在应用内一键创建命令入口：**⚙️ 设置 → 命令行 → 创建命令行快捷方式**。该操作在 `~/bin/xtract` 创建符号链接（Windows 为 `~\bin\xtract.cmd` shim）并自动把命令目录写入 PATH（macOS 写入 zsh/bash 的 rc 文件，Windows 写入用户环境变量），新开终端即可直接使用 `xtract`。
+
+也可直接用完整路径执行：
+
 ```bash
 # 打开「终端」执行；路径按实际安装位置调整
 "/Applications/Xtract.app/Contents/MacOS/Xtract" --help
 
-# 建议建软链，之后直接用 xtract
-sudo ln -sf "/Applications/Xtract.app/Contents/MacOS/Xtract" /usr/local/bin/xtract
-xtract --help
+xtract --help   # 已通过设置页创建快捷方式的话
 ```
 
 > macOS 从 Finder / Dock 启动时会注入 `-psn_*` 进程序列号参数，

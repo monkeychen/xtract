@@ -37,11 +37,29 @@ export interface BrowserImportResult {
   message?: string;
 }
 
+/** 设置页「创建命令行快捷方式」结果。message 为面向用户的中文状态。 */
+export interface CliShortcutResult {
+  ok: boolean;
+  linkPath?: string;
+  targetPath?: string;
+  /** 本次是否执行了 PATH 自动修复 */
+  pathFixed: boolean;
+  /** PATH 未能自动处理时的手动指引 */
+  pathHint?: string;
+  /** 命令入口已存在且指向正确（幂等重复点击） */
+  alreadyExists?: boolean;
+  message: string;
+}
+
 export interface XtractAPI {
   // Auth & Session
   checkAuth: () => Promise<{ isValid: boolean; info?: string; screenName?: string; proxy?: string; error?: string }>;
   /** 从用户日常浏览器读取既有 X 登录态。返回值绝不包含任何 cookie 明文。 */
   importFromBrowser: () => Promise<BrowserImportResult>;
+
+  // CLI Shortcut
+  /** 在 ~/bin 创建 xtract 命令入口（macOS 符号链接 / Windows .cmd shim），仅安装版可用 */
+  createCliShortcut: () => Promise<CliShortcutResult>;
 
   // Configuration
   getConfig: () => Promise<AppConfigView>;
@@ -121,6 +139,7 @@ export interface XtractAPI {
 export const xtractApiImplementation: XtractAPI = {
   checkAuth: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_CHECK),
   importFromBrowser: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_IMPORT_FROM_BROWSER),
+  createCliShortcut: () => ipcRenderer.invoke(IPC_CHANNELS.CLI_CREATE_SHORTCUT),
 
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_GET),
   updateConfig: (updates) => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_UPDATE, updates),

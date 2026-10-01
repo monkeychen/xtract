@@ -41,6 +41,18 @@ class ApiService {
     };
   }
 
+  /** 在 ~/bin 创建 xtract 命令入口（仅安装版可用）。浏览器降级模式下不可用。 */
+  async createCliShortcut() {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.createCliShortcut();
+    }
+    return {
+      ok: false,
+      pathFixed: false,
+      message: '浏览器降级演示模式下不可用，请使用桌面端。',
+    };
+  }
+
   async getConfig(): Promise<AppConfigView> {
     if (this.hasNativeApi()) {
       return window.xtractAPI.getConfig();

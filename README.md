@@ -84,7 +84,11 @@ Xtract 的桌面应用与命令行是**同一个程序**：
 
 ### 安装后用户（无 pnpm / Node）
 
-DMG 安装后即可直接使用，**不需要安装任何开发工具**：
+DMG 安装后即可直接使用，**不需要安装任何开发工具**。
+
+**推荐方式**：打开应用 → ⚙️ 设置 → 「命令行」→ 点击**创建命令行快捷方式**。一键在 `~/bin` 下创建 `xtract` 命令并自动配置 PATH，新开终端即可使用。Windows 安装版同样支持（`~/bin/xtract.cmd` + 用户 PATH）。
+
+也可以直接用完整路径执行：
 
 ```bash
 # 先打开「终端」，再执行（下面两行按需替换为你的实际安装路径）
@@ -93,13 +97,6 @@ XT="/Applications/Xtract.app/Contents/MacOS/Xtract"
 "$XT" --help            # 查看全部选项
 "$XT" --version         # 查看版本
 "$XT" --list 20         # 检索本地已抓推文
-```
-
-嫌路径太长？建一个软链，之后直接用 `xtract`：
-
-```bash
-sudo ln -sf "$XT" /usr/local/bin/xtract
-xtract --list 20
 ```
 
 ### 开发者（源码运行）

@@ -31,6 +31,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string>('');
+  const [isCreatingShortcut, setIsCreatingShortcut] = useState(false);
+  const [shortcutMsg, setShortcutMsg] = useState<string>('');
   const [xAuthToken, setXAuthToken] = useState('');
   const [xCt0, setXCt0] = useState('');
 
@@ -113,6 +115,19 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       setImportMsg(`导入失败：${err?.message || String(err)}`);
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleCreateCliShortcut = async () => {
+    setIsCreatingShortcut(true);
+    setShortcutMsg('');
+    try {
+      const res = await api.createCliShortcut();
+      setShortcutMsg(res.message || (res.ok ? '完成' : '失败'));
+    } catch (err: any) {
+      setShortcutMsg(`创建失败：${err?.message || String(err)}`);
+    } finally {
+      setIsCreatingShortcut(false);
     }
   };
 
@@ -210,6 +225,37 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   style={{ fontSize: '12px' }}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* 命令行快捷方式：为安装版用户提供免 pnpm 的 CLI 入口 */}
+          <div style={{ marginBottom: '24px' }}>
+            <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
+              命令行
+            </h3>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper)' }}>
+              <button
+                className="cta-button"
+                style={{ width: '100%', justifyContent: 'center' }}
+                disabled={isCreatingShortcut}
+                onClick={handleCreateCliShortcut}
+              >
+                <span>{isCreatingShortcut ? '正在创建...' : '创建命令行快捷方式'}</span>
+                <InfoTip text="在 ~/bin 下创建 xtract 命令并自动配置 PATH。创建后在终端直接运行 xtract 即可使用全部 CLI 能力（如 xtract --list）。仅安装版可用。" />
+              </button>
+              {shortcutMsg && (
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: shortcutMsg.startsWith('已创建') || shortcutMsg.startsWith('命令已存在') ? 'var(--green-moss)' : 'var(--amber)',
+                    marginTop: '8px',
+                    lineHeight: '1.5',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {shortcutMsg}
+                </div>
+              )}
             </div>
           </div>
 
