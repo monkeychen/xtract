@@ -6,6 +6,8 @@ import type { StreamEvent, AppConfigView } from '../../preload/index.js';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
 import { XClient } from '../client/index.js';
+import { importXCredentialsFromBrowser } from '../auth/index.js';
+import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
 import { isTweetContentIncomplete } from '../client/parser.js';
 import type { Tweet, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../types.js';
@@ -79,6 +81,16 @@ export function registerIpcHandlers(
       }
     }
   );
+
+  // 从用户日常浏览器读取既有 X 登录态（macOS 专用）
+  // 设计约束：不执行任何自动化登录，只读取用户在真实浏览器中已建立的会话。
+  ipcMain.handle(IPC_CHANNELS.AUTH_IMPORT_FROM_BROWSER, async (): Promise<BrowserImportResult> => {
+    try {
+      return await importXCredentialsFromBrowser();
+    } catch (err: any) {
+      return { success: false, message: `导入登录态时发生意外错误：${err?.message || String(err)}` };
+    }
+  });
 
   // 2. Configuration
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async (): Promise<AppConfigView> => {

@@ -60,6 +60,7 @@ xtract/
 ├── openspec/               # 增量变更规范体系
 ├── src/
 │   ├── main/               # Electron 主进程 & CLI 核心引擎 (client/storage/llm/pipeline)
+│   │   └── auth/           # X 凭证导入：chrome-cookie 纯解密层 + 浏览器登录态编排层
 │   ├── preload/            # 安全隔离桥梁 (ContextBridge)
 │   └── renderer/           # GUI 工作台前端 (React 19 + 手写 CSS 设计令牌，无 UI 框架)
 │       └── src/views/studio/  # 工作台模块：logic/formatters/useStudioData + 6 个展示组件

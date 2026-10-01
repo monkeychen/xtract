@@ -38,6 +38,17 @@ class ApiService {
     return { success: true };
   }
 
+  /** 从用户日常浏览器读取既有 X 登录态（macOS 专用）。浏览器降级模式下不可用。 */
+  async importFromBrowser() {
+    if (this.hasNativeApi()) {
+      return window.xtractAPI.importFromBrowser();
+    }
+    return {
+      success: false,
+      message: '浏览器降级演示模式下不可用，请使用桌面端。',
+    };
+  }
+
   async getConfig(): Promise<AppConfigView> {
     if (this.hasNativeApi()) {
       return window.xtractAPI.getConfig();

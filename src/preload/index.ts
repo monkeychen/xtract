@@ -30,10 +30,19 @@ export interface AppConfigView {
   configEnvPath: string;
 }
 
+export interface BrowserImportResult {
+  success: boolean;
+  importedCount?: number;
+  account?: string;
+  message?: string;
+}
+
 export interface XtractAPI {
   // Auth & Session
   checkAuth: () => Promise<{ isValid: boolean; info?: string; screenName?: string; proxy?: string; error?: string }>;
   login: (service?: 'x' | 'openai' | 'gemini') => Promise<{ success: boolean; error?: string }>;
+  /** 从用户日常浏览器读取既有 X 登录态。返回值绝不包含任何 cookie 明文。 */
+  importFromBrowser: () => Promise<BrowserImportResult>;
 
   // Configuration
   getConfig: () => Promise<AppConfigView>;
@@ -113,6 +122,7 @@ export interface XtractAPI {
 export const xtractApiImplementation: XtractAPI = {
   checkAuth: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_CHECK),
   login: (service = 'x') => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN, service),
+  importFromBrowser: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_IMPORT_FROM_BROWSER),
 
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_GET),
   updateConfig: (updates) => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_UPDATE, updates),

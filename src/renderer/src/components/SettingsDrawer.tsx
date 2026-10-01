@@ -29,6 +29,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string>('');
   const [loginMsg, setLoginMsg] = useState<string | null>(null);
   const [xAuthToken, setXAuthToken] = useState('');
   const [xCt0, setXCt0] = useState('');
@@ -99,6 +101,20 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     setIsSaving(false);
     onConfigUpdated();
     onClose();
+  };
+
+  const handleImportFromBrowser = async () => {
+    setIsImporting(true);
+    setImportMsg('');
+    try {
+      const res = await api.importFromBrowser();
+      setImportMsg(res.message || (res.success ? '导入完成' : '导入失败'));
+      if (res.success) onConfigUpdated();
+    } catch (err: any) {
+      setImportMsg(`导入失败：${err?.message || String(err)}`);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -174,6 +190,38 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               >
                 <span>{isLoggingIn ? '正在登录中（请在弹窗操作）...' : '重新登录'}</span>
               </button>
+              <div style={{ fontSize: '11px', color: 'var(--ink-faint)', marginTop: '6px', lineHeight: '1.5' }}>
+                该方式在弹出的自动化浏览器中完成登录，X 可能会将其判定为机器人而拒绝。
+                若失败，请改用上方「从 Chrome 读取登录态」。
+              </div>
+              {/* 从日常浏览器读取登录态（推荐通道：登录动作由真实浏览器完成，不与 X 的自动化风控对抗） */}
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--line-strong)' }}>
+                <button
+                  className="cta-button"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  disabled={isImporting || isLoggingIn}
+                  onClick={handleImportFromBrowser}
+                >
+                  <span>{isImporting ? '正在读取并验证...' : '从 Chrome 读取登录态'}</span>
+                </button>
+                <div style={{ fontSize: '11px', color: 'var(--ink-faint)', marginTop: '6px', lineHeight: '1.5' }}>
+                  推荐方式。先在日常 Chrome 中登录 x.com，再点此按钮一键导入完整会话（含设备指纹与
+                  Cloudflare 凭证），无需打开开发者工具。仅 macOS 可用。
+                </div>
+                {importMsg && (
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: importMsg.includes('已从浏览器导入') ? 'var(--green-moss)' : 'var(--amber)',
+                      marginTop: '8px',
+                      lineHeight: '1.5',
+                    }}
+                  >
+                    {importMsg}
+                  </div>
+                )}
+              </div>
+
               {loginMsg && (
                 <div style={{ fontSize: '11px', color: loginMsg.includes('成功') ? 'var(--green-moss)' : 'var(--amber)', marginTop: '8px', textAlign: 'center' }}>
                   {loginMsg}

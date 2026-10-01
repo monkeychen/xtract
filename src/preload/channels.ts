@@ -26,6 +26,8 @@ export const IPC_CHANNELS = {
   TWEETS_DELETE: 'tweets:delete',
   TWEETS_EXPORT: 'tweets:export',
 
+  AUTH_IMPORT_FROM_BROWSER: 'auth:import-from-browser',
+
   // Lists Management
   LISTS_GET_USER_LISTS: 'lists:get-user-lists',
   LISTS_SAVE_USER_LIST: 'lists:save-user-list',

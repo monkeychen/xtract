@@ -49,8 +49,8 @@ export async function downloadImage(
   try {
     const fetchOptions: any = {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        // 不设 User-Agent：图片 CDN 不校验 UA（实测有无 UA 均返回 200），
+        // 而任何硬编码的版本号都可能与实际客户端不符。
         Referer: 'https://x.com/',
       },
       signal: controller.signal,

@@ -151,12 +151,13 @@ export class Config {
         content = content.replace(regex, '');
         continue;
       }
-      const regex = new RegExp(`^${key}=.*$`, 'm');
-      if (regex.test(content)) {
-        content = content.replace(regex, `${key}=${value}`);
-      } else {
-        content = content ? `${content.trim()}\n${key}=${value}` : `${key}=${value}`;
-      }
+      // 先移除该键的全部历史行——**含被注释的占位行**。
+      // 原实现用 `^KEY=` 只能命中原有未注释行，遇到 `#KEY=` 占位时会走追加分支，
+      // 导致同一份 config.env 同时存在注释行与新行，解析结果依赖 dotenv 实现细节。
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const strip = new RegExp(`^#?${escaped}=.*$\\n?`, 'gm');
+      content = content.replace(strip, '');
+      content = content ? `${content.trim()}\n${key}=${value}` : `${key}=${value}`;
     }
 
     try {

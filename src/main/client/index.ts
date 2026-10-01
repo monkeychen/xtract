@@ -88,8 +88,6 @@ export class XClient {
   private async setupContext(browser: Browser, timeoutMs?: number): Promise<BrowserContext> {
     const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
     const contextOptions: any = {
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 900 },
       locale: 'zh-CN',
       timezoneId: 'Asia/Shanghai',
@@ -204,8 +202,6 @@ export class XClient {
           headless,
           proxy,
           args,
-          userAgent:
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
           viewport: { width: 1280, height: 900 },
           locale: 'zh-CN',
           timezoneId: 'Asia/Shanghai',
@@ -215,22 +211,29 @@ export class XClient {
           headless,
           proxy,
           args,
-          userAgent:
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
           viewport: { width: 1280, height: 900 },
           locale: 'zh-CN',
           timezoneId: 'Asia/Shanghai',
         });
       }
 
+      // 持久化 profile 自带磁盘 cookie，只有在 profile 中确实没有登录态时才用 .env 兜底。
+      // 此前是无条件注入，会导致刚通过「从浏览器读取登录态」导入的新会话被 .env 中的
+      // 旧 token 覆盖，与 setupContext() 的 storageState 优先策略不一致。
       if (Config.X_AUTH_TOKEN) {
-        const cookies = [
-          { name: 'auth_token', value: Config.X_AUTH_TOKEN, domain: '.x.com', path: '/' },
-        ];
-        if (Config.X_CT0) {
-          cookies.push({ name: 'ct0', value: Config.X_CT0, domain: '.x.com', path: '/' });
+        const hasPersistedSession = await context
+          .cookies(['https://x.com', 'https://twitter.com'])
+          .then((cs) => cs.some((c) => c.name === 'auth_token' && c.value))
+          .catch(() => false);
+        if (!hasPersistedSession) {
+          const cookies = [
+            { name: 'auth_token', value: Config.X_AUTH_TOKEN, domain: '.x.com', path: '/' },
+          ];
+          if (Config.X_CT0) {
+            cookies.push({ name: 'ct0', value: Config.X_CT0, domain: '.x.com', path: '/' });
+          }
+          await context.addCookies(cookies);
         }
-        await context.addCookies(cookies);
       }
 
       await context.addInitScript(
@@ -275,8 +278,6 @@ export class XClient {
     // 1. 创建完全纯净的独立浏览器上下文（绝不注入任何旧 Token 或旧 storageState）
     const browser = await this.launchBrowser(false);
     const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 900 },
       locale: 'zh-CN',
       timezoneId: 'Asia/Shanghai',
