@@ -17,7 +17,10 @@ Xtract 是一款面向专业技术人员与创作者的高信噪比 X (Twitter) 
 | **系统总体架构 (HLD)** | [`docs/architecture.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/architecture.md) | 系统分层、数据流向、IPC 通信契约、安全隔离模型与容灾机制 |
 | **核心机制与详细设计 (LLD)** | [`docs/detailed_design.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/detailed_design.md) | 抓取早停过滤、视频代理穿透、追评受控、级联删除、7大主流模型端点规范 |
 | **研发日志与踩坑复盘** | [`docs/vibe-coding-log.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/vibe-coding-log.md) | 历史攻坚踩坑记录、技术权衡理由与设计复盘 |
-| **外部用户手册** | [`README.md`](file:///Users/chenzhian/workspace/ai/xtract/README.md) | 面向外部用户的安装、配置、开箱上手指南与功能特性展示 |
+| **外部用户手册** | [`README.md`](file:///Users/chenzhian/workspace/ai/xtract/README.md) | 项目总览、5 分钟快速开始、CLI 速查表与文档索引（保持精简，细节一律下沉到下方 docs/） |
+| **CLI 命令与工作流** | [`docs/cli-reference.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/cli-reference.md) | 全部命令行参数详解、用法示例与典型工作流场景 |
+| **凭据与模型配置** | [`docs/configuration.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/configuration.md) | X 会话凭据、网络代理、7 大模型端点解析规则与双轨认证 |
+| **部署与运维** | [`docs/operations.md`](file:///Users/chenzhian/workspace/ai/xtract/docs/operations.md) | 定时任务（cron / launchd）、存储架构与数据目录规范、FAQ |
 | **研发流程与交付规约** | [`dev-workflow.md`](file:///Users/chenzhian/workspace/ai/xtract/dev-workflow.md) | Vibe-Coding 5步研发闭环、门禁检查流程与 Git 规范 |
 | **敏捷功能演进** | [`openspec/`](file:///Users/chenzhian/workspace/ai/xtract/openspec/) | 每个增量变更的 Proposal、Delta Spec、Technical Design 与 Tasks |
 
@@ -46,16 +49,20 @@ Xtract 是一款面向专业技术人员与创作者的高信噪比 X (Twitter) 
 xtract/
 ├── README.md               # 外部用户说明书与快速上手
 ├── dev-workflow.md         # 研发流程与门禁规范
-├── docs/                   # 架构、详细设计、产品版本库与复盘沉淀
+├── docs/                   # 架构、详细设计、用户文档、产品版本库与复盘沉淀
 │   ├── prd/                # 版本化 PRD 体系 (README 进度大盘, v1.0, v1.1, v1.2, v2.0)
 │   ├── architecture.md     # 高层架构 (HLD)
 │   ├── detailed_design.md  # 详细设计 (LLD)
+│   ├── cli-reference.md    # CLI 完整命令手册与工作流场景
+│   ├── configuration.md    # 凭据、代理与多模型端点配置
+│   ├── operations.md       # 定时任务、存储架构与 FAQ
 │   └── vibe-coding-log.md  # 研发踩坑与复盘日志
 ├── openspec/               # 增量变更规范体系
 ├── src/
 │   ├── main/               # Electron 主进程 & CLI 核心引擎 (client/storage/llm/pipeline)
 │   ├── preload/            # 安全隔离桥梁 (ContextBridge)
 │   └── renderer/           # GUI 工作台前端 (React 19 + 手写 CSS 设计令牌，无 UI 框架)
+│       └── src/views/studio/  # 工作台模块：logic/formatters/useStudioData + 6 个展示组件
 ├── data/                   # 本地数据持久化（Git 忽略：tweets.db, auth_state.json）
 └── output/                 # 归档产物（reports/ 早报, {author}/{tweet_id}/ 自包含 Page Bundle）
 ```
