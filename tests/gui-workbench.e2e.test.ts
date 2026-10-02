@@ -377,6 +377,21 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     });
     expect(zoneOrder.inputLeft).toBeGreaterThan(0);
     expect(zoneOrder.inputLeft).toBeLessThan(zoneOrder.buttonLeft);
+
+    // 7. 四个数据源的抓取按钮 label 必须完全一致（§交互一致性）：「抓取最新 N 条」
+    const crawlLabels: string[] = [];
+    for (const chip of ['following', 'user', 'lists', 'search']) {
+      await page.locator(`#chip-source-${chip}`).click();
+      await page.waitForTimeout(150);
+      crawlLabels.push((await page.locator(`#label-crawl-${chip}`).textContent()) ?? '');
+    }
+    expect(new Set(crawlLabels).size).toBe(1);
+    expect(crawlLabels[0]).toContain('抓取最新');
+    expect(crawlLabels[0]).toContain('20');
+
+    // 恢复到关注流，保持本 Flow 结束状态与原先一致（后续 Flow 依赖此状态）
+    await page.locator('#chip-source-following').click();
+    await page.waitForTimeout(150);
   });
 
   it('Flow 3: Split-action Crawl Button Dropdown Selection (20 / 50 / 100)', async () => {
@@ -395,7 +410,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(200);
 
     const mainBtnText = await page.locator('#label-crawl-following').textContent();
-    expect(mainBtnText).toContain('50条');
+    expect(mainBtnText).toContain('抓取最新');
+    expect(mainBtnText).toContain('50');
   });
 
   it('Flow 4: Signal-to-Noise Ratio (SNR) Filter Pills', async () => {
@@ -778,7 +794,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     // 显式把抓取条数设为 50：crawlLimit 默认值为 20，直接断言易与默认值混淆
     await page.locator('#zone-following button.split-btn-arrow').click();
     await page.locator('#menu-following.split-btn-menu.open .split-btn-item', { hasText: '50 条' }).click();
-    await expectTextToBe(page.locator('#label-crawl-following'), '🔄 抓取最新 (50条)');
+    await expectTextToBe(page.locator('#label-crawl-following'), '🔄 抓取最新 50 条');
 
     await page.locator('#zone-following button.split-btn-main').click();
 

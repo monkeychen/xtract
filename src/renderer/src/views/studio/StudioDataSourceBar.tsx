@@ -115,7 +115,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
                 <span id="label-crawl-following">
                   {isLoading && crawlProgress?.source === 'following'
                     ? '⏳ 正在抓取...'
-                    : `🔄 抓取最新 (${crawlLimit}条)`}
+                    : `🔄 抓取最新 ${crawlLimit} 条`}
                 </span>
               </button>
               <button
@@ -188,8 +188,8 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               >
                 <span id="label-crawl-search">
                   {isLoading && crawlProgress?.source === 'search'
-                    ? '⏳ 搜索中...'
-                    : `搜索抓取 (${crawlLimit}条)`}
+                    ? '⏳ 正在抓取...'
+                    : `🔄 抓取最新 ${crawlLimit} 条`}
                 </span>
               </button>
               <button
@@ -263,8 +263,8 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               >
                 <span id="label-crawl-user">
                   {isLoading && crawlProgress?.source === 'user'
-                    ? '⏳ 抓取中...'
-                    : `抓取推文 (${crawlLimit}条)`}
+                    ? '⏳ 正在抓取...'
+                    : `🔄 抓取最新 ${crawlLimit} 条`}
                 </span>
               </button>
               <button
@@ -378,8 +378,8 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               >
                 <span id="label-crawl-lists">
                   {isLoading && crawlProgress?.source === 'lists'
-                    ? '⏳ 抓取中...'
-                    : `🔄 抓取最新 (${crawlLimit}条)`}
+                    ? '⏳ 正在抓取...'
+                    : `🔄 抓取最新 ${crawlLimit} 条`}
                 </span>
               </button>
               <button
