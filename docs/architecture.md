@@ -83,7 +83,7 @@ flowchart TD
 
 | 架构层级 | 核心模块 | 职责与边界 |
 | :--- | :--- | :--- |
-| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`（纯布局容器，158 行）<br>`src/renderer/src/views/studio/`（9 个职责单一模块）<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、全网搜索、博主追踪、X 列表四维情报。<br>**模块划分**：`logic.ts`（纯函数层，禁止 React 依赖）、`formatters.tsx`（展示格式化）、`useStudioData.ts`（状态与业务编排）、`StudioDataSourceBar` / `TweetListPane` / `TweetDetailPane` / `TweetVideoPlayer` / `BatchActions` / `ImageLightbox`（展示组件）。<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
+| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`（纯布局容器，158 行）<br>`src/renderer/src/views/studio/`（9 个职责单一模块）<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、博主追踪、X 列表、全网搜索四维情报。<br>**模块划分**：`logic.ts`（纯函数层，禁止 React 依赖）、`formatters.tsx`（展示格式化）、`useStudioData.ts`（状态与业务编排）、`StudioDataSourceBar` / `TweetListPane` / `TweetDetailPane` / `TweetVideoPlayer` / `BatchActions` / `ImageLightbox`（展示组件）。<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
 | **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、严格数量约束（`--limit` 截断与提前退出）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
 | **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、视频 MP4 高清直链、X 专栏长文并抽离广告。 |
 | **4. 模型调度层** | `src/main/llm/index.ts`<br>`src/main/pipeline/summarizer.ts` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的原生流式支持，负责 Prompt 组装与研报渲染。 |

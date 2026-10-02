@@ -38,8 +38,10 @@ export const InfoTip: React.FC<InfoTipProps> = ({ text, label = '说明' }) => {
 
   return (
     <span ref={ref} style={{ position: 'relative', display: 'inline-flex', marginLeft: '5px', verticalAlign: 'middle' }}>
-      <button
-        type="button"
+      {/* 用 span role=button 而非真 button：InfoTip 常嵌在 cta-button 内，HTML 禁止 button 嵌套 */}
+      <span
+        role="button"
+        tabIndex={0}
         className="info-tip-trigger"
         aria-label={`${label}：${text}`}
         aria-expanded={open}
@@ -53,9 +55,16 @@ export const InfoTip: React.FC<InfoTipProps> = ({ text, label = '说明' }) => {
           e.stopPropagation();
           setOpen((v) => !v);
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }
+        }}
       >
         i
-      </button>
+      </span>
       {open && (
         <span className="info-tip-bubble" role="tooltip">
           {text}

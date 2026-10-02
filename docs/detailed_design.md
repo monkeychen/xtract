@@ -258,6 +258,11 @@ sequenceDiagram
 2. **提前终止滚动 (Early Termination)**：在向下滚动加载循环中，动态统计已解析推文数量。一旦 `countSoFar >= limit`，**立即中断 `for` 循环提前退出**，杜绝无意义的滚动与网络等待，将抓取时间缩短 60% 以上；
 3. **精准切片落库**：最终返回前严格执行 `allTweets.slice(0, limit)`，确保入库条数与前端展示 100% 符合用户选择。
 
+**抓取入库类 IPC 的统一返回契约**（`FetchAndStoreResult`，v0.1.0 起）：
+`fetchUserAndStore` / `fetchListAndStore` / `fetchSearchAndStore` 统一返回 `{ tweets, fetched, inserted, skipped }`——`fetched` 为从 X 拉取的条数，`inserted` / `skipped` 为 `saveTweets` 的真实落库统计（新增 / 主键去重跳过）。IPC 层原样透传给渲染层，完成提示（toast 与进度卡片）必须使用这些真实数字，**严禁用 `fetched` 冒充 `inserted` 或把 `skipped` 写死为 0**。历史上列表源曾因 handler 返回裸数组、前端拿到 `undefined` 统计而提示"入库 13 条"（实为 13 条全部重复），引发用户对数据丢失的误判。
+
+**X 列表滚动加载的停止判据**（`shouldScrollListTimeline` 纯函数）：按「实际捕获的 GraphQL 响应批次数」驱动滚动——批次达到 `ceil(limit/20)` 停；连续 3 屏无新增批次（列表内容到底）提前停；轮数硬上限（目标页数 + 4）兜底。禁止退回固定轮数滚动（慢加载列表会少抓一半以上，真机实测 limit=50 实得 15 条）。
+
 ---
 
 ### 2.7 机制 7：推特视频免落盘流式播放与防盗链穿透架构
