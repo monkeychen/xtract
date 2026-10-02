@@ -22,4 +22,4 @@
 - `src/main/pipeline/index.ts`（返回契约）、`src/main/ipc/index.ts`（三 handler 透传 + 诚实 done 消息）、`src/main/client/index.ts`（滚动判据）、`src/main/index.ts`（CLI 调用点解构）；
 - `src/renderer/`：StudioDataSourceBar（布局/label/placeholder/删提示）、StudioView（props）、InfoTip；
 - 测试：`tests/list-scroll.test.ts`（4 例新增）、E2E 布局顺序与四源 label 一致性断言（19 Flows）；
-- 文档：`docs/detailed_design.md` §2.6（契约与滚动判据）、README/PRD/architecture（源顺序）。
+- 文档：`docs/detailed_design.md` §2.6（契约与滚动判据）、README/architecture（源顺序）、产品规格增量记录于 `docs/prd/v0.1.1.md` §2/§3。

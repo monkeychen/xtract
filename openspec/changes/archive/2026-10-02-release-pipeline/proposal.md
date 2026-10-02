@@ -23,5 +23,5 @@ v0.1.0 为首个双平台发布版本（用户决策：Windows 随 v0.1.0 首发
 ## Impact
 
 - `.github/workflows/release.yml`（新建）、`electron-builder.yml`、`scripts/smoke-packaged.ts`、`package.json`（pack 系列 + packageManager 锁定）；
-- 文档：`docs/operations.md` §10（发版流程 + 本地打包 + 关键配置备忘）、README 下载章节、PRD §4.7.5/4.7.7；
+- 文档：`docs/operations.md` §10（发版流程 + 本地打包 + 关键配置备忘）、README 下载章节、产品规格增量记录于 `docs/prd/v0.1.1.md` §4（发布管线）；
 - v0.1.0 已按此管线发布（tag → 双平台构建 → Release 挂 DMG+EXE）。
