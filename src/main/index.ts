@@ -442,7 +442,7 @@ if (isCLI) {
 
       // 8. Search
       if (options.search) {
-        const tweets = await pipeline.fetchSearchAndStore(options.search, {
+        const { tweets } = await pipeline.fetchSearchAndStore(options.search, {
           searchType: options.searchType,
           limit,
           minLikes,
@@ -468,7 +468,7 @@ if (isCLI) {
 
       // 9. User timeline
       if (options.user) {
-        const tweets = await pipeline.fetchUserAndStore(options.user, limit, timeout);
+        const { tweets } = await pipeline.fetchUserAndStore(options.user, limit, timeout);
         if (isJson) {
           process.stdout.write(JSON.stringify(tweets, null, 2) + '\n');
         } else {
@@ -480,7 +480,7 @@ if (isCLI) {
 
       // 10. List timeline
       if (options.xList) {
-        const tweets = await pipeline.fetchListAndStore(options.xList, limit, timeout);
+        const { tweets } = await pipeline.fetchListAndStore(options.xList, limit, timeout);
         if (isJson) {
           process.stdout.write(JSON.stringify(tweets, null, 2) + '\n');
         } else {

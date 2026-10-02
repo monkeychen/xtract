@@ -69,7 +69,6 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery, jump
         searchQuery={searchQuery}
         selectedList={selectedList}
         streamFilter={streamFilter}
-        totalDbCount={totalDbCount}
         userHandle={userHandle}
         userLists={userLists}
         onSwitchSource={handleSwitchDataSource}

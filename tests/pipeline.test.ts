@@ -129,8 +129,8 @@ describe('Pipeline and Summarizer Modules', () => {
       minRetweets: 10,
     });
 
-    expect(results.length).toBe(1);
-    expect(results[0].tweet_id).toBe('t2');
+    expect(results.tweets.length).toBe(1);
+    expect(results.tweets[0].tweet_id).toBe('t2');
 
     // Clean up
     storage.close();

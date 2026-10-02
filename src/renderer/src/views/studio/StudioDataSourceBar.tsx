@@ -14,7 +14,6 @@ export interface StudioDataSourceBarProps {
   searchQuery: string;
   selectedList: string;
   streamFilter: string;
-  totalDbCount: number;
   userHandle: string;
   userLists: XListInfo[];
   onSwitchSource: (source: DataSource) => void;
@@ -40,7 +39,7 @@ export interface StudioDataSourceBarProps {
  */
 export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
   dataSource, crawlLimit, crawlProgress, customListId, isLoading, isSyncingLists,
-  minLikes, openMenu, searchQuery, selectedList, streamFilter, totalDbCount,
+  minLikes, openMenu, searchQuery, selectedList, streamFilter,
   userHandle, userLists,
   onSwitchSource, onCrawl, onSyncOnlineLists,
   onSearchChange, onUserChange, onStreamFilterChange,
@@ -369,7 +368,6 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
             >
               <span>{isSyncingLists ? '同步中...' : '☁️ 同步'}</span>
             </button>
-            <span style={{ fontSize: '12px', color: 'var(--ink-faint)', whiteSpace: 'nowrap' }}>已存 {totalDbCount} 篇</span>
             <div className="split-btn-group">
               <button
                 className="cta-button split-btn-main"

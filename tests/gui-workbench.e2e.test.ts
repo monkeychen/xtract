@@ -858,6 +858,10 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
       (v) => v.length >= 1
     );
     expect(listCalls[0].listId).toBe('1234567890');
+
+    // 操作区不再显示「已存 N 篇」（那是全库总数，放在列表语境下误导，已删除）
+    const zoneText = await page.locator('#zone-lists').innerText();
+    expect(zoneText).not.toContain('已存');
   });
 
   it('Flow 16: Live Crawl Progress Card Reflects Streaming Events', async () => {

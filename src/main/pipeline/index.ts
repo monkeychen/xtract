@@ -43,6 +43,14 @@ export interface RunTrendsDigestOptions {
   onProgress?: (event: PipelineProgressEvent) => void;
 }
 
+/** 抓取入库类方法的统一返回：推文本体 + 真实落库统计（fetched=拉取数，inserted=新增，skipped=去重跳过） */
+export interface FetchAndStoreResult {
+  tweets: Tweet[];
+  fetched: number;
+  inserted: number;
+  skipped: number;
+}
+
 export interface BatchExportItem {
   tweetId: string;
   filePath: string;
@@ -127,7 +135,7 @@ export class Pipeline {
     username: string,
     limit = 20,
     timeout?: number
-  ): Promise<Tweet[]> {
+  ): Promise<FetchAndStoreResult> {
     const cleanUser = username.replace(/^@/, '').trim();
     process.stderr.write(`⏳ 开始抓取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`);
 
@@ -139,21 +147,23 @@ export class Pipeline {
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条 @${cleanUser} 的推文\n`);
 
+    let inserted = 0;
+    let skipped = 0;
     if (fetchedCount > 0) {
       const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
-      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'user');
+      ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'user'));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
     }
-    return tweets;
+    return { tweets, fetched: fetchedCount, inserted, skipped };
   }
 
   async fetchListAndStore(
     listIdOrUrl: string,
     limit = 20,
     timeout?: number
-  ): Promise<Tweet[]> {
+  ): Promise<FetchAndStoreResult> {
     process.stderr.write(`⏳ 开始抓取 X 列表 (${listIdOrUrl}) 的最新推文（目标 ${limit} 篇）...\n`);
 
     const match = listIdOrUrl.match(/(\d{5,})/);
@@ -173,14 +183,16 @@ export class Pipeline {
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);
 
+    let inserted = 0;
+    let skipped = 0;
     if (fetchedCount > 0) {
       const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
-      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'list', cleanListId);
+      ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'list', cleanListId));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
     }
-    return tweets;
+    return { tweets, fetched: fetchedCount, inserted, skipped };
   }
 
   async fetchTweetAndStore(
@@ -242,7 +254,7 @@ export class Pipeline {
       minRetweets?: number;
       timeout?: number;
     }
-  ): Promise<Tweet[]> {
+  ): Promise<FetchAndStoreResult> {
     const searchType = options?.searchType || 'live';
     const limit = options?.limit || 20;
     const minLikes = options?.minLikes || 0;
@@ -271,15 +283,17 @@ export class Pipeline {
       );
     }
 
+    let inserted = 0;
+    let skipped = 0;
     if (fetchedCount > 0) {
       const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
-      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'search');
+      ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'search'));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
       );
     }
 
-    return filtered;
+    return { tweets: filtered, fetched: fetchedCount, inserted, skipped };
   }
 
   async generateReport(options?: GenerateReportOptions): Promise<string | null> {
@@ -451,13 +465,15 @@ export class Pipeline {
 
       let topicTweets: Tweet[] = [];
       try {
-        topicTweets = await this.fetchSearchAndStore(targetQuery, {
-          searchType: 'top',
-          limit: 10,
-          minLikes,
-          minRetweets,
-          timeout: timeout || 25,
-        });
+        topicTweets = (
+          await this.fetchSearchAndStore(targetQuery, {
+            searchType: 'top',
+            limit: 10,
+            minLikes,
+            minRetweets,
+            timeout: timeout || 25,
+          })
+        ).tweets;
       } catch (err: any) {
         process.stderr.write(`⚠️ 话题【${topicName}】推文抓取受限: ${err?.message || err}，将使用基础趋势信息...\n`);
       }

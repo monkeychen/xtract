@@ -382,9 +382,13 @@ export function registerIpcHandlers(
       sendEv('fetch', `🌐 正在启动双轨机制检索博主 @${cleanUser} 推文流...`, 20);
       try {
         sendEv('fetch', `⏳ 正在通过实时搜索流与主页双轨拦截 @${cleanUser} 的最新推文...`, 50);
-        const tweets = await pipeline.fetchUserAndStore(cleanUser, args.limit);
-        sendEv('done', `✓ 抓取完成：成功拉取并入库 ${tweets.length} 条 @${cleanUser} 的推文`, 100);
-        return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+        const result = await pipeline.fetchUserAndStore(cleanUser, args.limit);
+        sendEv(
+          'done',
+          `✓ 抓取完成：拉取 ${result.fetched} 条 @${cleanUser} 的推文，新增入库 ${result.inserted} 条，跳过重复 ${result.skipped} 条`,
+          100
+        );
+        return { tweets: result.tweets, fetched: result.fetched, inserted: result.inserted, skipped: result.skipped };
       } catch (err: any) {
         sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
         throw err;
@@ -412,9 +416,13 @@ export function registerIpcHandlers(
       sendEv('fetch', `🌐 正在打开 X 列表并挂载网络流嗅探器...`, 25);
       try {
         sendEv('fetch', `⏳ 正在拦截列表最新推文并同步本地元数据...`, 55);
-        const tweets = await pipeline.fetchListAndStore(args.listId, args.limit);
-        sendEv('done', `✓ 抓取完成：成功拉取并入库 ${tweets.length} 条列表推文`, 100);
-        return { fetched: tweets.length, inserted: tweets.length, skipped: 0 };
+        const result = await pipeline.fetchListAndStore(args.listId, args.limit);
+        sendEv(
+          'done',
+          `✓ 抓取完成：拉取 ${result.fetched} 条列表推文，新增入库 ${result.inserted} 条，跳过重复 ${result.skipped} 条`,
+          100
+        );
+        return { tweets: result.tweets, fetched: result.fetched, inserted: result.inserted, skipped: result.skipped };
       } catch (err: any) {
         sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
         throw err;
@@ -451,14 +459,18 @@ export function registerIpcHandlers(
       sendEv('fetch', `🌐 正在向 X 发起全网实时搜索「${args.query}」...`, 25);
       try {
         sendEv('fetch', `⏳ 正在拦截 SearchTimeline 数据包并进行互动指标过滤...`, 60);
-        const tweets = await pipeline.fetchSearchAndStore(args.query, {
+        const result = await pipeline.fetchSearchAndStore(args.query, {
           searchType: args.searchType,
           limit: args.limit,
           minLikes: args.minLikes,
           minRetweets: args.minRetweets,
         });
-        sendEv('done', `✓ 搜索完成：符合条件的推文共 ${tweets.length} 条已更新入库`, 100);
-        return { count: tweets.length, tweets };
+        sendEv(
+          'done',
+          `✓ 搜索完成：拉取 ${result.fetched} 条，新增入库 ${result.inserted} 条，跳过重复 ${result.skipped} 条`,
+          100
+        );
+        return { count: result.fetched, tweets: result.tweets, fetched: result.fetched, inserted: result.inserted, skipped: result.skipped };
       } catch (err: any) {
         sendEv('error', `❌ 搜索抓取失败: ${err?.message || String(err)}`, 100);
         throw err;

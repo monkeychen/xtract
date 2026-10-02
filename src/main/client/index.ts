@@ -26,6 +26,29 @@ export {
   isTweetContentIncomplete,
 };
 
+/**
+ * X 列表滚动加载的停止判据（纯函数，便于单测）。
+ *
+ * 历史缺陷：固定滚动 ceil(limit/20) 轮、每轮仅 2500px——列表内容加载慢时
+ * GraphQL 流只捕获到十几条就停手，limit=50 实得 15 条（真机实测）。
+ * 改为按「实际捕获的 GraphQL 响应批次数」驱动，三重停止条件：
+ *   1. 捕获批次数 ≥ 目标页数（limit 已吃满）
+ *   2. 连续 3 轮无新增批次（列表已到底，提前收手）
+ *   3. 轮数硬上限（防死循环护栏）
+ */
+export function shouldScrollListTimeline(params: {
+  capturedBatches: number;
+  targetBatches: number;
+  stagnantRounds: number;
+  round: number;
+  maxRounds: number;
+}): boolean {
+  if (params.capturedBatches >= params.targetBatches) return false;
+  if (params.stagnantRounds >= 3) return false;
+  if (params.round > params.maxRounds) return false;
+  return true;
+}
+
 export interface FetchTimelineOptions {
   limit?: number;
   maxPages?: number;
@@ -868,11 +891,30 @@ export class XClient {
         );
       }
 
+      // 按实际捕获量驱动滚动（旧版固定轮数在列表加载慢时会少抓一半以上）：
+      // 捕获批次够目标页数 / 连续 3 轮无新增 / 硬上限，三者任一即停
       const pagesNeeded = Math.max(1, Math.ceil(limit / 20));
-      for (let pIdx = 1; pIdx < pagesNeeded; pIdx++) {
-        process.stderr.write(`📜 正在向下滚动加载第 ${pIdx + 1} 页...\n`);
+      const maxRounds = pagesNeeded + 4;
+      let lastSeenBatches = capturedInstructions.length;
+      let stagnantRounds = 0;
+      for (let round = 1; shouldScrollListTimeline({
+        capturedBatches: capturedInstructions.length,
+        targetBatches: pagesNeeded,
+        stagnantRounds,
+        round,
+        maxRounds,
+      }); round++) {
+        process.stderr.write(
+          `📜 已捕获 ${capturedInstructions.length}/${pagesNeeded} 批，继续向下滚动加载第 ${round + 1} 屏...\n`
+        );
         await page.evaluate(() => window.scrollBy(0, 2500));
         await new Promise((r) => setTimeout(r, pageDelay * 1000));
+        if (capturedInstructions.length === lastSeenBatches) {
+          stagnantRounds++;
+        } else {
+          stagnantRounds = 0;
+        }
+        lastSeenBatches = capturedInstructions.length;
       }
 
       await new Promise((r) => setTimeout(r, 1500));
