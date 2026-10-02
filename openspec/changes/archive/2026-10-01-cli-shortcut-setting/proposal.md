@@ -7,8 +7,8 @@ dmg 安装用户没有 pnpm/Node，此前用 CLI 只能敲完整路径或手工 
 ## What Changes
 
 - **新增 `src/main/cli/shortcut.ts`**：平台差异纯函数（`getShortcutSpec` / `buildCmdShim` / `rcNeedsPathFix`）+ 跨平台编排（`createCliShortcut`）：
-  - macOS：`~/bin/xtract` 符号链接 → `process.execPath`；PATH 条目自动写入 shell rc（`$SHELL` 识别 zsh/bash，其余降级为手动指引）；
-  - Windows：`~/bin/xtract.cmd` shim（`@echo off` + 引号路径 + `%*`；符号链接需管理员权限，shim 是 npm/pip 的业界做法）；用户 PATH 经 PowerShell `[Environment]::SetEnvironmentVariable` 写注册表（`%USERPROFILE%` 不展开，必须传实际路径）；
+  - macOS：`~/bin/xtract` bash shim（`exec` 指向 `process.execPath`）+ PATH 条目自动写入 shell rc（`$SHELL` 识别 zsh/bash，其余降级为手动指引）。**变更记录（真机验收后）**：原实现为符号链接，实测软链启动会让 Electron 按软链目录定位 Helper.app 而 FATAL 刷屏，已改为 shim 并支持旧软链自动迁移；
+  - Windows：`~/bin/xtract.cmd` shim（`@echo off` + 引号路径 + `%*`）；用户 PATH 经 PowerShell `[Environment]::SetEnvironmentVariable` 写注册表（`%USERPROFILE%` 不展开，必须传实际路径）；
   - 幂等：已存在且指向正确 → `alreadyExists`；被占用 → 报冲突不覆盖；PATH 条目已存在不重复追加；
   - 仅安装版可用（`app.isPackaged`），开发态明确提示。
 - **IPC `cli:create-shortcut`**：main 组装 deps（`process.execPath` / `os.homedir()` / `app.isPackaged` / `$SHELL`）调用编排层。

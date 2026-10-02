@@ -3,7 +3,7 @@
 ## 1. 核心编排层（TDD）
 
 - [x] 1.1 `tests/cli-shortcut.test.ts` 先行红灯：平台 spec、cmd shim、rc 幂等判定、真实 fs 编排、PowerShell stub
-- [x] 1.2 `getShortcutSpec`：darwin 软链 spec（$SHELL → .zshrc/.bashrc/null）；win32 shim spec（`path.win32` 确定性拼接）；其余平台 null
+- [x] 1.2 `getShortcutSpec`：darwin shim spec（$SHELL → .zshrc/.bashrc/null；真机验收后由符号链接改为 bash shim，旧软链自动迁移）；win32 shim spec（`path.win32` 确定性拼接）；其余平台 null
 - [x] 1.3 `createCliShortcut`：开发态拒绝 → mkdir → 创建入口（lstat 存在性判断，existsSync 对悬空软链返回 false 的陷阱）→ PATH 修复 → 中文状态汇总
 - [x] 1.4 win32 PowerShell script：`GetEnvironmentVariable('Path','User')` + `-notlike` 幂等 + 失败降级 pathHint
 - [x] 1.5 19/19 全绿

@@ -228,6 +228,34 @@ flowchart TD
 
 ---
 
+### 坑 13：打包态 argv 形态差异让 dmg 用户完全进不了 CLI（P0）
+- **现象**：`argv.length > 2` 的 CLI/GUI 判定在开发态恰好成立，打包后 argv 少一层脚本路径（`[Xtract, --list]` 长度为 2），dmg 用户的 CLI 完全失效，且 277 个开发态测试全部通过也拦不住。
+- **解法**：`resolveUserArgs` 按 `process.defaultApp` 区分三种运行形态（纯 Node / Electron 开发 / Electron 打包），过滤 `-psn_*` 与 Chromium 运行时开关（`--remote-debugging-*`/`--inspect*`，否则 CDP 调试会把应用拽进 CLI 再以 unknown option 崩溃）。
+- **教训**：**开发态验证的结论只对开发态成立**。凡是依赖进程/宿主形态的逻辑，必须对真实产物做 smoke——这正是第 5 道门禁（打包 smoke）的由来。
+
+### 坑 14：process.exit 在 CI 的 Electron 环境下不生效
+- **现象**：GitHub Actions 的 mac runner 上，打包产物的 `xtract --version` 打印版本号后**没有退出**，掉进 default 分支执行完整抓取流水线，最终以 error 退出。本地同产物无法复现。
+- **解法**：CLI 全面改为显式控制流——`program.exitOverride()` 让 version/help/选项错误以 `CommanderError` 交回；所有命令分支经统一的 `finish(code)`（设置 `process.exitCode` → 50ms flush 窗口 → 强制退出）后立即 `return`，任何分支不可能串到下一个。
+- **教训**：`process.exit` 的隐式终止是「应该生效」而非「必然生效」；管道型 CLI 的分支控制流必须显式闭合，否则 `--help` 触发抓取这类破坏性行为随时可能发生。
+
+### 坑 15：符号链接启动 Electron 应用找不到 Helper.app
+- **现象**：`~/bin/xtract` 软链到 `.app/Contents/MacOS/Xtract` 后，每次 CLI 调用刷屏 `FATAL: Unable to find helper app` 与 GPU/network service 错误。
+- **根因**：Electron 按进程可执行文件所在目录定位 Helper app——软链启动时解析到 `~/bin/`，那里当然没有 Frameworks。
+- **解法**：macOS 快捷方式与 Windows 一致改用 bash shim（`exec "<真实路径>" "$@"`），并在再次点击时自动把旧软链迁移为 shim。
+
+### 坑 16：tsx 转译注入 `__name` 导致 Playwright initScript 静默崩溃
+- **现象**：截图脚本的 mock 桥经 `page.addInitScript(fn)` 注入后完全不生效，页面落入降级演示模式；无任何报错，仅能靠 `ReferenceError: __name is not defined` 的 page console 捕获定位。
+- **根因**：tsx（esbuild）转译 TS 函数时注入 `__name` 命名 helper，该 helper 只存在于 Node 侧运行时，浏览器上下文没有。
+- **解法**：跨上下文注入的脚本一律用**纯 JS 字符串**（数据用 `JSON.stringify` 内联），杜绝经转译的函数。
+- **教训**：凡「Node 侧构造、浏览器侧执行」的代码（initScript、evaluate），必须当作纯 JS 环境写。
+
+### 坑 17：mock 桥与真实 IPC handler 结构不一致 = E2E 全绿仍带病
+- **现象**：列表抓取完成后 toast 谎报「入库 13 条」（实为 13 条全部重复），用户误以为数据丢失。根因是 handler 返回裸 `Tweet[]`，渲染层按 `{ fetched, inserted, skipped }` 消费拿到全 undefined；E2E 的 mock 桥恰好返回了「正确结构」，19 个 Flow 全绿。
+- **解法**：三个抓取管道统一返回 `FetchAndStoreResult`，IPC 透传真实落库统计；完成提示只允许使用真实数字。
+- **教训**：**mock 桥的返回结构必须从真实 handler 派生，而不是凭记忆手写**——契约的两端各自「看起来对」时，测试网恰恰在最需要它的地方失效。
+
+---
+
 ## 五、交互设计与 Vibe Coding 哲学反思
 
 在整个开发推进过程中，我们始终践行了以下四条交互设计哲学：

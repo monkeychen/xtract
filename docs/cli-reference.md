@@ -18,7 +18,7 @@ Xtract 的桌面应用与命令行是**同一个二进制**，靠是否带参数
 
 **安装用户（DMG，无需 pnpm / Node）：**
 
-推荐在应用内一键创建命令入口：**⚙️ 设置 → 命令行 → 创建命令行快捷方式**。该操作在 `~/bin/xtract` 创建符号链接（Windows 为 `~\bin\xtract.cmd` shim）并自动把命令目录写入 PATH（macOS 写入 zsh/bash 的 rc 文件，Windows 写入用户环境变量），新开终端即可直接使用 `xtract`。
+推荐在应用内一键创建命令入口：**⚙️ 设置 → 命令行 → 创建命令行快捷方式**。该操作在 `~/bin/xtract` 创建 bash shim 脚本（Windows 为 `~\bin\xtract.cmd` shim），自动把命令目录写入 PATH（macOS 写入 zsh/bash 的 rc 文件，Windows 写入用户环境变量），新开终端即可直接使用 `xtract`。入口是脚本而非符号链接——软链启动会让 Electron 无法定位 Helper.app。
 
 也可直接用完整路径执行：
 
