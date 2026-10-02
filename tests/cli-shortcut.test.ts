@@ -42,13 +42,17 @@ function tmpHome(): string {
 const itMacOnly = process.platform === 'win32' ? it.skip : it;
 
 describe('getShortcutSpec（平台差异纯函数）', () => {
-  it('darwin：软链到 ~/bin/xtract，zsh 对应 ~/.zshrc', () => {
+  it('darwin：shim 脚本到 ~/bin/xtract，zsh 对应 ~/.zshrc', () => {
     const spec = getShortcutSpec({ platform: 'darwin', execPath: MAC_EXE, homeDir: '/Users/a', shell: '/bin/zsh' });
     expect(spec).not.toBeNull();
     expect(spec!.linkPath).toBe('/Users/a/bin/xtract');
     expect(spec!.targetPath).toBe(MAC_EXE);
     expect(spec!.rcFile).toBe('/Users/a/.zshrc');
     expect(spec!.pathEntry).toContain('export PATH="$HOME/bin:$PATH"');
+    // macOS 也用 shim 而非符号链接：软链启动时 Electron 按软链目录定位 Helper.app，
+    // 会 FATAL "Unable to find helper app" 并刷屏 GPU/network service 错误（真机实测）
+    expect(spec!.shimContent).toContain('#!/bin/bash');
+    expect(spec!.shimContent).toContain(`exec "${MAC_EXE}" "$@"`);
   });
 
   it('darwin：bash 对应 ~/.bashrc，未知 shell 返回 null rcFile（不自动改写）', () => {
@@ -107,27 +111,47 @@ describe('createCliShortcut（darwin 编排，真实 fs + 临时目录）', () =
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  itMacOnly('成功创建软链并写入 PATH 到 ~/.zshrc', async () => {
+  itMacOnly('成功创建可执行 shim 并写入 PATH 到 ~/.zshrc', async () => {
     const home = tmpHome();
     const res = await createCliShortcut(makeDeps({}, home));
     expect(res.ok).toBe(true);
-    const link = path.join(home, 'bin', 'xtract');
-    // 软链 target 在测试机未必存在，必须用 lstat（不追踪目标）断言存在性
-    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(fs.readlinkSync(link)).toBe(MAC_EXE);
+    const entry = path.join(home, 'bin', 'xtract');
+    // shim 是普通可执行脚本（绝不能是符号链接，否则 Electron 找不到 Helper.app）
+    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(entry, 'utf-8')).toContain(`exec "${MAC_EXE}" "$@"`);
+    // POSIX 可执行位
+    expect(fs.statSync(entry).mode & 0o111).toBeTruthy();
     const rc = fs.readFileSync(path.join(home, '.zshrc'), 'utf-8');
     expect(rc).toContain('export PATH="$HOME/bin:$PATH"');
     expect(res.pathFixed).toBe(true);
     fs.rmSync(home, { recursive: true, force: true });
   });
 
+  itMacOnly('旧版符号链接应自动迁移为 shim（升级兼容）', async () => {
+    const home = tmpHome();
+    const bin = path.join(home, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.symlinkSync(MAC_EXE, path.join(bin, 'xtract'));
+    const res = await createCliShortcut(makeDeps({}, home));
+    expect(res.ok).toBe(true);
+    expect(res.migrated).toBe(true);
+    const entry = path.join(bin, 'xtract');
+    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(entry, 'utf-8')).toContain(`exec "${MAC_EXE}" "$@"`);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
   itMacOnly('重复点击应幂等（alreadyExists 且不重复追加 rc）', async () => {
     const home = tmpHome();
     await createCliShortcut(makeDeps({}, home));
+    const entry = path.join(home, 'bin', 'xtract');
+    const before = fs.readFileSync(entry, 'utf-8');
     const res2 = await createCliShortcut(makeDeps({}, home));
     expect(res2.ok).toBe(true);
     expect(res2.alreadyExists).toBe(true);
+    expect(res2.migrated).toBeUndefined();
     expect(res2.pathFixed).toBe(false);
+    expect(fs.readFileSync(entry, 'utf-8')).toBe(before);
     const rc = fs.readFileSync(path.join(home, '.zshrc'), 'utf-8');
     expect(rc.match(/HOME\/bin/g)?.length).toBe(1);
     fs.rmSync(home, { recursive: true, force: true });

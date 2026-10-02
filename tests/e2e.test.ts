@@ -47,6 +47,16 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
     ]);
     storage.close();
   });
+  it('E2E: --version and -v both print the app version (exit 0)', async () => {
+    const { version } = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+    // 回归背景：-v 曾未定义别名报 unknown option（commander 默认只给 -V）
+    for (const flag of ['--version', '-v']) {
+      const res = await runCli([flag]);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain(version);
+    }
+  });
+
   it('E2E: --help prints all crawl & LLM flags', async () => {
     const { stdout, exitCode } = await runCli(['--help']);
     expect(exitCode).toBe(0);

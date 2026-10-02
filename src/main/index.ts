@@ -56,7 +56,7 @@ if (isCLI) {
   program
     .name('xtract')
     .description('Production-grade X (Twitter) intelligence radar & AI digest.')
-    .version(cliVersion())
+    .version(cliVersion(), '-v, --version')
     // 显式控制流：version/help/选项错误以异常形式交回我们处理，
     // 不依赖 process.exit 的隐式终止（CI 上实测存在 exit 不生效的环境，
     // 曾导致 `--version` 输出后继续执行 default 抓取流水线）

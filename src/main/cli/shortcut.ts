@@ -65,6 +65,9 @@ export function getShortcutSpec(input: {
       targetPath: input.execPath,
       rcFile,
       pathEntry: RC_ENTRY,
+      // macOS 也必须用 shim 而非符号链接：通过软链启动时 Electron 按软链所在目录
+      // 定位 Helper.app，会 FATAL "Unable to find helper app" 并刷屏 GPU/network 错误
+      shimContent: `#!/bin/bash\nexec "${input.execPath}" "$@"\n`,
     };
   }
 
@@ -119,17 +122,30 @@ export async function createCliShortcut(deps: ShortcutDeps): Promise<CliShortcut
 
   fs.mkdirSync(spec.binDir, { recursive: true });
 
-  // 1. 创建命令入口（软链 / shim），已存在时幂等或报冲突。
+  // 1. 创建命令入口（macOS / Windows 均为 shim 脚本），已存在时幂等、迁移或报冲突。
   //    注意必须用 lstat 判断存在性：existsSync 对「指向不存在目标的软链」返回 false，
-  //    会导致悬空链接场景下 symlink 报 EEXIST。
+  //    会导致悬空链接场景下判定出错。
   let alreadyExists = false;
+  let migrated: boolean | undefined;
   const existingStat = fs.lstatSync(spec.linkPath, { throwIfNoEntry: false });
   if (existingStat) {
-    const sameTarget =
-      deps.platform === 'darwin'
-        ? existingStat.isSymbolicLink() && fs.readlinkSync(spec.linkPath) === spec.targetPath
-        : existingStat.isFile() && fs.readFileSync(spec.linkPath, 'utf-8') === spec.shimContent;
-    if (!sameTarget) {
+    // v0.1.0 早期版本在 macOS 上创建的是符号链接：软链启动会让 Electron 找不到 Helper.app，
+    // 检测到指向正确的旧软链时静默迁移为 shim
+    const isLegacySymlink =
+      existingStat.isSymbolicLink() && fs.readlinkSync(spec.linkPath) === spec.targetPath;
+    const isCurrentShim =
+      !existingStat.isSymbolicLink() &&
+      existingStat.isFile() &&
+      fs.readFileSync(spec.linkPath, 'utf-8') === spec.shimContent;
+
+    if (isLegacySymlink) {
+      fs.unlinkSync(spec.linkPath);
+      fs.writeFileSync(spec.linkPath, spec.shimContent!, 'utf-8');
+      if (deps.platform === 'darwin') fs.chmodSync(spec.linkPath, 0o755);
+      migrated = true;
+    } else if (isCurrentShim) {
+      alreadyExists = true;
+    } else {
       return {
         ok: false,
         pathFixed: false,
@@ -137,11 +153,9 @@ export async function createCliShortcut(deps: ShortcutDeps): Promise<CliShortcut
         message: `${spec.linkPath} 已被其他程序占用，为避免覆盖请手动处理后重试。`,
       };
     }
-    alreadyExists = true;
-  } else if (deps.platform === 'darwin') {
-    fs.symlinkSync(spec.targetPath, spec.linkPath);
   } else {
     fs.writeFileSync(spec.linkPath, spec.shimContent!, 'utf-8');
+    if (deps.platform === 'darwin') fs.chmodSync(spec.linkPath, 0o755);
   }
 
   // 2. PATH 修复
@@ -178,7 +192,9 @@ export async function createCliShortcut(deps: ShortcutDeps): Promise<CliShortcut
   // 3. 面向用户的状态汇总（反馈引导行动：告知下一步——新开终端生效）
   const parts: string[] = [];
   if (alreadyExists) {
-    parts.push(`命令已存在：${spec.linkPath}（指向正确，无需重复创建）`);
+    parts.push(`命令已存在：${spec.linkPath}（内容正确，无需重复创建）`);
+  } else if (migrated) {
+    parts.push(`已将旧版符号链接升级为脚本入口：${spec.linkPath}`);
   } else {
     parts.push(`已创建命令：${spec.linkPath}`);
   }
@@ -197,6 +213,7 @@ export async function createCliShortcut(deps: ShortcutDeps): Promise<CliShortcut
     pathFixed,
     pathHint,
     alreadyExists,
+    migrated,
     message: parts.join('；'),
   };
 }

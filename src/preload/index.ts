@@ -48,6 +48,8 @@ export interface CliShortcutResult {
   pathHint?: string;
   /** 命令入口已存在且指向正确（幂等重复点击） */
   alreadyExists?: boolean;
+  /** 旧版符号链接入口已自动迁移为 shim 脚本 */
+  migrated?: boolean;
   message: string;
 }
 
