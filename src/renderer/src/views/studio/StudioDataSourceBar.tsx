@@ -35,8 +35,8 @@ export interface StudioDataSourceBarProps {
 
 /**
  * 顶栏：单行一体化智能工具条 (54px)。
- * 左侧四维数据源分段切换，中间为随数据源切换的上下文操作区
- * （关注流过滤 / 全网搜索 / 博主追踪 / X 列表），右侧为信噪比互动门槛药丸。
+ * 左侧四维数据源分段切换（关注流 / 博主追踪 / X 列表 / 全网搜索），
+ * 中间为随数据源切换的上下文操作区，右侧为信噪比互动门槛药丸。
  */
 export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
   dataSource, crawlLimit, crawlProgress, customListId, isLoading, isSyncingLists,
@@ -60,7 +60,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
         minHeight: '54px',
       }}
     >
-      {/* 左侧：数据源分段切换 */}
+      {/* 左侧：数据源分段切换（顺序：关注流 → 博主追踪 → X 列表 → 全网搜索） */}
       <div id="studio-source-chips" style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
         <div
           id="chip-source-following"
@@ -68,13 +68,6 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
           onClick={() => onSwitchSource('following')}
         >
           关注流
-        </div>
-        <div
-          id="chip-source-search"
-          className={`fmt-chip ${dataSource === 'search' ? 'active' : ''}`}
-          onClick={() => onSwitchSource('search')}
-        >
-          全网搜索
         </div>
         <div
           id="chip-source-user"
@@ -89,6 +82,13 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
           onClick={() => onSwitchSource('lists')}
         >
           X 列表
+        </div>
+        <div
+          id="chip-source-search"
+          className={`fmt-chip ${dataSource === 'search' ? 'active' : ''}`}
+          onClick={() => onSwitchSource('search')}
+        >
+          全网搜索
         </div>
       </div>
 
