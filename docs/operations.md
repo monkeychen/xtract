@@ -147,6 +147,20 @@ v0.1.0 起为双平台发布（macOS arm64 DMG + Windows x64 NSIS），由 GitHu
    - macOS：安装 DMG → 设置页「从 Chrome 读取登录态」→「创建命令行快捷方式」→ 新终端执行 `xtract --list`；
    - Windows：安装 Setup → 设置页「手动填入 Cookie」→「创建命令行快捷方式」→ 新开 PowerShell 执行 `xtract --list`（验证 shim 与用户 PATH 注册表生效）。
 
+### 本地打包（不发版也可出安装包）
+
+| 命令 | 产物 |
+| :--- | :--- |
+| `pnpm pack:mac` | 仅 macOS：`release/Xtract-<版本>-arm64.dmg` |
+| `pnpm pack:win` | 仅 Windows：`release/Xtract-Setup-<版本>.exe` |
+| `pnpm pack:all` | 双平台一次出齐（产物同上两个） |
+| `pnpm pack:dir` | macOS 目录包（免安装器，`pnpm verify` 门禁内部使用） |
+
+- 所有命令都会先执行 `pnpm build`（vite 产物 + Electron 主进程/预加载编译）再调用 electron-builder；
+- 平台与架构以 `electron-builder.yml` 的 target 配置为准（mac=arm64 DMG、win=x64 NSIS），**组合命令不要再传 `--x64/--arm64`**——CLI 的 arch 参数与 yml 配置是「并集」而非覆盖，同传会打出多余的 x64 DMG 与无 SQLite prebuild 的 win32-arm64 目标；
+- 本地打出的 Windows exe 与 CI 产物同规格，但**无法在 macOS 上运行验证**——运行时验证以 CI 的打包 smoke 与真机人工验收为准；
+- 产物仅供自用/测试；对外分发一律走 tag 触发的 CI Release（保证与 smoke 门禁绑定）。
+
 ### 关键配置备忘
 
 - **双平台产物同源于 `win-unpacked/` 与 `mac-arm64/Xtract.app/`**，打包 smoke 对这两个目录的可执行文件做真实启动验证；
