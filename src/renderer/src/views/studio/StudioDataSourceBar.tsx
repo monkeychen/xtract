@@ -101,7 +101,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               className="text-input"
               style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
               type="text"
-              placeholder="🔍 搜索关注流推文 (全库检索)..."
+              placeholder="🔍 输入【关键词】即触发本地搜索关注流推文"
               value={streamFilter}
               onChange={(e) => onStreamFilterChange(e.target.value)}
             />
@@ -170,7 +170,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               className="text-input"
               style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
               type="text"
-              placeholder="输入【关键词、推文链接或ID】即触发本地搜索"
+              placeholder="🔍 输入【关键词、推文链接或ID】即触发本地搜索"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => {
@@ -244,7 +244,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
               className="text-input"
               style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
               type="text"
-              placeholder="输入【博主用户名或昵称】即触发本地搜索"
+              placeholder="🔍 输入【博主用户名或昵称】即触发本地搜索"
               value={userHandle}
               onChange={(e) => onUserChange(e.target.value)}
               onKeyDown={(e) => {
