@@ -94,9 +94,18 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
 
       {/* 中间：自适应动态操作区 (按数据源切换) */}
       <div id="studio-context-zone" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-        {/* 容器 1: 关注流操作区 */}
+        {/* 容器 1: 关注流操作区（与搜索/博主一致：先输入框、再抓取按钮，样式同源） */}
         {dataSource === 'following' && (
-          <div id="zone-following" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+          <div id="zone-following" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <input
+              id="stream-filter-input"
+              className="text-input"
+              style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
+              type="text"
+              placeholder="🔍 搜索关注流推文 (全库检索)..."
+              value={streamFilter}
+              onChange={(e) => onStreamFilterChange(e.target.value)}
+            />
             <div className="split-btn-group">
               <button
                 className="cta-button split-btn-main"
@@ -151,15 +160,6 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
                 </div>
               </div>
             </div>
-            <input
-              id="stream-filter-input"
-              className="text-input"
-              style={{ flex: 1, maxWidth: '240px', fontSize: '12.5px', padding: '6px 10px' }}
-              type="text"
-              placeholder="🔍 搜索关注流推文 (全库检索)..."
-              value={streamFilter}
-              onChange={(e) => onStreamFilterChange(e.target.value)}
-            />
           </div>
         )}
 

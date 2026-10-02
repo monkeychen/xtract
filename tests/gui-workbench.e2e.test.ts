@@ -367,6 +367,16 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.locator('#chip-source-following').click();
     await page.waitForTimeout(200);
     expect(await page.locator('#stream-filter-input').isVisible()).toBe(true);
+
+    // 6. 关注流操作区布局与其他数据源一致：输入框在前、抓取按钮在后（§交互一致性）
+    const zoneOrder = await page.evaluate(() => {
+      const zone = document.querySelector('#zone-following');
+      const inputLeft = zone?.querySelector('#stream-filter-input')?.getBoundingClientRect().left ?? -1;
+      const buttonLeft = zone?.querySelector('button.split-btn-main')?.getBoundingClientRect().left ?? -1;
+      return { inputLeft, buttonLeft };
+    });
+    expect(zoneOrder.inputLeft).toBeGreaterThan(0);
+    expect(zoneOrder.inputLeft).toBeLessThan(zoneOrder.buttonLeft);
   });
 
   it('Flow 3: Split-action Crawl Button Dropdown Selection (20 / 50 / 100)', async () => {
