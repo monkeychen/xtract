@@ -12,6 +12,7 @@ export interface StreamEvent {
 }
 
 export interface AppConfigView {
+  appVersion: string;
   httpProxy: string;
   llmProvider: string;
   llmAuthMode: string;

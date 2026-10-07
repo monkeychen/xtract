@@ -250,6 +250,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         },
         deleteTweets: async () => ({ deletedCount: 1 }),
         getConfig: async () => ({
+          appVersion: '0.1.2',
           httpProxy: 'http://127.0.0.1:8118',
           llmProvider: 'qwen-token-plan',
           llmAuthMode: 'account',
@@ -270,6 +271,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         updateConfig: async (updates: any) => ({
           success: true,
           config: {
+            appVersion: '0.1.2',
             httpProxy: updates?.HTTP_PROXY || 'http://127.0.0.1:8118',
             llmProvider: 'qwen-token-plan',
             llmAuthMode: 'account',
@@ -584,6 +586,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(300);
 
     expect(await page.locator('h2.serif-title', { hasText: '设置' }).isVisible()).toBe(true);
+    expect(await page.locator('#settings-app-version', { hasText: 'v0.1.2' }).isVisible()).toBe(true);
+    expect(await page.locator('#settings-footer-version', { hasText: 'Xtract v0.1.2' }).isVisible()).toBe(true);
 
     const reasoningLabel = page.locator('div', { hasText: '深度思考' }).first();
     expect(await reasoningLabel.isVisible()).toBe(true);

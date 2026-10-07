@@ -145,10 +145,27 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             background: 'var(--paper)',
           }}
         >
-          <div>
-            <h2 className="serif-title" style={{ fontSize: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 className="serif-title" style={{ fontSize: '18px', margin: 0 }}>
               设置
             </h2>
+            {config?.appVersion && (
+              <span
+                id="settings-app-version"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--ink-muted)',
+                  fontFamily: 'monospace',
+                  background: 'var(--surface)',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--line)',
+                  lineHeight: '1.4',
+                }}
+              >
+                v{config.appVersion}
+              </span>
+            )}
           </div>
           <button className="secondary-button" style={{ padding: '4px 8px' }} onClick={onClose}>
             ✕
@@ -525,13 +542,18 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         </div>
 
         {/* Drawer Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: 'var(--paper)' }}>
-          <button className="secondary-button" onClick={onClose}>
-            取消
-          </button>
-          <button className="cta-button" onClick={handleSave} disabled={isSaving}>
-            {saveSuccess ? '已保存' : isSaving ? '保存中...' : '保存'}
-          </button>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper)' }}>
+          <div id="settings-footer-version" style={{ fontSize: '12px', color: 'var(--ink-muted)', fontFamily: 'monospace' }}>
+            {config?.appVersion ? `Xtract v${config.appVersion}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="secondary-button" onClick={onClose}>
+              取消
+            </button>
+            <button className="cta-button" onClick={handleSave} disabled={isSaving}>
+              {saveSuccess ? '已保存' : isSaving ? '保存中...' : '保存'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

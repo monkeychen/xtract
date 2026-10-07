@@ -58,6 +58,7 @@ class ApiService {
       return window.xtractAPI.getConfig();
     }
     return {
+      appVersion: '0.1.2',
       httpProxy: 'http://127.0.0.1:8118',
       llmProvider: 'gemini',
       llmAuthMode: 'api_key',

@@ -80,9 +80,22 @@ export function registerIpcHandlers(
     });
   });
 
+  function getAppVersion(): string {
+    try {
+      if (typeof app?.getVersion === 'function') {
+        const v = app.getVersion();
+        if (v) return v;
+      }
+    } catch {
+      // ignore
+    }
+    return Config.APP_VERSION;
+  }
+
   // 2. Configuration
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async (): Promise<AppConfigView> => {
     return {
+      appVersion: getAppVersion(),
       httpProxy: Config.HTTP_PROXY,
       llmProvider: Config.LLM_PROVIDER,
       llmAuthMode: Config.LLM_AUTH_MODE,

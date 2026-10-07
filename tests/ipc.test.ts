@@ -138,6 +138,8 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.articlesDir).toBe('string');
     expect(typeof config.reportsDir).toBe('string');
     expect(typeof config.configEnvPath).toBe('string');
+    expect(typeof config.appVersion).toBe('string');
+    expect(config.appVersion).toBe('0.1.2');
     // 子目录由 path.join 生成，Windows 上是反斜杠——断言必须用同源构造而非字面斜杠模板串
     expect(config.dataDir).toBe(path.join(config.storageRoot, 'data'));
     expect(config.articlesDir).toBe(path.join(config.storageRoot, 'articles'));

@@ -11,6 +11,20 @@ const projectRoot = process.cwd();
 export class Config {
   static readonly PROJECT_ROOT = projectRoot;
 
+  /** 当前应用版本号，优先读 package.json，兜底 0.1.2 */
+  static get APP_VERSION(): string {
+    try {
+      const pkgPath = path.join(projectRoot, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (pkg.version) return pkg.version;
+      }
+    } catch {
+      // ignore
+    }
+    return '0.1.2';
+  }
+
   /**
    * 用户数据保存根目录：
    * 不区分开发态与生产态，统一由设置项指定 (环境变量 XTRACT_STORAGE_ROOT)，默认 ~/Documents/Xtract
