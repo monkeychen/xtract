@@ -3,7 +3,20 @@ import type { Tweet, TrendTopic, XListInfo } from '../types.js';
 /**
  * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images.
  */
-export function formatArticleContent(articleResult: any): { text: string; mediaUrls: string[] } {
+export interface ParsedArticleEntity {
+  type: string;
+  imageUrl?: string;
+  tweetId?: string;
+  tweetUrl?: string;
+}
+
+/**
+ * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images and embedded tweet cards.
+ */
+export function formatArticleContent(
+  articleResult: any,
+  embeddedTweets?: Map<string, Partial<Tweet>> | Record<string, Partial<Tweet>>
+): { text: string; mediaUrls: string[] } {
   if (!articleResult) return { text: '', mediaUrls: [] };
 
   const lines: string[] = [];
@@ -24,7 +37,7 @@ export function formatArticleContent(articleResult: any): { text: string; mediaU
     lines.push(`![封面图](${coverUrl})\n`);
   }
 
-  // Media map for atomic blocks
+  // Media map for atomic image blocks
   const mediaMap: Record<string, string> = {};
   if (Array.isArray(articleResult.media_entities)) {
     for (const m of articleResult.media_entities) {
@@ -36,15 +49,39 @@ export function formatArticleContent(articleResult: any): { text: string; mediaU
     }
   }
 
-  const entityMap: Record<string, string> = {};
+  // Parse all Draft.js entities: IMAGE, DIVIDER, TWEET, etc.
+  const entityMap: Record<string, ParsedArticleEntity> = {};
   if (Array.isArray(articleResult.content_state?.entityMap)) {
     for (const item of articleResult.content_state.entityMap) {
-      const mediaId = item.value?.data?.mediaItems?.[0]?.mediaId;
-      if (mediaId && mediaMap[mediaId]) {
-        entityMap[item.key] = mediaMap[mediaId];
+      const entType = item.value?.type;
+      const data = item.value?.data || {};
+
+      if (entType === 'DIVIDER') {
+        entityMap[item.key] = { type: 'DIVIDER' };
+      } else if (entType === 'TWEET') {
+        const tweetId = data.tweetId ? String(data.tweetId) : '';
+        const tweetUrl = data.url || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
+        entityMap[item.key] = { type: 'TWEET', tweetId, tweetUrl };
+      } else {
+        // Image or fallback
+        const mediaId = data.mediaItems?.[0]?.mediaId;
+        if (mediaId && mediaMap[mediaId]) {
+          entityMap[item.key] = { type: 'IMAGE', imageUrl: mediaMap[mediaId] };
+        } else if (entType) {
+          entityMap[item.key] = { type: entType };
+        }
       }
     }
   }
+
+  // Helper to resolve embedded tweet details
+  const getEmbeddedTweet = (tweetId: string): Partial<Tweet> | undefined => {
+    if (!tweetId || !embeddedTweets) return undefined;
+    if (embeddedTweets instanceof Map) {
+      return embeddedTweets.get(tweetId);
+    }
+    return (embeddedTweets as Record<string, Partial<Tweet>>)[tweetId];
+  };
 
   if (Array.isArray(articleResult.content_state?.blocks)) {
     for (const b of articleResult.content_state.blocks) {
@@ -66,9 +103,41 @@ export function formatArticleContent(articleResult: any): { text: string; mediaU
         lines.push(`1. ${text}`);
       } else if (t === 'atomic') {
         for (const er of b.entityRanges || []) {
-          const imgUrl = entityMap[String(er.key)];
-          if (imgUrl) {
-            lines.push(`![](${imgUrl})\n`);
+          const ent = entityMap[String(er.key)];
+          if (!ent) continue;
+
+          if (ent.type === 'DIVIDER') {
+            lines.push('\n---\n');
+          } else if (ent.imageUrl) {
+            lines.push(`![](${ent.imageUrl})\n`);
+          } else if (ent.type === 'TWEET') {
+            const tweetId = ent.tweetId || '';
+            const tweetUrl = ent.tweetUrl || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
+            const tweetInfo = tweetId ? getEmbeddedTweet(tweetId) : undefined;
+
+            if (tweetInfo) {
+              const headerParts: string[] = [];
+              if (tweetInfo.author_name) headerParts.push(`**${tweetInfo.author_name}**`);
+              if (tweetInfo.author_username) headerParts.push(`(@${tweetInfo.author_username})`);
+              const header = headerParts.join(' ');
+
+              const cardLines: string[] = [];
+              cardLines.push(`> 💬 ${header || '推文'}`);
+              cardLines.push('>');
+              if (tweetInfo.text) {
+                const bodyLines = tweetInfo.text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').split('\n');
+                for (const bl of bodyLines) {
+                  cardLines.push(`> ${bl}`);
+                }
+              }
+              if (tweetUrl) {
+                cardLines.push('>');
+                cardLines.push(`> 🔗 [原文链接](${tweetUrl})`);
+              }
+              lines.push(cardLines.join('\n') + '\n');
+            } else if (tweetUrl) {
+              lines.push(`> 🔗 **引用推文**: [${tweetUrl}](${tweetUrl})\n`);
+            }
           }
         }
       } else {
@@ -83,6 +152,27 @@ export function formatArticleContent(articleResult: any): { text: string; mediaU
     text: lines.join('\n').trim(),
     mediaUrls,
   };
+}
+
+/**
+ * Extracts and parses tweets from GraphQL TweetResultsByRestIds response.
+ */
+export function parseTweetResultsByRestIds(data: any): Tweet[] {
+  if (!data) return [];
+  const tweetResultList = data.data?.tweetResult || data.tweetResult;
+  if (!Array.isArray(tweetResultList)) return [];
+
+  const parsedTweets: Tweet[] = [];
+  for (const item of tweetResultList) {
+    const rawResult = item?.result;
+    if (rawResult) {
+      const tweet = parseTweetResult(rawResult);
+      if (tweet && tweet.tweet_id) {
+        parsedTweets.push(tweet);
+      }
+    }
+  }
+  return parsedTweets;
 }
 
 /**
@@ -132,7 +222,10 @@ export function formatTweetTextWithMarkdownUrls(
 /**
  * Extracts a clean Tweet object from an X GraphQL tweet_results node.
  */
-export function parseTweetResult(tweetResult: any): Tweet | null {
+export function parseTweetResult(
+  tweetResult: any,
+  embeddedTweets?: Map<string, Partial<Tweet>> | Record<string, Partial<Tweet>>
+): Tweet | null {
   if (!tweetResult) return null;
 
   // Handle TweetWithVisibilityResults wrapper
@@ -158,7 +251,7 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
   let fullText = '';
   const articleResult = tweetResult.article?.article_results?.result;
   if (articleResult) {
-    const art = formatArticleContent(articleResult);
+    const art = formatArticleContent(articleResult, embeddedTweets);
     if (art.text) {
       fullText = art.text;
       for (const u of art.mediaUrls) {
@@ -203,7 +296,7 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
 
     // 智能提取被转推内容的专栏长文 (X Article) 或 Note Tweet
     if (rtResult.article?.article_results?.result) {
-      const art = formatArticleContent(rtResult.article.article_results.result);
+      const art = formatArticleContent(rtResult.article.article_results.result, embeddedTweets);
       if (art.text) {
         retweetedText = art.text;
         for (const u of art.mediaUrls) {
@@ -238,7 +331,7 @@ export function parseTweetResult(tweetResult: any): Tweet | null {
 
     // 智能提取被引用内容的专栏长文 (X Article) 或 Note Tweet
     if (qResult.article?.article_results?.result) {
-      const art = formatArticleContent(qResult.article.article_results.result);
+      const art = formatArticleContent(qResult.article.article_results.result, embeddedTweets);
       if (art.text) {
         quotedText = art.text;
         for (const u of art.mediaUrls) {

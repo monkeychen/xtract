@@ -4,6 +4,7 @@ import { Config } from '../config.js';
 import type { Tweet, TrendTopic, XListInfo } from '../types.js';
 import {
   parseTweetResult,
+  parseTweetResultsByRestIds,
   parseTimelineInstructions,
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
@@ -16,6 +17,7 @@ import {
 
 export {
   parseTweetResult,
+  parseTweetResultsByRestIds,
   parseTimelineInstructions,
   extractTimelineInstructions,
   parseTrendsFromGraphQL,
@@ -1059,6 +1061,9 @@ export class XClient {
     const shouldFetchReplies = options?.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
 
     const capturedTweets: Tweet[] = [];
+    let rawMainTweetResult: any = null;
+    const embeddedTweetsMap = new Map<string, Tweet>();
+    let hasArticleTweetEntities = false;
     const browser = await this.launchBrowser(true);
 
     try {
@@ -1069,15 +1074,42 @@ export class XClient {
         const url = res.url();
         if (
           url.includes('/graphql/') &&
-          (url.includes('TweetDetail') || url.includes('TweetResult')) &&
+          (url.includes('TweetDetail') || url.includes('TweetResult') || url.includes('TweetResultsByRestIds')) &&
           res.status() === 200
         ) {
           try {
             const data = await res.json();
-            if (data?.data?.tweetResult?.result) {
-              const t = parseTweetResult(data.data.tweetResult.result);
-              if (t && t.tweet_id) capturedTweets.push(t);
+
+            // 1. TweetResultsByRestIds (数组形态：Article 内嵌推文卡片批量查询)
+            if (url.includes('TweetResultsByRestIds') || Array.isArray(data?.data?.tweetResult)) {
+              const batchTweets = parseTweetResultsByRestIds(data);
+              for (const bt of batchTweets) {
+                if (bt && bt.tweet_id) {
+                  embeddedTweetsMap.set(bt.tweet_id, bt);
+                  capturedTweets.push(bt);
+                }
+              }
             }
+
+            // 2. 单篇主推文或结果
+            if (data?.data?.tweetResult?.result) {
+              const rawResult = data.data.tweetResult.result;
+              const t = parseTweetResult(rawResult);
+              if (t && t.tweet_id) {
+                if (t.tweet_id === cleanId) {
+                  rawMainTweetResult = rawResult;
+                  const articleResult = rawResult.article?.article_results?.result;
+                  if (Array.isArray(articleResult?.content_state?.entityMap)) {
+                    hasArticleTweetEntities = articleResult.content_state.entityMap.some(
+                      (e: any) => e.value?.type === 'TWEET'
+                    );
+                  }
+                }
+                capturedTweets.push(t);
+              }
+            }
+
+            // 3. 时间线指令 (包含追评及对话流)
             const inst = extractTimelineInstructions(data);
             if (inst.length > 0) {
               const instTweets = parseTimelineInstructions(inst);
@@ -1096,17 +1128,36 @@ export class XClient {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedTweets.length > 0) {
           const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
-          if (!shouldFetchReplies && hasMain) {
-            await new Promise((r) => setTimeout(r, 1000));
-            break;
-          } else if (shouldFetchReplies) {
-            await new Promise((r) => setTimeout(r, 2000));
-            break;
+          if (hasMain) {
+            // 若主推文为包含内嵌推文的 Article，而前端 TweetResultsByRestIds 尚未返回，留出最多 4 秒接收窗口
+            if (hasArticleTweetEntities && embeddedTweetsMap.size === 0 && i < 4) {
+              continue;
+            }
+            if (!shouldFetchReplies) {
+              await new Promise((r) => setTimeout(r, 1000));
+              break;
+            } else if (shouldFetchReplies) {
+              await new Promise((r) => setTimeout(r, 2000));
+              break;
+            }
           }
         }
       }
     } finally {
       await browser.close();
+    }
+
+    // 若抓取到了内嵌推文，且主推文为 Article，用完整内嵌推文字典重新富化主推文正文
+    if (rawMainTweetResult && embeddedTweetsMap.size > 0) {
+      const enrichedMain = parseTweetResult(rawMainTweetResult, embeddedTweetsMap);
+      if (enrichedMain && enrichedMain.tweet_id) {
+        const idx = capturedTweets.findIndex((t) => t.tweet_id === cleanId);
+        if (idx >= 0) {
+          capturedTweets[idx] = enrichedMain;
+        } else {
+          capturedTweets.unshift(enrichedMain);
+        }
+      }
     }
 
     const seenIds = new Set<string>();
@@ -1118,17 +1169,30 @@ export class XClient {
       }
     }
 
-    // 默认或显式关闭时，仅保留目标主推文本体，过滤掉下方所有作者追评
-    if (!shouldFetchReplies) {
-      return uniqueTweets.filter((t) => t.tweet_id === cleanId);
-    }
-
-    // 显式开启追评时：保留主推文以及该推文作者本人的追加回复（过滤掉非原作者的路人评论）
     const mainTweet = uniqueTweets.find((t) => t.tweet_id === cleanId);
     if (!mainTweet) {
       return uniqueTweets.filter((t) => t.tweet_id === cleanId);
     }
-    return uniqueTweets.filter((t) => t.author_username === mainTweet.author_username);
+
+    // 默认或显式关闭追评时：返回主推文 + 内嵌推文卡片（排除评论区路人/追评）
+    // 这样 pipeline 可以将内嵌推文一并存入本地数据库，且主推文排在首位
+    if (!shouldFetchReplies) {
+      const result: Tweet[] = [mainTweet];
+      for (const t of uniqueTweets) {
+        if (t.tweet_id !== cleanId && embeddedTweetsMap.has(t.tweet_id)) {
+          result.push(t);
+        }
+      }
+      return result;
+    }
+
+    // 显式开启追评时：保留主推文、内嵌推文以及该推文作者本人的追加回复
+    return uniqueTweets.filter(
+      (t) =>
+        t.tweet_id === cleanId ||
+        t.author_username === mainTweet.author_username ||
+        embeddedTweetsMap.has(t.tweet_id)
+    );
   }
 
   async fetchExploreTrends(options?: {

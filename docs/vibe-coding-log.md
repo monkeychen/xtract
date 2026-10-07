@@ -254,6 +254,18 @@ flowchart TD
 - **解法**：三个抓取管道统一返回 `FetchAndStoreResult`，IPC 透传真实落库统计；完成提示只允许使用真实数字。
 - **教训**：**mock 桥的返回结构必须从真实 handler 派生，而不是凭记忆手写**——契约的两端各自「看起来对」时，测试网恰恰在最需要它的地方失效。
 
+### 坑 18：X Article 专栏内嵌推文卡片与分割线实体静默丢弃
+- **现象**：抓取汇总盘点类 X Article 专栏长文时，正文中大量引用的推文卡片和段落分割线全部消失，文章各章节仅剩空标题。
+- **根因**：
+  1. X Article 使用 Draft.js 数据模型，推文与分割线以 `atomic` block 存储，索引 `entityMap` 中的 `TWEET`（包含 `tweetId` 和 `url`）与 `DIVIDER` 实体。此前 `formatArticleContent` 假定 entityMap 仅包含图片，非图片实体被无声过滤；
+  2. Twitter 前端异步发出 `TweetResultsByRestIds` 批量获取被引用的 20 条推文，返回的 JSON 是推文对象数组（`data.tweetResult`），而此前监听器仅处理单推对象（`data.tweetResult.result`），导致这些推文被完全漏掉；
+  3. `fetchTweetThread` 在捕获主推文后过早退出，未给内嵌推文批量请求留出响应时间，且未向 Article 注入内嵌推文字典。
+- **解法**：
+  1. `formatArticleContent` 全面支持 `DIVIDER`（渲染为 `---`）与 `TWEET` 实体，无详情时优雅降级为 Markdown 链接卡片，有详情时渲染为包含作者、正文、链接的 Markdown 引用块；
+  2. `XClient` 响应监听器识别并解析 `TweetResultsByRestIds`，将内嵌推文注入主推文的 Article 富化流程，并一并增量入库；
+  3. 主推文为含有嵌入推文的 Article 时，等待窗口内保留最多 4 秒缓冲，确保异步卡片请求被捕获。
+- **教训**：逆向复杂富文本结构时，必须探针先行、全盘打印 `entityMap` 实体类型全集；不能假定富文本里只有图片，对未识别实体必须保留兜底链接，绝不能吞没。
+
 ---
 
 ## 五、交互设计与 Vibe Coding 哲学反思
