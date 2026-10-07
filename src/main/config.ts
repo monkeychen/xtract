@@ -5,8 +5,11 @@ import net from 'node:net';
 import dotenv from 'dotenv';
 import type { XListInfo } from './types.js';
 
+import { fileURLToPath } from 'node:url';
+
 // Initialize project root
 const projectRoot = process.cwd();
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 export class Config {
   static readonly PROJECT_ROOT = projectRoot;
@@ -14,10 +17,19 @@ export class Config {
   /** 当前应用版本号，优先读 package.json，兜底 0.1.2 */
   static get APP_VERSION(): string {
     try {
-      const pkgPath = path.join(projectRoot, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        if (pkg.version) return pkg.version;
+      const candidates = [
+        path.join(projectRoot, 'package.json'),
+        path.resolve(currentDir, '../../package.json'),
+        path.resolve(currentDir, '../package.json'),
+        path.resolve(currentDir, '../../../package.json'),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          const pkg = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+          if (pkg.version && typeof pkg.version === 'string' && pkg.version.trim()) {
+            return pkg.version.trim();
+          }
+        }
       }
     } catch {
       // ignore

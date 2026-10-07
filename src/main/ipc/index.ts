@@ -82,9 +82,11 @@ export function registerIpcHandlers(
 
   function getAppVersion(): string {
     try {
-      if (typeof app?.getVersion === 'function') {
+      // 只有在打包态 (isPackaged === true) 时 app.getVersion() 才是应用版本；
+      // 开发态下 app.getVersion() 会返回 Electron 内核版本（如 42.x.x），严禁使用
+      if (app?.isPackaged && typeof app.getVersion === 'function') {
         const v = app.getVersion();
-        if (v) return v;
+        if (v && v.trim()) return v.trim();
       }
     } catch {
       // ignore

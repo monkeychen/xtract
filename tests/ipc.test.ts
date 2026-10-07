@@ -203,4 +203,28 @@ describe('Preload & IPC Communication Bridge', () => {
     const res = await xtractApiImplementation.selectDirectory('/tmp');
     expect(res).toBe('/Users/test/SelectedDirectory');
   });
+
+  it('CONFIG_GET 必须在开发态屏蔽 Electron 内核版本，永远返回业务版本 0.1.2', async () => {
+    const electron = await import('electron');
+    // 模拟开发态：未打包，app.getVersion() 返回 Electron 引擎版本
+    (electron.app as any).isPackaged = false;
+    (electron.app as any).getVersion = vi.fn(() => '42.11.8');
+
+    _resetRegisteredForTest();
+    registerIpcHandlers(undefined, { force: true });
+
+    const config = await xtractApiImplementation.getConfig();
+    expect(config.appVersion).toBe('0.1.2');
+    expect(config.appVersion).not.toBe('42.11.8');
+
+    // 模拟打包态：已打包，app.getVersion() 返回打包应用版本
+    (electron.app as any).isPackaged = true;
+    (electron.app as any).getVersion = vi.fn(() => '0.1.2-packaged');
+
+    _resetRegisteredForTest();
+    registerIpcHandlers(undefined, { force: true });
+
+    const packagedConfig = await xtractApiImplementation.getConfig();
+    expect(packagedConfig.appVersion).toBe('0.1.2-packaged');
+  });
 });

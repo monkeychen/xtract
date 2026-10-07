@@ -22,7 +22,9 @@ function cliVersion(): string {
   return resolveVersion(
     () => {
       const electron = nodeRequire('electron');
-      return typeof electron?.app?.getVersion === 'function' ? electron.app.getVersion() : null;
+      return electron?.app?.isPackaged && typeof electron.app.getVersion === 'function'
+        ? electron.app.getVersion()
+        : null;
     },
     () => {
       // src/main/cli → src/main → src → 项目根；打包后 dist-electron/main → asar 根
