@@ -83,4 +83,39 @@ describe('TweetMarkdown Unit Tests', () => {
     const children = element.props.children;
     expect(children.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('UT-3: should parse standalone and blockquote embedded video markers into inline video player blocks', () => {
+    const v1 = 'https://video.twimg.com/amplify_video/2121343472368074752/vid/avc1/3840x2160/rdmP3hbqzNGNuPrj.mp4?tag=29';
+    const p1 = 'https://pbs.twimg.com/amplify_video_thumb/2121343472368074752/img/jhtGcT4FbrEL1Df0.jpg';
+    const v2 = 'https://video.twimg.com/ext_tw_video/888000111/vid/demo.mp4';
+
+    const rawText = [
+      '# 专栏视频测试',
+      '',
+      '> 💬 **Chris** (@ChrisGPT)',
+      '>',
+      '> Fable 5.2 demo video',
+      '>',
+      `> 🎬 [视频](${v1} "poster=${p1}")`,
+      '>',
+      '> 🔗 [原文链接](https://x.com/ChrisGPT/status/2121343522318274958)',
+      '',
+      `🎬 [视频](${v2})`,
+    ].join('\n');
+
+    const renderedVideos: Array<{ videoUrl: string; posterUrl?: string }> = [];
+    const element = TweetMarkdown({
+      content: rawText,
+      renderVideo: (videoUrl, posterUrl) => {
+        renderedVideos.push({ videoUrl, posterUrl });
+        return React.createElement('div', { 'data-mock-video': videoUrl });
+      },
+    }) as React.ReactElement<any>;
+
+    expect(element).not.toBeNull();
+    expect(renderedVideos).toEqual([
+      { videoUrl: v1, posterUrl: p1 },
+      { videoUrl: v2, posterUrl: undefined },
+    ]);
+  });
 });

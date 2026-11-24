@@ -34,6 +34,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [contentTypeGuardMsg, setContentTypeGuardMsg] = useState(false);
   const guardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fetchAuthorReplies, setFetchAuthorReplies] = useState(false);
+  const [autoDownloadVideos, setAutoDownloadVideos] = useState(false);
   const [storageRoot, setStorageRoot] = useState('~/Documents/Xtract');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -61,6 +62,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         );
         setContentTypeGuardMsg(false);
         setFetchAuthorReplies(cfg.fetchAuthorReplies === true);
+        setAutoDownloadVideos(cfg.autoDownloadVideos === true);
         setStorageRoot(cfg.storageRoot || '~/Documents/Xtract');
       });
       setSaveSuccess(false);
@@ -126,6 +128,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       FETCH_CONTENT_TYPES: effectiveTypes.join(','),
       FETCH_ONLY_LONG_TWEETS: String(!effectiveTypes.includes('short')),
       FETCH_AUTHOR_REPLIES: String(fetchAuthorReplies),
+      AUTO_DOWNLOAD_VIDEOS: String(autoDownloadVideos),
       XTRACT_STORAGE_ROOT: storageRoot,
     };
     if (xAuthToken.trim()) {
@@ -499,7 +502,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               )}
             </div>
 
-            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)', marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <span>抓取作者追评与追加回复</span>
@@ -511,6 +514,24 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                     id="fetch-author-replies-toggle"
                     checked={fetchAuthorReplies}
                     onChange={(e) => setFetchAuthorReplies(e.target.checked)}
+                  />
+                  <span className="slider" />
+                </label>
+              </div>
+            </div>
+
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span>导出归档时自动下载视频</span>
+                  <InfoTip text="默认关闭（推荐按需在播放器内点击下载）。开启后，生成单推 Page Bundle 或批量导出时将自动流式下载推文及文章内嵌视频到 videos/ 目录。" />
+                </div>
+                <label className="switch" style={{ flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    id="auto-download-videos-toggle"
+                    checked={autoDownloadVideos}
+                    onChange={(e) => setAutoDownloadVideos(e.target.checked)}
                   />
                   <span className="slider" />
                 </label>

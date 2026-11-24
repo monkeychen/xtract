@@ -13,7 +13,8 @@ export function renderFormattedTweetText(
   text: string,
   urls?: string[],
   onOpenUrl?: (url: string) => void,
-  onPreviewImage?: (imgUrl: string) => void
+  onPreviewImage?: (imgUrl: string) => void,
+  renderVideo?: (videoUrl: string, posterUrl?: string) => React.ReactNode
 ): React.ReactNode {
   if (!text) return null;
   return (
@@ -22,6 +23,7 @@ export function renderFormattedTweetText(
       urls={urls}
       onOpenUrl={onOpenUrl}
       onPreviewImage={onPreviewImage}
+      renderVideo={renderVideo}
     />
   );
 }

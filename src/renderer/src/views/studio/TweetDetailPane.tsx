@@ -1,9 +1,8 @@
-import React from 'react';
-import type { Tweet } from '../../types.js';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { Tweet, LocalVideoStatus } from '../../types.js';
 import { api } from '../../services/api.js';
-import { renderFormattedTweetText } from './formatters.js';
-import { classifyTweet, extractMedia, formatTweetDate } from './logic.js';
-import { formatCount } from './formatters.js';
+import { renderFormattedTweetText, formatCount } from './formatters.js';
+import { classifyTweet, extractMedia, extractInlineVideoUrls, formatTweetDate } from './logic.js';
 import { TweetVideoPlayer } from './TweetVideoPlayer.js';
 
 export interface TweetDetailPaneProps {
@@ -35,6 +34,80 @@ export const TweetDetailPane: React.FC<TweetDetailPaneProps> = ({
   onToast,
 }) => {
   const classification = selectedTweet ? classifyTweet(selectedTweet) : null;
+  const [localVideosMap, setLocalVideosMap] = useState<Record<string, LocalVideoStatus>>({});
+
+  const mediaInfo = useMemo(
+    () => (selectedTweet ? extractMedia(selectedTweet) : null),
+    [selectedTweet]
+  );
+  const inlineMedia = useMemo(
+    () => extractInlineVideoUrls(selectedTweet?.text),
+    [selectedTweet?.text]
+  );
+
+  // 收集当前推文（含正文内联视频 + 附件视频）全部视频 URL，切换推文时自动探测本地落盘状态
+  const allTweetVideoUrls = useMemo(() => {
+    const urls: string[] = [];
+    for (const v of mediaInfo?.videos || []) {
+      if (!urls.includes(v.url)) urls.push(v.url);
+    }
+    for (const u of inlineMedia.videoUrls) {
+      if (!urls.includes(u)) urls.push(u);
+    }
+    return urls;
+  }, [mediaInfo, inlineMedia]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedTweet || allTweetVideoUrls.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    api
+      .getVideoStatus({
+        tweetId: selectedTweet.tweet_id,
+        authorUsername: selectedTweet.author_username || 'unknown',
+        videoUrls: allTweetVideoUrls,
+      })
+      .then((statusMap) => {
+        if (!cancelled && statusMap) {
+          setLocalVideosMap(statusMap);
+        }
+      })
+      .catch(() => {
+        // ignore status check error
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTweet?.tweet_id, selectedTweet?.author_username, allTweetVideoUrls]);
+
+  const handleVideoDownloaded = useCallback((videoUrl: string, status: LocalVideoStatus) => {
+    setLocalVideosMap((prev) => ({ ...prev, [videoUrl]: status }));
+  }, []);
+
+  const renderInlineVideo = useCallback(
+    (videoUrl: string, posterUrl?: string) => {
+      if (!selectedTweet) return null;
+      return (
+        <TweetVideoPlayer
+          videoUrl={videoUrl}
+          posterUrl={posterUrl}
+          tweetId={selectedTweet.tweet_id}
+          tweetUrl={`https://x.com/${selectedTweet.author_username || 'i'}/status/${selectedTweet.tweet_id}`}
+          authorUsername={selectedTweet.author_username}
+          containerId={`tweet-inline-video-${selectedTweet.tweet_id}`}
+          localVideo={localVideosMap[videoUrl]}
+          onVideoDownloaded={handleVideoDownloaded}
+          onToast={onToast}
+        />
+      );
+    },
+    [selectedTweet, localVideosMap, handleVideoDownloaded, onToast]
+  );
 
   return (
       <div className="studio-main">
@@ -206,7 +279,8 @@ export const TweetDetailPane: React.FC<TweetDetailPaneProps> = ({
                 selectedTweet.text,
                 selectedTweet.urls,
                 (url) => api.openExternal(url),
-                (img) => onPreviewImage(img)
+                (img) => onPreviewImage(img),
+                renderInlineVideo
               )}
             </div>
 
@@ -295,20 +369,28 @@ export const TweetDetailPane: React.FC<TweetDetailPaneProps> = ({
 
             {/* 本地媒体（视频与配图）预览容器 */}
             {(() => {
-              const { isVideo, videoUrl, posterUrl, displayImages } = extractMedia(selectedTweet);
+              const media = mediaInfo || extractMedia(selectedTweet);
+              // 过滤已在正文 Markdown 内联渲染的视频与封面，避免文章末尾重复堆叠播放器
+              const bottomVideos = media.videos.filter((v) => !inlineMedia.videoUrls.has(v.url));
+              const displayImages = media.displayImages.filter((img) => !inlineMedia.posterUrls.has(img));
 
               return (
                 <>
-                  {/* 现代化推特在线视频播放器 */}
-                  {isVideo && videoUrl && (
+                  {/* 现代化推特视频播放器（支持单视频、多视频、按需本地下载与离线秒播） */}
+                  {bottomVideos.map((vid, vIdx) => (
                     <TweetVideoPlayer
-                      videoUrl={videoUrl}
-                      posterUrl={posterUrl}
+                      key={vid.url}
+                      videoUrl={vid.url}
+                      posterUrl={vid.posterUrl}
+                      tweetId={selectedTweet.tweet_id}
                       tweetUrl={`https://x.com/${selectedTweet.author_username || 'i'}/status/${selectedTweet.tweet_id}`}
                       authorUsername={selectedTweet.author_username}
+                      containerId={vIdx === 0 ? 'tweet-detail-video' : `tweet-detail-video-${vIdx}`}
+                      localVideo={localVideosMap[vid.url]}
+                      onVideoDownloaded={handleVideoDownloaded}
                       onToast={onToast}
                     />
-                  )}
+                  ))}
 
                   {/* 普通配图容器 */}
                   {displayImages.length > 0 && (

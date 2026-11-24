@@ -5,9 +5,13 @@ export interface TweetMarkdownProps {
   urls?: string[];
   onOpenUrl?: (url: string) => void;
   onPreviewImage?: (imgUrl: string) => void;
+  renderVideo?: (videoUrl: string, posterUrl?: string) => React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
 }
+
+const STANDALONE_VIDEO_LINE_REGEX =
+  /^🎬\s*\[(?:视频|本地视频)\]\((https?:\/\/[^\s)"]+)(?:\s+"poster=(https?:\/\/[^\s"]+)")?\)$/;
 
 /**
  * 解析行内 Markdown 元素：加粗、斜体、代码、删除线、Markdown 链接、Markdown 图片与原生 URL
@@ -231,11 +235,14 @@ interface BlockItem {
     | 'ul'
     | 'ol'
     | 'standalone-image'
+    | 'standalone-video'
     | 'paragraph';
   lines: string[];
   level?: number;
   altText?: string;
   imgUrl?: string;
+  videoUrl?: string;
+  posterUrl?: string;
 }
 
 /**
@@ -355,6 +362,19 @@ function parseBlocks(rawText: string, urls?: string[]): BlockItem[] {
       continue;
     }
 
+    // 6.5 单独成行的视频标记 🎬 [视频](url "poster=...")
+    const singleVideoMatch = trimmed.match(STANDALONE_VIDEO_LINE_REGEX);
+    if (singleVideoMatch) {
+      blocks.push({
+        type: 'standalone-video',
+        lines: [trimmed],
+        videoUrl: singleVideoMatch[1],
+        posterUrl: singleVideoMatch[2] || undefined,
+      });
+      i++;
+      continue;
+    }
+
     // 7. 普通段落 (多行归并，直到遇到空行、标题或列表)
     const paraLines: string[] = [];
     while (i < lines.length) {
@@ -366,6 +386,7 @@ function parseBlocks(rawText: string, urls?: string[]): BlockItem[] {
       if (/^[-*+]\s+/.test(curTrimmed)) break;
       if (/^\d+\.\s+/.test(curTrimmed)) break;
       if (/^!\[.*?\]\(.*?\)$/.test(curTrimmed)) break;
+      if (STANDALONE_VIDEO_LINE_REGEX.test(curTrimmed)) break;
 
       paraLines.push(lines[i]);
       i++;
@@ -388,6 +409,7 @@ export const TweetMarkdown: React.FC<TweetMarkdownProps> = ({
   urls,
   onOpenUrl,
   onPreviewImage,
+  renderVideo,
   className,
   style,
 }) => {
@@ -578,11 +600,21 @@ export const TweetMarkdown: React.FC<TweetMarkdownProps> = ({
                   fontStyle: 'normal',
                 }}
               >
-                {block.lines.map((l, lIdx) => (
-                  <p key={`${blockKey}-l-${lIdx}`} style={{ margin: '4px 0', lineHeight: '1.6' }}>
-                    {renderInlineMarkdown(l, urls, onOpenUrl, onPreviewImage, `${blockKey}-${lIdx}`)}
-                  </p>
-                ))}
+                {block.lines.map((l, lIdx) => {
+                  const vidMatch = l.trim().match(STANDALONE_VIDEO_LINE_REGEX);
+                  if (vidMatch && renderVideo) {
+                    return (
+                      <div key={`${blockKey}-v-${lIdx}`} style={{ margin: '10px 0' }}>
+                        {renderVideo(vidMatch[1], vidMatch[2] || undefined)}
+                      </div>
+                    );
+                  }
+                  return (
+                    <p key={`${blockKey}-l-${lIdx}`} style={{ margin: '4px 0', lineHeight: '1.6' }}>
+                      {renderInlineMarkdown(l, urls, onOpenUrl, onPreviewImage, `${blockKey}-${lIdx}`)}
+                    </p>
+                  );
+                })}
               </blockquote>
             );
 
@@ -686,6 +718,22 @@ export const TweetMarkdown: React.FC<TweetMarkdownProps> = ({
                   </span>
                 )}
               </div>
+            );
+          }
+
+          case 'standalone-video': {
+            if (!block.videoUrl) return null;
+            if (renderVideo) {
+              return (
+                <div key={blockKey} style={{ margin: '16px 0' }}>
+                  {renderVideo(block.videoUrl, block.posterUrl)}
+                </div>
+              );
+            }
+            return (
+              <p key={blockKey} style={{ margin: '12px 0' }}>
+                {renderInlineMarkdown(block.lines[0], urls, onOpenUrl, onPreviewImage, blockKey)}
+              </p>
             );
           }
 

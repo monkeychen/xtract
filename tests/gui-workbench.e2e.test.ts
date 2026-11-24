@@ -127,7 +127,54 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           urls: ['https://Dot.com'],
           source_type: 'following',
         },
+        {
+          tweet_id: '2124098048842473619',
+          author_id: '998877',
+          author_name: 'Adrian Punk',
+          author_username: 'AdrianPunk115',
+          is_article: true,
+          text: [
+            '# 零基础用Fable5.2做视频',
+            '',
+            '> 💬 **Chris** (@ChrisGPT)',
+            '>',
+            '> Cowboy animation demo',
+            '>',
+            '> 🎬 [视频](https://video.twimg.com/amplify_video/2121343472368074752/vid/avc1/3840x2160/rdmP3hbqzNGNuPrj.mp4?tag=29 "poster=https://pbs.twimg.com/amplify_video_thumb/2121343472368074752/img/jhtGcT4FbrEL1Df0.jpg")',
+            '>',
+            '> 🔗 [原文链接](https://x.com/ChrisGPT/status/2121343522318274958)',
+            '',
+            '> 💬 **Riley** (@rileybrown)',
+            '>',
+            '> One-shot 4K animation',
+            '>',
+            '> 🎬 [视频](https://video.twimg.com/amplify_video/2119897796736131072/vid/avc1/3840x2160/pzacfkpXtKVX4i85.mp4?tag=29 "poster=https://pbs.twimg.com/amplify_video_thumb/2119897796736131072/img/uYa4QI709MAYcBH3.jpg")',
+            '>',
+            '> 🔗 [原文链接](https://x.com/rileybrown/status/2119902109709537708)',
+          ].join('\n'),
+          created_at: new Date().toISOString(),
+          like_count: 920,
+          retweet_count: 310,
+          reply_count: 45,
+          view_count: 88000,
+          media_urls: [
+            'https://pbs.twimg.com/amplify_video_thumb/2121343472368074752/img/jhtGcT4FbrEL1Df0.jpg',
+            'https://video.twimg.com/amplify_video/2121343472368074752/vid/avc1/3840x2160/rdmP3hbqzNGNuPrj.mp4?tag=29',
+            'https://pbs.twimg.com/amplify_video_thumb/2119897796736131072/img/uYa4QI709MAYcBH3.jpg',
+            'https://video.twimg.com/amplify_video/2119897796736131072/vid/avc1/3840x2160/pzacfkpXtKVX4i85.mp4?tag=29',
+          ],
+          urls: [],
+          source_type: 'search',
+        },
       ];
+
+      (window as any).__downloadedVideos = {} as Record<string, any>;
+      (window as any).__streamListeners = new Set();
+      (window as any).__emitStream = (ev: any) => {
+        for (const fn of Array.from((window as any).__streamListeners) as any[]) {
+          fn(ev);
+        }
+      };
 
       (window as any).xtractAPI = {
         openExternal: async (url: string) => {
@@ -263,6 +310,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           fetchContentTypes: (window as any).__savedContentTypes || ['article'],
           onlyLongTweets: !((window as any).__savedContentTypes || ['article']).includes('short'),
           fetchAuthorReplies: false,
+          autoDownloadVideos: Boolean((window as any).__autoDownloadVideos),
           storageRoot: '~/Documents/Xtract',
           dataDir: '~/Documents/Xtract/data',
           articlesDir: '~/Documents/Xtract/articles',
@@ -276,6 +324,9 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
               .split(',')
               .map((s: string) => s.trim())
               .filter(Boolean);
+          }
+          if (updates?.AUTO_DOWNLOAD_VIDEOS !== undefined) {
+            (window as any).__autoDownloadVideos = updates.AUTO_DOWNLOAD_VIDEOS === 'true';
           }
           const nextTypes = (window as any).__savedContentTypes || ['article'];
           return {
@@ -294,6 +345,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
               fetchContentTypes: nextTypes,
               onlyLongTweets: !nextTypes.includes('short'),
               fetchAuthorReplies: updates?.FETCH_AUTHOR_REPLIES === 'true',
+              autoDownloadVideos: Boolean((window as any).__autoDownloadVideos),
               storageRoot: updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract',
               dataDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/data`,
               articlesDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/articles`,
@@ -303,9 +355,59 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           };
         },
         selectDirectory: async () => '/tmp/custom_xtract',
+        getVideoStatus: async (params: { videoUrls: string[] }) => {
+          const out: Record<string, any> = {};
+          const store = (window as any).__downloadedVideos || {};
+          for (const u of params.videoUrls || []) {
+            out[u] = store[u] || { downloaded: false };
+          }
+          return out;
+        },
+        downloadVideo: async (params: { tweetId: string; authorUsername: string; videoUrl: string }) => {
+          const localPath = `/Users/dev/Documents/Xtract/articles/${params.authorUsername}/${params.tweetId}/videos/mock_video.mp4`;
+          const mediaUrl = `xtract-media://articles/${params.authorUsername}/${params.tweetId}/videos/mock_video.mp4`;
+          const sizeBytes = 15 * 1024 * 1024;
+          (window as any).__emitStream({
+            taskId: 'vid_1',
+            stage: 'video_download',
+            type: 'status',
+            progress: 50,
+            meta: {
+              tweetId: params.tweetId,
+              videoUrl: params.videoUrl,
+              status: 'downloading',
+              downloadedBytes: 7.5 * 1024 * 1024,
+              totalBytes: sizeBytes,
+              percent: 50,
+            },
+          });
+          await new Promise((r) => setTimeout(r, 150));
+          const status = { downloaded: true, localPath, mediaUrl, sizeBytes };
+          (window as any).__downloadedVideos[params.videoUrl] = status;
+          (window as any).__emitStream({
+            taskId: 'vid_1',
+            stage: 'video_download',
+            type: 'status',
+            progress: 100,
+            meta: {
+              tweetId: params.tweetId,
+              videoUrl: params.videoUrl,
+              status: 'done',
+              localPath,
+              mediaUrl,
+              sizeBytes,
+              percent: 100,
+            },
+          });
+          return { success: true, videoUrl: params.videoUrl, localPath, mediaUrl, sizeBytes, alreadyExisted: false };
+        },
+        cancelVideoDownload: async () => ({ canceled: true }),
         onStreamEvent: (callback: any) => {
           (window as any).__streamCallback = callback;
-          return () => {};
+          (window as any).__streamListeners.add(callback);
+          return () => {
+            (window as any).__streamListeners.delete(callback);
+          };
         },
         triggerWorkflow: async () => ({ success: true }),
         abortWorkflow: async () => ({ success: true }),
@@ -649,6 +751,18 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await authorRepliesSlider.click();
     await page.waitForTimeout(100);
     expect(await authorRepliesToggle.isChecked()).toBe(false);
+
+    // Verify 导出归档时自动下载视频开关 defaults to false and toggles cleanly
+    expect(await page.locator('div', { hasText: '导出归档时自动下载视频' }).first().isVisible()).toBe(true);
+    const autoDownloadToggle = page.locator('#auto-download-videos-toggle');
+    expect(await autoDownloadToggle.isChecked()).toBe(false);
+    const autoDownloadSlider = page.locator('label.switch:has(#auto-download-videos-toggle) .slider');
+    await autoDownloadSlider.click();
+    await page.waitForTimeout(100);
+    expect(await autoDownloadToggle.isChecked()).toBe(true);
+    await autoDownloadSlider.click();
+    await page.waitForTimeout(100);
+    expect(await autoDownloadToggle.isChecked()).toBe(false);
 
     // Verify 数据存储位置 section exists with directory picker and reset button
     const storageRootHeader = page.locator('div', { hasText: '数据存储位置' }).first();
@@ -999,5 +1113,63 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.locator('#settings-drawer .secondary-button').first().click();
     await page.waitForTimeout(300);
     expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
+  });
+
+  it('Flow 20: Video Local Download Lifecycle, Offline Source Switch & Reveal in Finder (M2)', async () => {
+    await page.locator('#chip-source-following').click();
+    await page.waitForTimeout(300);
+
+    const videoItem = page.locator('.feed-item', { hasText: '体验全新视频推文' }).first();
+    await videoItem.click();
+    const videoContainer = page.locator('#tweet-detail-video');
+    await videoContainer.waitFor({ state: 'visible', timeout: 5000 });
+
+    // 1. Initially shows "下载视频" button
+    const dlBtn = videoContainer.locator('button.video-download-btn');
+    await dlBtn.waitFor({ state: 'visible' });
+    expect(await dlBtn.textContent()).toContain('下载视频');
+
+    // 2. Click download -> completes -> switches to "本地离线" badge & "已下载 · 访达定位"
+    await dlBtn.click();
+    const revealBtn = videoContainer.locator('button.video-reveal-btn');
+    await revealBtn.waitFor({ state: 'visible', timeout: 5000 });
+    expect(await revealBtn.textContent()).toContain('已下载 · 访达定位');
+    expect(await videoContainer.locator('.video-offline-badge').isVisible()).toBe(true);
+
+    // 3. <video> src switched to controlled local xtract-media:// protocol
+    const localSrc = await videoContainer.locator('video').getAttribute('src');
+    expect(localSrc).toBe('xtract-media://articles/democreator/2003/videos/mock_video.mp4');
+
+    // 4. Clicking reveal invokes showItemInFolder with local MP4 path
+    await revealBtn.click();
+    await page.waitForTimeout(150);
+    const revealed = await page.evaluate(() => (window as any).__recordedCalls.revealedPaths);
+    expect(revealed).toContain('/Users/dev/Documents/Xtract/articles/democreator/2003/videos/mock_video.mp4');
+  });
+
+  it('Flow 21: X Article Embedded Multi-Video Tweets Render Inline Without Bottom Duplication (M2)', async () => {
+    // Switch to search tab and clear any leftover keyword from earlier flows so all tweets list
+    await page.locator('#chip-source-search').click();
+    const searchInput = page.locator('#search-query-input');
+    await searchInput.waitFor({ state: 'visible', timeout: 5000 });
+    await searchInput.fill('');
+    await page.waitForTimeout(450);
+
+    const articleItem = page.locator('.feed-item', { hasText: '零基础用Fable5.2做视频' }).first();
+    await articleItem.waitFor({ state: 'visible', timeout: 5000 });
+    await articleItem.click();
+
+    // 1. Two embedded tweet videos render inline inside #tweet-detail-text
+    const inlinePlayers = page.locator('#tweet-detail-text .tweet-video-player');
+    await inlinePlayers.first().waitFor({ state: 'visible', timeout: 5000 });
+    expect(await inlinePlayers.count()).toBe(2);
+
+    // 2. Bottom media section must NOT duplicate inline videos (total players on detail pane == 2)
+    const allPlayers = page.locator('.studio-main .tweet-video-player');
+    expect(await allPlayers.count()).toBe(2);
+
+    // 3. Each embedded video has an independent download button
+    expect(await inlinePlayers.nth(0).locator('button.video-download-btn').isVisible()).toBe(true);
+    expect(await inlinePlayers.nth(1).locator('button.video-download-btn').isVisible()).toBe(true);
   });
 });
