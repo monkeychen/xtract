@@ -171,7 +171,7 @@ export interface FetchFollowingOptions {
 | **T1.2** | `XClient` 与 `Pipeline` 四维批量抓取升级为 `contentTypes` 透传过滤，并落实单推同步 & 趋势研报双豁免契约（TDD） | AC5.3, AC5.4 | T1.1 | ✅ 完成（`vitest pipeline.test.ts` 7/7 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T1.3** | CLI 新增 `--content-types <types>` 校验解析与 `--all-tweets` 兼容别名（TDD） | AC5.5 | T1.1, T1.2 | ✅ 完成（`vitest cli-argv.test.ts` 20/20 pass, CLI `--content-types bogus` 准确报错 exit 1） |
 | **T1.4** | IPC 契约（`preload`/`ipc`/`renderer api`）与 `SettingsDrawer` 多选芯片 + 防呆拦截 + `InfoTip` 精简，并补齐单元测试与 GUI E2E（TDD） | AC5.2 | T1.1 | ✅ 完成（`ipc.test.ts` 9/9 + `gui-workbench.e2e.test.ts` 19/19 pass, `eslint` 0 err, `tsc` 0 err） |
-| **T1.5** | M1 自动化门禁验收（`pnpm verify` 全量通过并补充验收记录） | AC5.1–AC5.5 | T1.1–T1.4 | ⬜ 待开始 |
+| **T1.5** | M1 自动化门禁验收（`pnpm verify` 全量通过并补充验收记录） | AC5.1–AC5.5 | T1.1–T1.4 | ✅ 完成（`pnpm verify` 5/5 门禁全绿，332/332 测试通过，Smoke 4/4 通过） |
 
 ---
 
@@ -189,3 +189,31 @@ export interface FetchFollowingOptions {
 ### 7.2 视觉规范（对齐 `src/renderer/src/index.css`）
 - **配色令牌**：暖白纸底 `--paper: #faf7f0`、凹陷卡底 `--paper-sunken: #f3ede1`、墨黑主字 `--ink: #211c15`、朱砂选中态 `--cinnabar: #b5462f` / `--cinnabar-wash: #f6e7df`、琥珀防呆提示 `--amber: #9a6b1e` / `--amber-wash: #f3e9d4`。
 - **字体与间距**：标题 `15px` 衬线（`--font-serif`），项标签 `13px` `font-weight: 600`，多选芯片 `12.5px`、`padding: 6px 12px`、圆角 `999px`、横向 `gap: 8px` 均分三列（`flex: 1`），选中项左侧带 `✓` 勾选符号增强辨识度。
+
+---
+
+## 8. 验收记录
+
+- **验收日期**：2026-11-24
+- **验收命令**：`pnpm verify`（依次执行 `pnpm lint && pnpm test && tsc --noEmit && pnpm build && pnpm pack:dir && pnpm smoke`）
+- **额外 CLI 边界校验**：`pnpm dev:cli -- --list 1 --content-types bogus --json`
+
+### 门禁与测试结果
+| 门禁项 | 命令 | 结果 | 详情 |
+| :--- | :--- | :---: | :--- |
+| 代码风格 | `pnpm lint` | ✅ 通过 | 0 Error（14 条存量 React Hooks warning，未新增 warning） |
+| 自动化测试 | `pnpm test` | ✅ 通过 | **26/26 文件，332/332 用例通过（100%）**，含新增 13 条单测/集成用例与更新后的 Flow 9 真实浏览器 E2E |
+| 静态类型 | `tsc --noEmit` | ✅ 通过 | 0 Error |
+| 生产构建 | `pnpm build` | ✅ 通过 | Vite 渲染层 + Electron 主进程 + Preload 均 0 Error |
+| 打包 Smoke | `pnpm pack:dir && pnpm smoke` | ✅ 通过 | **4/4 全通过**（`--version`、`--help`、`--list 1` 读 SQLite、无参启动 GUI 存活） |
+| CLI 非法枚举边界 | `--content-types bogus --json` | ✅ 通过 | 返回标准 JSON 错误并退出码 `1` |
+
+### 覆盖 AC 核对
+- `AC5.1`：分类优先级 `article > note > short`、宽松/严格解析、`Config.FETCH_CONTENT_TYPES` 默认 `['article']` → 已由 `tests/content-type-filter.test.ts` 验证；
+- `AC5.2`：设置抽屉多选芯片、防呆拦截至少留 1 项、`InfoTip` 收敛文案、保存持久化 → 已由 `tests/ipc.test.ts` 与 `tests/gui-workbench.e2e.test.ts` Flow 9 验证；
+- `AC5.3`：四维批量抓取全链路 `contentTypes` 透传过滤 → 已由 `tests/pipeline.test.ts` UT-5 验证；
+- `AC5.4`：单推精准同步与趋势研报内部挖掘豁免 → 已由 `tests/pipeline.test.ts` UT-6 验证；
+- `AC5.5`：CLI `--content-types` 校验与 `--all-tweets` 兼容别名 → 已由 `tests/cli-argv.test.ts` UT-8 与真实 CLI 运行验证。
+
+### 遗留问题
+- 无（M1 范围内 0 遗留问题；版本号 `0.1.3` 统一在全部里程碑完成后交付阶段升级）。
