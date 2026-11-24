@@ -191,7 +191,7 @@ export interface AppConfigView {
 | **T2.3** | 受控本地媒体协议 `xtract-media://`（路径安全校验 + HTTP Range `206`）与 Electron 主进程注册（TDD） | AC3.1 | T2.2 | ✅ 完成（`media-protocol.test.ts` 3/3 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T2.4** | IPC 通道（`VIDEO_DOWNLOAD` / `VIDEO_DOWNLOAD_CANCEL` / `VIDEO_STATUS` + `AUTO_DOWNLOAD_VIDEOS` 配置）与 Preload/Renderer API 契约（TDD） | AC3.2–AC3.4 | T2.2, T2.3 | ✅ 完成（`ipc.test.ts` 10/10 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T2.5** | GUI 播放器三态下载交互（`TweetVideoPlayer`）、文章内联视频渲染（`TweetMarkdown` + `TweetDetailPane`）、设置自动下载开关（`SettingsDrawer`）与 GUI E2E（TDD） | AC1.1, AC1.3, AC3.2–AC3.4 | T2.1, T2.4 | ✅ 完成（`tweet-markdown` 7/7 + `gui-workbench.e2e` 21/21 pass, `eslint` 0 err, `tsc` 0 err） |
-| **T2.6** | CLI `--download-videos` / `--no-download-videos` 支持（`--view` & `--export-ids`）、真实样本 `2124098048842473619` 真机验证与 `pnpm verify` 全量验收（TDD） | AC1.4, AC4.1, AC4.2 | T2.2–T2.5 | ⬜ 待开始 |
+| **T2.6** | CLI `--download-videos` / `--no-download-videos` 支持（`--view` & `--export-ids`）、`x-web` SSR 文章抓取兼容与 3 篇真实 X Article 真机验证、`pnpm verify` 全量验收（TDD） | AC1.4, AC4.1, AC4.2 | T2.2–T2.5 | ✅ 完成（`pnpm verify` 5/5 门禁，357/357 tests, Smoke 4/4） |
 
 ---
 
@@ -212,3 +212,39 @@ export interface AppConfigView {
 ### 7.2 视觉规范（对齐 `src/renderer/src/index.css`）
 - **配色令牌**：沿用暖纸墨色朱砂体系——进度条填充与「下载视频」主强调态使用 `--cinnabar: #b5462f` / `--cinnabar-wash: #f6e7df`；「本地离线」微标与「已下载」态使用 `--jade: #3f6b51` / `--jade-wash: #e6efe7`；错误提示条使用 `--cinnabar-wash` 与 `--cinnabar`。
 - **布局与克制**：下载进度条高 `3px` 贴合于视频画面与底栏交界处，不占额外高度；按钮统一高度 `28px`、`font-size: 12px`；设置开关说明一律收纳于 `InfoTip`。
+
+---
+
+## 8. 验收记录
+
+> **验收日期**：2026-11-24
+> **门禁命令**：`pnpm verify`（`pnpm lint && pnpm test && tsc --noEmit && pnpm build && pnpm pack:dir && pnpm smoke`）
+> **验收结果**：✅ 五道门禁 100% 通过，3 篇真实线上 X Article 实测验证通过，待人工审批进入 `v0.1.3` 发布阶段。
+
+### 8.1 五道质量门禁实测结果
+| 门禁 | 执行命令 | 实测结果 |
+| :--- | :--- | :--- |
+| 1. 代码风格 | `pnpm lint` | ✅ 0 Error（仅存量 react-hooks warning） |
+| 2. 自动化测试 | `pnpm test` | ✅ **28/28 测试文件、357/357 用例全部通过**（含 21/21 GUI E2E Flow） |
+| 3. 静态类型 | `tsc --noEmit` | ✅ 0 Error |
+| 4. 生产构建 | `pnpm build` | ✅ Renderer (136ms) + Main (32ms) + Preload (6ms) 0 Error |
+| 5. 打包产物 Smoke | `pnpm pack:dir && pnpm smoke` | ✅ 4/4 通过（`--version`、`--help`、`--list` 打包态 SQLite、无参 GUI 存活） |
+
+### 8.2 三篇真实 X Article 真机验证记录（沙箱隔离，已全部清理）
+1. **`https://x.com/AdrianPunk115/status/2124098048842473619`**（内嵌 5 条视频推文，共 17 个内联视频）
+   - 解析完整捕获 5/5 嵌入推文与 17/17 视频标记；
+   - 经代理 `http://127.0.0.1:8118` 真机流式下载 3 段代表性视频（0.14 MB / 55.85 MB 1080p / 99.90 MB 4K），全部通过 MP4 `ftyp` 文件头校验，`index.md` 写入 3 条相对路径链接，级联删除确认连带清空 `videos/` 目录。
+2. **`https://x.com/xaiwind/status/2124724609358631007`**（X 新版 `x-web` TanStack Router SSR 专栏，无视频）
+   - 触发无头 403 自动切换可见 Chrome 窗口，6.0s 抓取全文（8,102 字、9 段 `MARKDOWN` 代码块、15 张图）；
+   - 3.6s 完成 Page Bundle 导出与 15 张图片本地化，`index.md` 全部重写为相对路径。
+3. **`https://x.com/dashiAIxz/status/2124087160907403401`**（X 新版 `x-web` SSR 专栏 + 9 个原生 `ApiVideo` + 1 条内嵌 10 分钟 4K 推文视频）
+   - 6.5s 抓取全文（8,253 字、5 段代码块、16 张配图、10 个视频全部识别）；
+   - 9 个原生 `ApiVideo`（0.56–4.47 MB）与 26 张图 100% 落盘并通过 `ftyp` 校验；第 10 个 10 分钟 4K 视频实测流式写入 712+ MB 时暴露了原 10 分钟固定总时长超时缺陷，已立即升级为「60 秒无字节到达空闲超时」并补充回归测试 `UT-4f`。
+
+### 8.3 AC 验收矩阵（AC1.1–AC4.2）
+| AC | 验收结论 | 证据 |
+| :--- | :---: | :--- |
+| AC1.1–AC1.4（全形态视频解析与去重） | ✅ | `tests/article-embedded-cards.test.ts` (10/10) + `tests/studio-logic.test.ts` (59/59) + 3 篇真机样本 |
+| AC2.1–AC2.4（流式下载、Page Bundle 归档、级联删除、容错清理） | ✅ | `tests/video-downloader.test.ts` (7/7，含代理与空闲超时回归) + `tests/storage.test.ts` (13/13) |
+| AC3.1–AC3.4（`xtract-media://` Range 206 离线播放、播放器三态、自动下载开关） | ✅ | `tests/media-protocol.test.ts` (3/3) + `tests/ipc.test.ts` (10/10) + `tests/gui-workbench.e2e.test.ts` Flow 20 & 21 |
+| AC4.1–AC4.2（CLI `--download-videos` / `--no-download-videos` 与 JSON 输出） | ✅ | `tests/cli-argv.test.ts` + `tests/cli-batch.test.ts` + `tests/e2e.test.ts` (8/8) |

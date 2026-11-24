@@ -21,6 +21,9 @@
   - [坑 10：功能膨胀反噬体验：果断剥离不可用 Tab，回归极简核心](#坑-10功能膨胀反噬体验果断剥离不可用-tab回归极简核心)
   - [坑 11：视频播放器 preload=metadata 导致静默偷跑流量与未播先转圈](#坑-11视频播放器-preloadmetadata-导致静默偷跑流量与未播先转圈)
   - [坑 12：推文详情纯文本展示导致 X Article 专栏结构化 Markdown 暴露与排版粗糙](#坑-12推文详情纯文本展示导致-x-article-专栏结构化-markdown-暴露与排版粗糙)
+  - [坑 18：X Article 专栏内嵌推文卡片与分割线实体静默丢弃](#坑-18x-article-专栏内嵌推文卡片与分割线实体静默丢弃)
+  - [坑 19：Node 24 全局 fetch 与项目依赖 undici v8 ProxyAgent 版本冲突](#坑-19node-24-全局-fetch-与项目依赖-undici-v8-proxyagent-版本冲突)
+  - [坑 20：X 新版前端 x-web 切换 TanStack Router SSR 导致单篇 X Article 抓不到正文](#坑-20x-新版前端-x-web-切换-tanstack-router-ssr-导致单篇-x-article-抓不到正文)
 - [四、多大模型与双轨计费认证的最佳实践](#四多大模型与双轨计费认证的最佳实践)
 - [五、交互设计与 Vibe Coding 哲学反思](#五交互设计与-vibe-coding-哲学反思)
 
@@ -265,6 +268,23 @@ flowchart TD
   2. `XClient` 响应监听器识别并解析 `TweetResultsByRestIds`，将内嵌推文注入主推文的 Article 富化流程，并一并增量入库；
   3. 主推文为含有嵌入推文的 Article 时，等待窗口内保留最多 4 秒缓冲，确保异步卡片请求被捕获。
 - **教训**：逆向复杂富文本结构时，必须探针先行、全盘打印 `entityMap` 实体类型全集；不能假定富文本里只有图片，对未识别实体必须保留兜底链接，绝不能吞没。
+
+### 坑 19：Node 24 全局 fetch 与项目依赖 undici v8 ProxyAgent 版本冲突
+- **现象**：纯 Node.js 流式视频下载器（`downloadVideoStream`）在单元测试对本地回环服务 100% 通过，但真机带 `HTTP_PROXY=http://127.0.0.1:8118` 下载 `video.twimg.com` MP4 时立即报错 `TypeError: invalid onRequestStart method`。
+- **根因**：Node 24 内置全局 `fetch` 绑定了内置 `undici` v7，而项目 `package.json` 依赖 `undici@^8.11.2`。将 v8 的 `new ProxyAgent(...)` 作为 `dispatcher` 传给全局 `fetch` 时，两个大版本的内部 Dispatcher 钩子签名不兼容，直接在请求派发阶段抛异常。同时，本地单测因为跳过了回环地址代理而没踩到这条路径。
+- **解法**：`downloadVideoStream` 与 `downloadImage` 改为从 `undici` 同源导入 `{ fetch: undiciFetch, ProxyAgent }`，保证 `fetch` 与 `ProxyAgent` 始终来自同一份 `undici` 运行时。
+- **教训**：凡是显式传入 `undici` 的 `dispatcher / ProxyAgent`，严禁混用 Node 全局 `fetch`；真机带代理冒烟验证不可省。
+
+### 坑 20：X 新版前端 x-web 切换 TanStack Router SSR 导致单篇 X Article 抓不到正文
+- **现象**：抓取 `https://x.com/xaiwind/status/2124724609358631007` 与 `https://x.com/dashiAIxz/status/2124087160907403401` 时，无头模式直接报 `ERR_HTTP_RESPONSE_CODE_FAILURE`（HTTP 403）；即使切到可见窗口返回 200，GraphQL 网络拦截器也完全抓不到 `TweetDetail`，文章只剩时间线里的 95 字标题预览。
+- **根因**：
+  1. X 新版前端 `x-web` 切流至 **TanStack Router (`$_TSR`) SSR 流式直出**，对带 `HeadlessChrome` UA 的 `/status/...` 请求直接返回空体 403；
+  2. 首屏 HTML 直接通过 `<script>` 内联 `kind:"Result.Ok",value:"{\"data\":{\"tweet_result_by_rest_id\":...}}"` 下发整篇专栏，不再额外发出 `/graphql/TweetDetail` XHR 请求，且将元信息（`counts` / `details` / `views`）与完整正文（`content_state`）拆在多个分片中；
+  3. 新版 Article 与推文 JSON 大量改为 `snake_case` 与新字段：`cover_media_results`、`entity_map`、`entity_ranges`、`media_items`（`media_id`）、`TWEET` 实体 `tweet_id`、`ApiVideo` 变体 `bit_rate`、`MARKDOWN` 代码块实体以及推文 `media_entities2` / `url_entities`。
+- **解法**：
+  1. 在 [`parser.ts`](file:///Users/chenzhian/workspace/ai/xtract/src/main/client/parser.ts) 新增 `extractSsrTweetPayloadsFromHtml` 与 `mergeRawTweetPayload`，解码 `$_TSR` 内联载荷（含 `\x3C` 转义）并按 `rest_id` 合并多段分片；`formatArticleContent` 与 `parseTweetResult` 全面双兼容新旧键名及 `MARKDOWN` / `ApiVideo(bit_rate)` / `media_entities2`；
+  2. 在 [`XClient.fetchTweetThread`](file:///Users/chenzhian/workspace/ai/xtract/src/main/client/index.ts) 同时监听 HTML SSR 响应与 GraphQL 响应；遇无头 403 时显式提示并自动回退至可见 Chrome 窗口完成抓取。
+- **教训**：大厂前端架构迁移（CSR GraphQL → SSR Streaming Hydration）会让纯 XHR 拦截静默归零；单推抓取必须「HTML SSR + GraphQL 网络流」双通道兜底，并始终对真实线上链接做结构探针。
 
 ---
 
