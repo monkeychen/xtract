@@ -1,7 +1,7 @@
 ---
 doc_type: release
 version: v0.1.3
-status: draft
+status: approved
 date: 2026-11-24
 ---
 
@@ -58,8 +58,8 @@ date: 2026-11-24
 
 | 里程碑 | 范围 | Spec 与验收记录 | 验收状态 |
 | :--- | :--- | :--- | :---: |
-| **M1** | 拉取内容类型可配置（F5 / AC5.1–AC5.5） | [`spec-v0.1.3-m1.md`](../spec/spec-v0.1.3-m1.md) §8 | ✅ 人工确认通过 |
-| **M2** | 全形态视频本地下载、离线播放、CLI 与 `x-web` SSR 适配（F1–F4 / AC1.1–AC4.2） | [`spec-v0.1.3-m2.md`](../spec/spec-v0.1.3-m2.md) §8 | ✅ 人工确认通过 |
+| **M1** | 拉取内容类型可配置（F5 / AC5.1–AC5.5） | [`spec-v0.1.3-m1.md`](spec-v0.1.3-m1.md) §8 | ✅ 人工确认通过 |
+| **M2** | 全形态视频本地下载、离线播放、CLI 与 `x-web` SSR 适配（F1–F4 / AC1.1–AC4.2） | [`spec-v0.1.3-m2.md`](spec-v0.1.3-m2.md) §8 | ✅ 人工确认通过 |
 
 - **全量最终质量门禁（`pnpm verify` @ `0.1.3`）**：
   - 代码风格（`pnpm lint`）：0 Error
