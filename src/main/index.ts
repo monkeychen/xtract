@@ -587,10 +587,26 @@ if (isCLI) {
   });
 } else {
   // Lazy import electron only when launching GUI
-  import('electron').then(async ({ app, BrowserWindow, session }) => {
+  import('electron').then(async ({ app, BrowserWindow, session, protocol }) => {
     const { registerIpcHandlers } = await import('./ipc/index.js');
+    const { XTRACT_MEDIA_SCHEME, handleMediaProtocolRequest } = await import('./media-protocol.js');
     const path = await import('node:path');
     const { fileURLToPath } = await import('node:url');
+
+    // 在 app.whenReady() 前声明受控本地媒体特权协议，启用 stream: true 以支持 <video> Range 拖动
+    if (typeof protocol?.registerSchemesAsPrivileged === 'function') {
+      protocol.registerSchemesAsPrivileged([
+        {
+          scheme: XTRACT_MEDIA_SCHEME,
+          privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            stream: true,
+          },
+        },
+      ]);
+    }
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const fs = await import('node:fs');
@@ -667,6 +683,13 @@ if (isCLI) {
             headers['Origin'] = 'https://x.com';
             callback({ cancel: false, requestHeaders: headers });
           }
+        );
+      }
+
+      // 注册受控本地视频/媒体协议，支持离线秒播与 Range 拖动（严格限定在 Config.ARTICLES_DIR 内）
+      if (typeof protocol?.handle === 'function') {
+        protocol.handle(XTRACT_MEDIA_SCHEME, (request) =>
+          handleMediaProtocolRequest(request, Config.ARTICLES_DIR)
         );
       }
 

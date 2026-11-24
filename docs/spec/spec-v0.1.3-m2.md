@@ -188,7 +188,7 @@ export interface AppConfigView {
 | :--- | :--- | :--- | :--- | :---: |
 | **T2.1** | 全形态视频解析增强：`formatArticleContent` 内嵌推文/原生视频标记、`fetchTweetThread` 补齐等待窗口、`extractMedia` 多视频与正文去重纯函数（TDD） | AC1.1, AC1.2 | 无 | ✅ 完成（`article-embedded-cards` 7/7 + `studio-logic` 59/59 pass, 0 err） |
 | **T2.2** | 纯 Node.js 流式视频下载器（`video-downloader.ts`）+ `Storage.exportSingleTweetMarkdown` 视频落盘/自动关联 `index.md` + 级联删除回归（TDD） | AC2.1–AC2.4 | T2.1 | ✅ 完成（`video-downloader` 5/5 + `storage` 13/13 pass, 0 err） |
-| **T2.3** | 受控本地媒体协议 `xtract-media://`（路径安全校验 + HTTP Range `206`）与 Electron 主进程注册（TDD） | AC3.1 | T2.2 | ⬜ 待开始 |
+| **T2.3** | 受控本地媒体协议 `xtract-media://`（路径安全校验 + HTTP Range `206`）与 Electron 主进程注册（TDD） | AC3.1 | T2.2 | ✅ 完成（`media-protocol.test.ts` 3/3 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T2.4** | IPC 通道（`VIDEO_DOWNLOAD` / `VIDEO_DOWNLOAD_CANCEL` / `VIDEO_STATUS` + `AUTO_DOWNLOAD_VIDEOS` 配置）与 Preload/Renderer API 契约（TDD） | AC3.2–AC3.4 | T2.2, T2.3 | ⬜ 待开始 |
 | **T2.5** | GUI 播放器三态下载交互（`TweetVideoPlayer`）、文章内联视频渲染（`TweetMarkdown` + `TweetDetailPane`）、设置自动下载开关（`SettingsDrawer`）与 GUI E2E（TDD） | AC1.1, AC1.3, AC3.2–AC3.4 | T2.1, T2.4 | ⬜ 待开始 |
 | **T2.6** | CLI `--download-videos` / `--no-download-videos` 支持（`--view` & `--export-ids`）、真实样本 `2124098048842473619` 真机验证与 `pnpm verify` 全量验收（TDD） | AC1.4, AC4.1, AC4.2 | T2.2–T2.5 | ⬜ 待开始 |
