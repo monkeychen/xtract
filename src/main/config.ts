@@ -373,6 +373,10 @@ export class Config {
   static get FETCH_AUTHOR_REPLIES(): boolean {
     return (process.env.FETCH_AUTHOR_REPLIES || 'false').toLowerCase().trim() === 'true';
   }
+  // Auto Download Videos on Page Bundle Export (导出归档时是否自动下载视频到本地，默认关闭)
+  static get AUTO_DOWNLOAD_VIDEOS(): boolean {
+    return (process.env.AUTO_DOWNLOAD_VIDEOS || 'false').toLowerCase().trim() === 'true';
+  }
 
   static ensureDirs(): void {
     for (const dir of [this.DATA_DIR, this.RAW_DIR, this.REPORTS_DIR, this.BROWSER_PROFILE_DIR]) {

@@ -3,6 +3,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
 import { normalizeTweetDate, isArticleTweet, isNoteTweet, isLongContentTweet } from '../client/parser.js';
+import {
+  downloadVideoStream,
+  getLocalVideoIfExists,
+  resolveVideoDestPath,
+  type VideoDownloadProgress,
+} from './video-downloader.js';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types.js';
 
 export function isVideoUrl(url: string): boolean {
@@ -739,8 +745,19 @@ export class Storage {
 
   public async exportSingleTweetMarkdown(
     tweetId: string,
-    options: { outputPath?: string; downloadImages?: boolean; fetchAuthorReplies?: boolean } = {}
-  ): Promise<{ filePath: string; downloadedImagesCount: number }> {
+    options: {
+      outputPath?: string;
+      downloadImages?: boolean;
+      downloadVideos?: boolean;
+      fetchAuthorReplies?: boolean;
+      onVideoProgress?: (info: { videoUrl: string; index: number; total: number } & VideoDownloadProgress) => void;
+    } = {}
+  ): Promise<{
+    filePath: string;
+    downloadedImagesCount: number;
+    downloadedVideosCount: number;
+    downloadedVideos: string[];
+  }> {
     const primaryTweet = this.getTweetById(tweetId);
     if (!primaryTweet) {
       throw new Error(`推文 ID \`${tweetId}\` 不存在于本地数据库中。`);
@@ -771,12 +788,14 @@ export class Storage {
 
     const tweetImagesDir = path.join(bundleDir, 'images');
     const shouldDownload = options.downloadImages ?? true;
+    const shouldDownloadVideos = options.downloadVideos ?? Config.AUTO_DOWNLOAD_VIDEOS;
 
     if (shouldDownload && !fs.existsSync(tweetImagesDir)) {
       fs.mkdirSync(tweetImagesDir, { recursive: true });
     }
 
     let dlCount = 0;
+    const downloadedVideos: string[] = [];
     const lines: string[] = [
       `# 📝 推文归档: @${authorUser} (${primaryTweet.tweet_id})`,
       `\n> 来源博主: **${primaryTweet.author_name}** (@${authorUser}) | 原文链接: https://x.com/${authorUser}/status/${primaryId}\n`,
@@ -784,6 +803,7 @@ export class Storage {
     ];
 
     const isMultiChapter = allTweets.length > 1;
+    const inlineVideoRegex = /🎬\s*\[视频\]\((https?:\/\/[^\s)"]+)(?:\s+"poster=[^\s"]+")?\)/g;
 
     for (let idx = 0; idx < allTweets.length; idx++) {
       const t = allTweets[idx];
@@ -822,6 +842,63 @@ export class Storage {
         lines.push(`> 🔁 **转推自 @${t.retweeted_author}**:\n> ${t.retweeted_text}\n`);
       } else if (t.is_quote) {
         lines.push(`> 💬 **引用推文 @${t.quoted_author}**:\n> ${t.quoted_text}\n`);
+      }
+
+      // 收集本推文全部视频 URL（video_url + media_urls + 正文内联视频，去重保序）
+      const tweetVideoUrls: string[] = [];
+      const addVideoUrl = (u?: string) => {
+        if (u && isVideoUrl(u) && !tweetVideoUrls.includes(u)) {
+          tweetVideoUrls.push(u);
+        }
+      };
+      addVideoUrl(t.video_url);
+      for (const m of t.media_urls || []) addVideoUrl(m);
+      let inlineMatch: RegExpExecArray | null;
+      inlineVideoRegex.lastIndex = 0;
+      while ((inlineMatch = inlineVideoRegex.exec(tweetBody)) !== null) {
+        addVideoUrl(inlineMatch[1]);
+      }
+
+      // 按需流式下载视频至 Page Bundle videos/
+      if (shouldDownloadVideos && tweetVideoUrls.length > 0) {
+        for (let vIdx = 0; vIdx < tweetVideoUrls.length; vIdx++) {
+          const vUrl = tweetVideoUrls[vIdx];
+          const destPath = resolveVideoDestPath(bundleDir, vUrl);
+          const dlRes = await downloadVideoStream({
+            url: vUrl,
+            destPath,
+            onProgress: (p) =>
+              options.onVideoProgress?.({
+                videoUrl: vUrl,
+                index: vIdx,
+                total: tweetVideoUrls.length,
+                ...p,
+              }),
+          });
+          if (dlRes.success && dlRes.localPath && !downloadedVideos.includes(dlRes.localPath)) {
+            downloadedVideos.push(dlRes.localPath);
+          }
+        }
+      }
+
+      // 建立本地已落盘视频映射（无论本次是否触发新下载，均自动关联已有本地视频）
+      const localVideoRelMap = new Map<string, string>();
+      for (const vUrl of tweetVideoUrls) {
+        const existing = getLocalVideoIfExists(bundleDir, vUrl);
+        if (existing) {
+          const rel = `videos/${path.basename(existing.localPath)}`;
+          localVideoRelMap.set(vUrl, rel);
+        }
+      }
+
+      // 将正文中已落盘的视频标记同步关联到本地相对路径，同时保留原视频链接
+      if (localVideoRelMap.size > 0) {
+        inlineVideoRegex.lastIndex = 0;
+        tweetBody = tweetBody.replace(inlineVideoRegex, (fullMatch, matchedUrl: string) => {
+          const rel = localVideoRelMap.get(matchedUrl);
+          if (!rel) return fullMatch;
+          return `🎬 [本地视频](${rel})（[原视频链接](${matchedUrl})）`;
+        });
       }
 
       if (t.media_urls && t.media_urls.length > 0) {
@@ -866,7 +943,14 @@ export class Storage {
           const entry = mediaEntries[mIdx];
           const ok = downloadResults[mIdx];
           if (isVideoUrl(entry.mediaUrl)) {
-            extraMediaLines.push(`- 🎥 [视频/音频流](${entry.mediaUrl})`);
+            const localRel = localVideoRelMap.get(entry.mediaUrl);
+            if (!tweetBody.includes(entry.mediaUrl)) {
+              if (localRel) {
+                extraMediaLines.push(`- 🎥 [本地视频](${localRel})（[原视频链接](${entry.mediaUrl})）`);
+              } else {
+                extraMediaLines.push(`- 🎥 [视频/音频流](${entry.mediaUrl})`);
+              }
+            }
           } else if (shouldDownload && ok) {
             dlCount++;
             if (tweetBody.includes(entry.mediaUrl)) {
@@ -882,6 +966,18 @@ export class Storage {
         }
       }
 
+      // 若推文仅存在 video_url 而 media_urls 为空，也补录到附件区
+      if (t.video_url && isVideoUrl(t.video_url) && !(t.media_urls || []).includes(t.video_url)) {
+        if (!tweetBody.includes(t.video_url)) {
+          const localRel = localVideoRelMap.get(t.video_url);
+          if (localRel) {
+            extraMediaLines.push(`- 🎥 [本地视频](${localRel})（[原视频链接](${t.video_url})）`);
+          } else {
+            extraMediaLines.push(`- 🎥 [视频/音频流](${t.video_url})`);
+          }
+        }
+      }
+
       lines.push(`\n${tweetBody}\n`);
       if (extraMediaLines.length > 0) {
         lines.push(`\n#### 媒体附件:`);
@@ -891,7 +987,12 @@ export class Storage {
     }
 
     fs.writeFileSync(mdFile, lines.join('\n'), 'utf-8');
-    return { filePath: mdFile, downloadedImagesCount: dlCount };
+    return {
+      filePath: mdFile,
+      downloadedImagesCount: dlCount,
+      downloadedVideosCount: downloadedVideos.length,
+      downloadedVideos,
+    };
   }
 
   public async deleteTweets(filter: DeleteFilter): Promise<DeleteResult> {
