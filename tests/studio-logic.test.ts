@@ -3,6 +3,7 @@ import type { Tweet } from '../src/main/types.js';
 import {
   classifyTweet,
   extractMedia,
+  extractInlineVideoUrls,
   filterTweetsByKeyword,
 } from '../src/renderer/src/views/studio/logic.js';
 
@@ -187,6 +188,45 @@ describe('extractMedia (媒体提取 §2.2)', () => {
   it('should return an empty displayImages list when media_urls is missing or empty', () => {
     expect(extractMedia({ ...base }).displayImages).toEqual([]);
     expect(extractMedia({ ...base, media_urls: [] }).displayImages).toEqual([]);
+  });
+
+  it('UT-2a: should extract multiple videos with media-id matched posters and strip matched posters from displayImages', () => {
+    const v1 = 'https://video.twimg.com/amplify_video/1001/vid/avc1/1920x1080/a.mp4';
+    const p1 = 'https://pbs.twimg.com/amplify_video_thumb/1001/img/a.jpg';
+    const v2 = 'https://video.twimg.com/amplify_video/2002/vid/avc1/1920x1080/b.mp4';
+    const p2 = 'https://pbs.twimg.com/amplify_video_thumb/2002/img/b.jpg';
+    const photo = 'https://pbs.twimg.com/media/photo_only.jpg';
+
+    const r = extractMedia({
+      ...base,
+      video_url: v1,
+      video_poster: p1,
+      media_urls: [p1, v1, p2, v2, photo],
+    });
+
+    expect(r.isVideo).toBe(true);
+    expect(r.videoUrl).toBe(v1);
+    expect(r.posterUrl).toBe(p1);
+    expect(r.videos).toEqual([
+      { url: v1, posterUrl: p1 },
+      { url: v2, posterUrl: p2 },
+    ]);
+    expect(r.displayImages).toEqual([photo]);
+  });
+
+  it('UT-2b: extractInlineVideoUrls extracts inline markdown video urls and posters for deduplication', () => {
+    const v1 = 'https://video.twimg.com/amplify_video/1001/vid/a.mp4?tag=29';
+    const p1 = 'https://pbs.twimg.com/amplify_video_thumb/1001/img/a.jpg';
+    const v2 = 'https://video.twimg.com/ext_tw_video/2002/vid/b.mp4';
+    const text = [
+      '# 专栏',
+      `> 🎬 [视频](${v1} "poster=${p1}")`,
+      `🎬 [视频](${v2})`,
+    ].join('\n');
+
+    const extracted = extractInlineVideoUrls(text);
+    expect(Array.from(extracted.videoUrls)).toEqual([v1, v2]);
+    expect(Array.from(extracted.posterUrls)).toEqual([p1]);
   });
 });
 

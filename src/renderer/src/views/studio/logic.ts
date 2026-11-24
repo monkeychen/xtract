@@ -1,4 +1,4 @@
-import type { Tweet, TweetQueryOptions } from '../../types.js';
+import type { Tweet, TweetQueryOptions, TweetVideoItem } from '../../types.js';
 import type { StreamEvent } from '../../../../preload/index.js';
 
 /**
@@ -112,26 +112,89 @@ export interface TweetMedia {
   videoUrl?: string;
   /** 非视频推文恒为 undefined，严禁把首张真实配图排挤掉 */
   posterUrl?: string;
-  /** 已剔除视频 URL；视频推文额外剔除封面 */
+  /** 全部视频列表（含按媒体 ID 配对的封面图） */
+  videos: TweetVideoItem[];
+  /** 已剔除视频 URL；视频推文额外剔除用作视频封面的缩略图 */
   displayImages: string[];
 }
 
-/** 提取推文的展示媒体：视频直链、视频封面与图集。 */
+function extractTwitterMediaId(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:amplify_video|ext_tw_video|tweet_video)(?:_thumb)?\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+/** 提取推文的展示媒体：全部视频直链与配对封面、兼容首视频字段与图集。 */
 export function extractMedia(tweet: Partial<Tweet>): TweetMedia {
   const isVideo = isTweetVideo(tweet);
-  const videoUrl = tweet.video_url || tweet.media_urls?.find((m) => isVideoUrl(m));
-  // 只有视频推文才提取 video_poster；非视频推文 posterUrl 必须为 undefined，严禁把首张配图排挤掉
-  const posterUrl = isVideo
-    ? tweet.video_poster ||
-      tweet.media_urls?.find((m) => m.includes('ext_tw_video_thumb') || m.includes('video_thumb')) ||
-      tweet.media_urls?.find((m) => !isVideoUrl(m)) ||
-      undefined
-    : undefined;
-  // 非视频推文展示全部真实配图；视频推文若有 posterUrl 则在视频播放器展示封面
-  const displayImages = (tweet.media_urls || []).filter(
-    (m) => !isVideoUrl(m) && (isVideo && posterUrl ? m !== posterUrl : true)
-  );
-  return { isVideo, videoUrl, posterUrl, displayImages };
+  if (!isVideo) {
+    // 非视频推文 posterUrl 必须为 undefined，严禁把首张配图排挤掉
+    const displayImages = (tweet.media_urls || []).filter((m) => !isVideoUrl(m));
+    return { isVideo: false, videoUrl: undefined, posterUrl: undefined, videos: [], displayImages };
+  }
+
+  const videoUrls: string[] = [];
+  if (tweet.video_url && isVideoUrl(tweet.video_url)) {
+    videoUrls.push(tweet.video_url);
+  }
+  for (const m of tweet.media_urls || []) {
+    if (isVideoUrl(m) && !videoUrls.includes(m)) {
+      videoUrls.push(m);
+    }
+  }
+
+  const nonVideoImages = (tweet.media_urls || []).filter((m) => !isVideoUrl(m));
+  const usedPosters = new Set<string>();
+
+  const videos: TweetVideoItem[] = videoUrls.map((vUrl, idx) => {
+    const mediaId = extractTwitterMediaId(vUrl);
+    let pUrl: string | undefined;
+
+    if (idx === 0 && tweet.video_poster && !usedPosters.has(tweet.video_poster)) {
+      pUrl = tweet.video_poster;
+    }
+    if (!pUrl && mediaId) {
+      pUrl = nonVideoImages.find((img) => !usedPosters.has(img) && extractTwitterMediaId(img) === mediaId);
+    }
+    if (!pUrl && idx === 0) {
+      pUrl =
+        nonVideoImages.find(
+          (img) => !usedPosters.has(img) && (img.includes('ext_tw_video_thumb') || img.includes('video_thumb'))
+        ) ||
+        nonVideoImages.find((img) => !usedPosters.has(img)) ||
+        undefined;
+    }
+
+    if (pUrl) usedPosters.add(pUrl);
+    return { url: vUrl, posterUrl: pUrl };
+  });
+
+  const videoUrl = videos[0]?.url;
+  const posterUrl = videos[0]?.posterUrl;
+  const displayImages = nonVideoImages.filter((img) => !usedPosters.has(img));
+
+  return { isVideo: true, videoUrl, posterUrl, videos, displayImages };
+}
+
+/**
+ * 提取推文/专栏正文中已通过 `🎬 [视频](url "poster=...")` 内联渲染的视频 URL 与封面集合，
+ * 供详情页底部媒体区去重，避免同一视频在正文与底部重复渲染。
+ */
+export function extractInlineVideoUrls(text?: string): {
+  videoUrls: Set<string>;
+  posterUrls: Set<string>;
+} {
+  const videoUrls = new Set<string>();
+  const posterUrls = new Set<string>();
+  if (!text) return { videoUrls, posterUrls };
+
+  const regex = /🎬\s*\[(?:视频|本地视频)\]\((https?:\/\/[^\s)"]+)(?:\s+"poster=(https?:\/\/[^\s"]+)")?\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    if (match[1]) videoUrls.add(match[1]);
+    if (match[2]) posterUrls.add(match[2]);
+  }
+  return { videoUrls, posterUrls };
 }
 
 /** 对本地已加载推文做关键词内存过滤：匹配正文、作者昵称、作者用户名，大小写不敏感。 */

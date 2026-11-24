@@ -241,4 +241,97 @@ describe('X Article Embedded Tweet Cards & Divider Parsing', () => {
     expect(tweet?.text).toContain('Check out my new AI framework!');
     expect(tweet?.text).toContain('https://x.com/creator/status/111222333');
   });
+
+  it('6. UT-1a: formatArticleContent should render embedded TWEET video markers and collect video URLs into mediaUrls', () => {
+    const articleResult = {
+      title: 'Fable 5.2 视频合集',
+      content_state: {
+        blocks: [
+          { type: 'header-two', text: '案例一' },
+          { type: 'atomic', text: ' ', entityRanges: [{ key: 0, length: 1, offset: 0 }] },
+        ],
+        entityMap: [
+          {
+            key: '0',
+            value: {
+              type: 'TWEET',
+              data: {
+                tweetId: '2121343522318274958',
+                url: 'https://x.com/ChrisGPT/status/2121343522318274958',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const videoUrl1 = 'https://video.twimg.com/amplify_video/2121343472368074752/vid/avc1/3840x2160/rdmP3hbqzNGNuPrj.mp4?tag=29';
+    const posterUrl1 = 'https://pbs.twimg.com/amplify_video_thumb/2121343472368074752/img/jhtGcT4FbrEL1Df0.jpg';
+    const videoUrl2 = 'https://video.twimg.com/amplify_video/2121343472368074999/vid/avc1/1920x1080/second.mp4?tag=29';
+    const posterUrl2 = 'https://pbs.twimg.com/amplify_video_thumb/2121343472368074999/img/second.jpg';
+
+    const embeddedMap = new Map<string, Partial<Tweet>>([
+      [
+        '2121343522318274958',
+        {
+          tweet_id: '2121343522318274958',
+          author_name: 'Chris',
+          author_username: 'ChrisGPT',
+          text: 'Fable 5.2 animated a cowboy toy',
+          video_url: videoUrl1,
+          video_poster: posterUrl1,
+          media_urls: [posterUrl1, videoUrl1, posterUrl2, videoUrl2],
+        },
+      ],
+    ]);
+
+    const res = formatArticleContent(articleResult, embeddedMap);
+    expect(res.text).toContain(`> 🎬 [视频](${videoUrl1} "poster=${posterUrl1}")`);
+    expect(res.text).toContain(`> 🎬 [视频](${videoUrl2} "poster=${posterUrl2}")`);
+    expect(res.mediaUrls).toContain(videoUrl1);
+    expect(res.mediaUrls).toContain(posterUrl1);
+    expect(res.mediaUrls).toContain(videoUrl2);
+    expect(res.mediaUrls).toContain(posterUrl2);
+  });
+
+  it('7. UT-1b: formatArticleContent should defensively parse native video media_entities in X Article', () => {
+    const nativeMp4 = 'https://video.twimg.com/ext_tw_video/888000111/vid/avc1/1280x720/demo.mp4';
+    const nativePoster = 'https://pbs.twimg.com/ext_tw_video_thumb/888000111/img/poster.jpg';
+
+    const articleResult = {
+      title: '原生视频专栏',
+      media_entities: [
+        {
+          media_id: '888000111',
+          media_info: {
+            __typename: 'ApiVideo',
+            preview_image: { original_img_url: nativePoster },
+            variants: [
+              { content_type: 'video/mp4', bitrate: 832000, url: 'https://video.twimg.com/ext_tw_video/888000111/vid/low.mp4' },
+              { content_type: 'video/mp4', bitrate: 2176000, url: nativeMp4 },
+            ],
+          },
+        },
+      ],
+      content_state: {
+        blocks: [
+          { type: 'atomic', text: ' ', entityRanges: [{ key: 0, length: 1, offset: 0 }] },
+        ],
+        entityMap: [
+          {
+            key: '0',
+            value: {
+              type: 'MEDIA',
+              data: { mediaItems: [{ mediaId: '888000111' }] },
+            },
+          },
+        ],
+      },
+    };
+
+    const res = formatArticleContent(articleResult);
+    expect(res.text).toContain(`🎬 [视频](${nativeMp4} "poster=${nativePoster}")`);
+    expect(res.mediaUrls).toContain(nativeMp4);
+    expect(res.mediaUrls).toContain(nativePoster);
+  });
 });

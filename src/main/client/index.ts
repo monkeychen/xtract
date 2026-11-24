@@ -1088,7 +1088,7 @@ export class XClient {
     const capturedTweets: Tweet[] = [];
     let rawMainTweetResult: any = null;
     const embeddedTweetsMap = new Map<string, Tweet>();
-    let hasArticleTweetEntities = false;
+    const expectedArticleTweetIds = new Set<string>();
     const browser = await this.launchBrowser(true);
 
     try {
@@ -1123,11 +1123,17 @@ export class XClient {
               if (t && t.tweet_id) {
                 if (t.tweet_id === cleanId) {
                   rawMainTweetResult = rawResult;
-                  const articleResult = rawResult.article?.article_results?.result;
+                  const inner =
+                    rawResult.__typename === 'TweetWithVisibilityResults'
+                      ? rawResult.tweet
+                      : rawResult;
+                  const articleResult = inner?.article?.article_results?.result;
                   if (Array.isArray(articleResult?.content_state?.entityMap)) {
-                    hasArticleTweetEntities = articleResult.content_state.entityMap.some(
-                      (e: any) => e.value?.type === 'TWEET'
-                    );
+                    for (const e of articleResult.content_state.entityMap) {
+                      if (e?.value?.type === 'TWEET' && e?.value?.data?.tweetId) {
+                        expectedArticleTweetIds.add(String(e.value.data.tweetId));
+                      }
+                    }
                   }
                 }
                 capturedTweets.push(t);
@@ -1149,13 +1155,23 @@ export class XClient {
       process.stderr.write(`🌐 正在打开推文页面 ${targetUrl} 并获取内容...\n`);
       await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
 
+      let mainCapturedAt = -1;
       for (let i = 0; i < Math.max(30, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         if (capturedTweets.length > 0) {
           const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
           if (hasMain) {
-            // 若主推文为包含内嵌推文的 Article，而前端 TweetResultsByRestIds 尚未返回，留出最多 4 秒接收窗口
-            if (hasArticleTweetEntities && embeddedTweetsMap.size === 0 && i < 4) {
+            if (mainCapturedAt < 0) mainCapturedAt = i;
+            const waitElapsed = i - mainCapturedAt;
+            // 若主推文为包含内嵌推文的 Article，最多留 6 秒等待所有 TweetResultsByRestIds 补齐
+            if (
+              expectedArticleTweetIds.size > 0 &&
+              embeddedTweetsMap.size < expectedArticleTweetIds.size &&
+              waitElapsed < 6
+            ) {
+              if (waitElapsed === 2 || waitElapsed === 4) {
+                await page.evaluate(() => window.scrollBy(0, 1200)).catch(() => {});
+              }
               continue;
             }
             if (!shouldFetchReplies) {

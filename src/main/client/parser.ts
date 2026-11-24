@@ -3,6 +3,7 @@ import {
   DEFAULT_TWEET_CONTENT_TYPES,
   type Tweet,
   type TweetContentType,
+  type TweetVideoItem,
   type TrendTopic,
   type XListInfo,
 } from '../types.js';
@@ -13,12 +14,68 @@ import {
 export interface ParsedArticleEntity {
   type: string;
   imageUrl?: string;
+  videoUrl?: string;
+  posterUrl?: string;
   tweetId?: string;
   tweetUrl?: string;
 }
 
+function isVideoMediaUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('.mp4') || lower.includes('.m3u8') || lower.includes('video.twimg.com');
+}
+
+function extractTwitterMediaId(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:amplify_video|ext_tw_video|tweet_video)(?:_thumb)?\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+export function extractTweetVideos(tweet: Partial<Tweet>): TweetVideoItem[] {
+  const videoUrls: string[] = [];
+  if (tweet.video_url && isVideoMediaUrl(tweet.video_url)) {
+    videoUrls.push(tweet.video_url);
+  }
+  for (const m of tweet.media_urls || []) {
+    if (isVideoMediaUrl(m) && !videoUrls.includes(m)) {
+      videoUrls.push(m);
+    }
+  }
+  if (videoUrls.length === 0) return [];
+
+  const nonVideoImages = (tweet.media_urls || []).filter((m) => !isVideoMediaUrl(m));
+  const usedPosters = new Set<string>();
+
+  return videoUrls.map((vUrl, idx) => {
+    const mediaId = extractTwitterMediaId(vUrl);
+    let posterUrl: string | undefined;
+
+    if (mediaId) {
+      posterUrl = nonVideoImages.find((img) => !usedPosters.has(img) && extractTwitterMediaId(img) === mediaId);
+    }
+    if (!posterUrl && idx === 0 && tweet.video_poster && !usedPosters.has(tweet.video_poster)) {
+      posterUrl = tweet.video_poster;
+    }
+    if (!posterUrl && idx === 0) {
+      posterUrl = nonVideoImages.find(
+        (img) => !usedPosters.has(img) && (img.includes('video_thumb') || img.includes('ext_tw_video_thumb'))
+      );
+    }
+    if (posterUrl) usedPosters.add(posterUrl);
+    return { url: vUrl, posterUrl };
+  });
+}
+
+export function formatVideoMarkdownLine(videoUrl: string, posterUrl?: string): string {
+  if (posterUrl) {
+    return `🎬 [视频](${videoUrl} "poster=${posterUrl}")`;
+  }
+  return `🎬 [视频](${videoUrl})`;
+}
+
 /**
- * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images and embedded tweet cards.
+ * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images, videos, and embedded tweet cards.
  */
 export function formatArticleContent(
   articleResult: any,
@@ -44,19 +101,37 @@ export function formatArticleContent(
     lines.push(`![封面图](${coverUrl})\n`);
   }
 
-  // Media map for atomic image blocks
-  const mediaMap: Record<string, string> = {};
+  // Media map for atomic image & native video blocks
+  const mediaMap: Record<
+    string,
+    { type: 'IMAGE' | 'VIDEO'; imageUrl?: string; videoUrl?: string; posterUrl?: string }
+  > = {};
   if (Array.isArray(articleResult.media_entities)) {
     for (const m of articleResult.media_entities) {
-      const url = m.media_info?.original_img_url;
+      const info = m.media_info || {};
+      const variants = info.variants || info.video_info?.variants || [];
+      const mp4s = Array.isArray(variants)
+        ? variants.filter((v: any) => v?.content_type === 'video/mp4' && v?.url)
+        : [];
+      if (m.media_id && mp4s.length > 0) {
+        mp4s.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+        const bestVideoUrl = mp4s[0].url;
+        const posterUrl = info.preview_image?.original_img_url || info.original_img_url || undefined;
+        mediaMap[m.media_id] = { type: 'VIDEO', videoUrl: bestVideoUrl, posterUrl };
+        if (posterUrl && !mediaUrls.includes(posterUrl)) mediaUrls.push(posterUrl);
+        if (!mediaUrls.includes(bestVideoUrl)) mediaUrls.push(bestVideoUrl);
+        continue;
+      }
+
+      const url = info.original_img_url;
       if (m.media_id && url) {
-        mediaMap[m.media_id] = url;
+        mediaMap[m.media_id] = { type: 'IMAGE', imageUrl: url };
         if (!mediaUrls.includes(url)) mediaUrls.push(url);
       }
     }
   }
 
-  // Parse all Draft.js entities: IMAGE, DIVIDER, TWEET, etc.
+  // Parse all Draft.js entities: IMAGE, VIDEO, DIVIDER, TWEET, etc.
   const entityMap: Record<string, ParsedArticleEntity> = {};
   if (Array.isArray(articleResult.content_state?.entityMap)) {
     for (const item of articleResult.content_state.entityMap) {
@@ -70,10 +145,16 @@ export function formatArticleContent(
         const tweetUrl = data.url || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
         entityMap[item.key] = { type: 'TWEET', tweetId, tweetUrl };
       } else {
-        // Image or fallback
         const mediaId = data.mediaItems?.[0]?.mediaId;
-        if (mediaId && mediaMap[mediaId]) {
-          entityMap[item.key] = { type: 'IMAGE', imageUrl: mediaMap[mediaId] };
+        const mapped = mediaId ? mediaMap[mediaId] : undefined;
+        if (mapped?.type === 'VIDEO' && mapped.videoUrl) {
+          entityMap[item.key] = {
+            type: 'VIDEO',
+            videoUrl: mapped.videoUrl,
+            posterUrl: mapped.posterUrl,
+          };
+        } else if (mapped?.type === 'IMAGE' && mapped.imageUrl) {
+          entityMap[item.key] = { type: 'IMAGE', imageUrl: mapped.imageUrl };
         } else if (entType) {
           entityMap[item.key] = { type: entType };
         }
@@ -115,6 +196,8 @@ export function formatArticleContent(
 
           if (ent.type === 'DIVIDER') {
             lines.push('\n---\n');
+          } else if (ent.type === 'VIDEO' && ent.videoUrl) {
+            lines.push(`${formatVideoMarkdownLine(ent.videoUrl, ent.posterUrl)}\n`);
           } else if (ent.imageUrl) {
             lines.push(`![](${ent.imageUrl})\n`);
           } else if (ent.type === 'TWEET') {
@@ -135,6 +218,19 @@ export function formatArticleContent(
                 const bodyLines = tweetInfo.text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').split('\n');
                 for (const bl of bodyLines) {
                   cardLines.push(`> ${bl}`);
+                }
+              }
+              const embeddedVideos = extractTweetVideos(tweetInfo);
+              if (embeddedVideos.length > 0) {
+                cardLines.push('>');
+                for (const v of embeddedVideos) {
+                  cardLines.push(`> ${formatVideoMarkdownLine(v.url, v.posterUrl)}`);
+                  if (v.posterUrl && !mediaUrls.includes(v.posterUrl)) {
+                    mediaUrls.push(v.posterUrl);
+                  }
+                  if (!mediaUrls.includes(v.url)) {
+                    mediaUrls.push(v.url);
+                  }
                 }
               }
               if (tweetUrl) {

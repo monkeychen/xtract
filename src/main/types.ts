@@ -3,6 +3,29 @@ export type TweetContentType = 'article' | 'note' | 'short';
 export const ALL_TWEET_CONTENT_TYPES: readonly TweetContentType[] = ['article', 'note', 'short'];
 export const DEFAULT_TWEET_CONTENT_TYPES: readonly TweetContentType[] = ['article'];
 
+export interface TweetVideoItem {
+  url: string;
+  posterUrl?: string;
+}
+
+export interface LocalVideoStatus {
+  downloaded: boolean;
+  localPath?: string;
+  mediaUrl?: string;
+  sizeBytes?: number;
+}
+
+export interface VideoDownloadResult {
+  success: boolean;
+  videoUrl: string;
+  localPath?: string;
+  mediaUrl?: string;
+  sizeBytes?: number;
+  alreadyExisted?: boolean;
+  canceled?: boolean;
+  error?: string;
+}
+
 export interface Tweet {
   tweet_id: string;
   author_id?: string;

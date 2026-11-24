@@ -1,7 +1,32 @@
-import type { Tweet, TweetContentType, TrendTopic, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../../main/types';
+import type {
+  Tweet,
+  TweetContentType,
+  TweetVideoItem,
+  LocalVideoStatus,
+  VideoDownloadResult,
+  TrendTopic,
+  DeleteFilter,
+  DeleteResult,
+  XListInfo,
+  TweetQueryOptions,
+} from '../../main/types';
 import type { StreamEvent, AppConfigView, XtractAPI } from '../../preload/index';
 
-export type { Tweet, TweetContentType, TrendTopic, DeleteFilter, DeleteResult, StreamEvent, AppConfigView, XtractAPI, XListInfo, TweetQueryOptions };
+export type {
+  Tweet,
+  TweetContentType,
+  TweetVideoItem,
+  LocalVideoStatus,
+  VideoDownloadResult,
+  TrendTopic,
+  DeleteFilter,
+  DeleteResult,
+  StreamEvent,
+  AppConfigView,
+  XtractAPI,
+  XListInfo,
+  TweetQueryOptions,
+};
 
 export interface ReportItem {
   id: string;
