@@ -5,6 +5,12 @@ import { IPC_CHANNELS } from '../../preload/channels.js';
 import type { StreamEvent, AppConfigView } from '../../preload/index.js';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
+import {
+  downloadVideoStream,
+  getLocalVideoIfExists,
+  resolveVideoDestPath,
+} from '../storage/video-downloader.js';
+import { buildLocalMediaUrl } from '../media-protocol.js';
 import { XClient } from '../client/index.js';
 import { importXCredentialsFromBrowser } from '../auth/index.js';
 import { createCliShortcut, runPowerShellForReal } from '../cli/shortcut.js';
@@ -12,7 +18,15 @@ import os from 'node:os';
 import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
 import { isTweetContentIncomplete, parseContentTypes } from '../client/parser.js';
-import type { Tweet, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../types.js';
+import type {
+  Tweet,
+  LocalVideoStatus,
+  VideoDownloadResult,
+  DeleteFilter,
+  DeleteResult,
+  XListInfo,
+  TweetQueryOptions,
+} from '../types.js';
 
 let isRegistered = false;
 
@@ -110,6 +124,7 @@ export function registerIpcHandlers(
       fetchContentTypes: Config.FETCH_CONTENT_TYPES,
       onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
       fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+      autoDownloadVideos: Config.AUTO_DOWNLOAD_VIDEOS,
       storageRoot: Config.STORAGE_ROOT,
       dataDir: Config.DATA_DIR,
       articlesDir: Config.ARTICLES_DIR,
@@ -197,6 +212,7 @@ export function registerIpcHandlers(
           fetchContentTypes: Config.FETCH_CONTENT_TYPES,
           onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
           fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+          autoDownloadVideos: Config.AUTO_DOWNLOAD_VIDEOS,
           storageRoot: Config.STORAGE_ROOT,
           dataDir: Config.DATA_DIR,
           articlesDir: Config.ARTICLES_DIR,
@@ -729,6 +745,162 @@ export function registerIpcHandlers(
         process.stderr.write(`⚠️ 打开目录选择弹窗失败: ${err}\n`);
         return null;
       }
+    }
+  );
+
+  // 8. Video Download & Local Media Status
+  const activeVideoDownloads = new Map<string, AbortController>();
+
+  ipcMain.handle(
+    IPC_CHANNELS.VIDEO_STATUS,
+    async (
+      _event,
+      params: { tweetId: string; authorUsername?: string; videoUrls: string[] }
+    ): Promise<Record<string, LocalVideoStatus>> => {
+      const result: Record<string, LocalVideoStatus> = {};
+      const author = params?.authorUsername || 'unknown';
+      const tweetId = String(params?.tweetId || '');
+      if (!tweetId || !Array.isArray(params?.videoUrls)) {
+        return result;
+      }
+
+      const bundleDir = path.join(Config.ARTICLES_DIR, author, tweetId);
+      for (const videoUrl of params.videoUrls) {
+        const existing = getLocalVideoIfExists(bundleDir, videoUrl);
+        if (existing) {
+          result[videoUrl] = {
+            downloaded: true,
+            localPath: existing.localPath,
+            mediaUrl: buildLocalMediaUrl(Config.ARTICLES_DIR, existing.localPath) || undefined,
+            sizeBytes: existing.sizeBytes,
+          };
+        } else {
+          result[videoUrl] = { downloaded: false };
+        }
+      }
+      return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.VIDEO_DOWNLOAD,
+    async (
+      event,
+      params: { tweetId: string; authorUsername?: string; videoUrl: string }
+    ): Promise<VideoDownloadResult> => {
+      const tweetId = String(params?.tweetId || '').trim();
+      const author = (params?.authorUsername || 'unknown').trim() || 'unknown';
+      const videoUrl = String(params?.videoUrl || '').trim();
+
+      if (!tweetId || !videoUrl) {
+        return { success: false, videoUrl, error: '缺少推文 ID 或视频链接，无法下载。' };
+      }
+
+      if (activeVideoDownloads.has(videoUrl)) {
+        return { success: false, videoUrl, error: '该视频正在下载中，请勿重复点击。' };
+      }
+
+      const bundleDir = path.join(Config.ARTICLES_DIR, author, tweetId);
+      const destPath = resolveVideoDestPath(bundleDir, videoUrl);
+      const taskId = `video_${Date.now()}`;
+      const controller = new AbortController();
+      activeVideoDownloads.set(videoUrl, controller);
+
+      const emitProgress = (meta: Record<string, unknown>, percent?: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: 'video_download',
+          type: 'status',
+          progress: percent,
+          meta: {
+            tweetId,
+            videoUrl,
+            ...meta,
+          },
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {
+          // ignore closed sender
+        }
+      };
+
+      emitProgress({ status: 'downloading', downloadedBytes: 0, totalBytes: 0, percent: 0 }, 0);
+
+      try {
+        const dlRes = await downloadVideoStream({
+          url: videoUrl,
+          destPath,
+          signal: controller.signal,
+          onProgress: (p) => {
+            emitProgress(
+              {
+                status: 'downloading',
+                downloadedBytes: p.downloadedBytes,
+                totalBytes: p.totalBytes,
+                percent: p.percent,
+              },
+              p.percent
+            );
+          },
+        });
+
+        if (dlRes.success && dlRes.localPath) {
+          const mediaUrl = buildLocalMediaUrl(Config.ARTICLES_DIR, dlRes.localPath) || undefined;
+          // 若数据库存在该推文，同步刷新 index.md 以关联新落盘的本地视频（不触发下载其他未点击视频）
+          try {
+            if (storage.getTweetById(tweetId)) {
+              await storage.exportSingleTweetMarkdown(tweetId, {
+                downloadImages: false,
+                downloadVideos: false,
+              });
+            }
+          } catch {
+            // index.md 同步失败不影响视频已成功落盘的事实
+          }
+
+          emitProgress(
+            {
+              status: 'done',
+              localPath: dlRes.localPath,
+              mediaUrl,
+              sizeBytes: dlRes.sizeBytes,
+              percent: 100,
+            },
+            100
+          );
+
+          return {
+            ...dlRes,
+            mediaUrl,
+          };
+        }
+
+        emitProgress(
+          {
+            status: dlRes.canceled ? 'canceled' : 'error',
+            error: dlRes.error,
+          },
+          0
+        );
+        return dlRes;
+      } finally {
+        activeVideoDownloads.delete(videoUrl);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.VIDEO_DOWNLOAD_CANCEL,
+    async (_event, params: { videoUrl: string }): Promise<{ canceled: boolean }> => {
+      const videoUrl = String(params?.videoUrl || '').trim();
+      const controller = activeVideoDownloads.get(videoUrl);
+      if (controller) {
+        controller.abort();
+        activeVideoDownloads.delete(videoUrl);
+        return { canceled: true };
+      }
+      return { canceled: false };
     }
   );
 }

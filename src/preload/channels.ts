@@ -46,6 +46,11 @@ export const IPC_CHANNELS = {
   SHELL_OPEN_PATH: 'shell:open-path',
   DIALOG_SELECT_DIRECTORY: 'dialog:select-directory',
 
+  // Video Download & Local Media Status
+  VIDEO_DOWNLOAD: 'video:download',
+  VIDEO_DOWNLOAD_CANCEL: 'video:download-cancel',
+  VIDEO_STATUS: 'video:status',
+
   // Real-time Event Streaming (Main -> Renderer)
   STREAM_EVENT: 'stream:event',
 } as const;

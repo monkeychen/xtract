@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { IPC_CHANNELS } from '../src/preload/channels.js';
@@ -105,6 +107,11 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof api.maximizeWindow).toBe('function');
     expect(typeof api.closeWindow).toBe('function');
     expect(typeof api.onStreamEvent).toBe('function');
+
+    // Video download & status
+    expect(typeof api.downloadVideo).toBe('function');
+    expect(typeof api.cancelVideoDownload).toBe('function');
+    expect(typeof api.getVideoStatus).toBe('function');
   });
 
   it('registerIpcHandlers should register handlers for all core channels', () => {
@@ -234,5 +241,86 @@ describe('Preload & IPC Communication Bridge', () => {
 
     const packagedConfig = await xtractApiImplementation.getConfig();
     expect(packagedConfig.appVersion).toBe('0.1.2-packaged');
+  });
+
+  it('UT-7: IPC VIDEO_STATUS, VIDEO_DOWNLOAD, VIDEO_DOWNLOAD_CANCEL and AUTO_DOWNLOAD_VIDEOS config', async () => {
+    const origRoot = process.env.XTRACT_STORAGE_ROOT;
+    const origAuto = process.env.AUTO_DOWNLOAD_VIDEOS;
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract_ipc_vid_'));
+    process.env.XTRACT_STORAGE_ROOT = tmpRoot;
+    delete process.env.AUTO_DOWNLOAD_VIDEOS;
+
+    const mockBytes = Buffer.alloc(64 * 1024, 0x55);
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(mockBytes.length),
+      });
+      res.end(mockBytes);
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as { port: number }).port;
+    const videoUrl = `http://127.0.0.1:${port}/amplify_video/777888999/vid/clip.mp4`;
+
+    try {
+      _resetRegisteredForTest();
+      registerIpcHandlers(undefined, { force: true });
+
+      expect(mockHandlers.has(IPC_CHANNELS.VIDEO_DOWNLOAD)).toBe(true);
+      expect(mockHandlers.has(IPC_CHANNELS.VIDEO_DOWNLOAD_CANCEL)).toBe(true);
+      expect(mockHandlers.has(IPC_CHANNELS.VIDEO_STATUS)).toBe(true);
+
+      // 1. autoDownloadVideos defaults to false and can be toggled
+      const cfg0 = await xtractApiImplementation.getConfig();
+      expect(cfg0.autoDownloadVideos).toBe(false);
+
+      const upd = await xtractApiImplementation.updateConfig({ AUTO_DOWNLOAD_VIDEOS: 'true' });
+      expect(upd.config.autoDownloadVideos).toBe(true);
+
+      // 2. Initial status: not downloaded
+      const statusBefore = await xtractApiImplementation.getVideoStatus({
+        tweetId: '2124098048842473619',
+        authorUsername: 'AdrianPunk115',
+        videoUrls: [videoUrl],
+      });
+      expect(statusBefore[videoUrl]?.downloaded).toBe(false);
+
+      // 3. Download via IPC -> streams, emits progress event, writes file, returns mediaUrl
+      const dlRes = await xtractApiImplementation.downloadVideo({
+        tweetId: '2124098048842473619',
+        authorUsername: 'AdrianPunk115',
+        videoUrl,
+      });
+      expect(dlRes.success).toBe(true);
+      expect(dlRes.localPath).toBeDefined();
+      expect(fs.existsSync(dlRes.localPath!)).toBe(true);
+      expect(dlRes.mediaUrl).toContain('xtract-media://articles/AdrianPunk115/2124098048842473619/videos/');
+      expect(mockSend).toHaveBeenCalledWith(
+        IPC_CHANNELS.STREAM_EVENT,
+        expect.objectContaining({ stage: 'video_download' })
+      );
+
+      // 4. Status after download: downloaded === true with mediaUrl & sizeBytes
+      const statusAfter = await xtractApiImplementation.getVideoStatus({
+        tweetId: '2124098048842473619',
+        authorUsername: 'AdrianPunk115',
+        videoUrls: [videoUrl],
+      });
+      expect(statusAfter[videoUrl]?.downloaded).toBe(true);
+      expect(statusAfter[videoUrl]?.sizeBytes).toBe(mockBytes.length);
+      expect(statusAfter[videoUrl]?.mediaUrl).toBe(dlRes.mediaUrl);
+
+      // 5. Cancel on non-running url returns { canceled: false } cleanly
+      const cancelRes = await xtractApiImplementation.cancelVideoDownload(videoUrl);
+      expect(cancelRes).toEqual({ canceled: false });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (origRoot === undefined) delete process.env.XTRACT_STORAGE_ROOT;
+      else process.env.XTRACT_STORAGE_ROOT = origRoot;
+      if (origAuto === undefined) delete process.env.AUTO_DOWNLOAD_VIDEOS;
+      else process.env.AUTO_DOWNLOAD_VIDEOS = origAuto;
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

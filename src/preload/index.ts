@@ -1,10 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './channels.js';
-import type { Tweet, TweetContentType, TrendTopic, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../main/types.js';
+import type {
+  Tweet,
+  TweetContentType,
+  LocalVideoStatus,
+  VideoDownloadResult,
+  TrendTopic,
+  DeleteFilter,
+  DeleteResult,
+  XListInfo,
+  TweetQueryOptions,
+} from '../main/types.js';
 
 export interface StreamEvent {
   taskId: string;
-  stage: 'init' | 'refine_query' | 'fetch' | 'reasoning' | 'synthesis' | 'done' | 'error';
+  stage: 'init' | 'refine_query' | 'fetch' | 'reasoning' | 'synthesis' | 'video_download' | 'done' | 'error';
   type?: 'reasoning' | 'content' | 'status';
   text?: string;
   progress?: number;
@@ -25,6 +35,7 @@ export interface AppConfigView {
   fetchContentTypes: TweetContentType[];
   onlyLongTweets: boolean;
   fetchAuthorReplies: boolean;
+  autoDownloadVideos: boolean;
   storageRoot: string;
   dataDir: string;
   articlesDir: string;
@@ -136,6 +147,19 @@ export interface XtractAPI {
   openPath: (dirPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   selectDirectory: (defaultPath?: string) => Promise<string | null>;
 
+  // Video Download & Local Status
+  downloadVideo: (params: {
+    tweetId: string;
+    authorUsername: string;
+    videoUrl: string;
+  }) => Promise<VideoDownloadResult>;
+  cancelVideoDownload: (videoUrl: string) => Promise<{ canceled: boolean }>;
+  getVideoStatus: (params: {
+    tweetId: string;
+    authorUsername: string;
+    videoUrls: string[];
+  }) => Promise<Record<string, LocalVideoStatus>>;
+
   // Real-time Event Streaming
   onStreamEvent: (callback: (event: StreamEvent) => void) => () => void;
 }
@@ -185,6 +209,10 @@ export const xtractApiImplementation: XtractAPI = {
   openPath: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, dirPath),
   selectDirectory: (defaultPath) =>
     ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_DIRECTORY, defaultPath),
+
+  downloadVideo: (params) => ipcRenderer.invoke(IPC_CHANNELS.VIDEO_DOWNLOAD, params),
+  cancelVideoDownload: (videoUrl) => ipcRenderer.invoke(IPC_CHANNELS.VIDEO_DOWNLOAD_CANCEL, { videoUrl }),
+  getVideoStatus: (params) => ipcRenderer.invoke(IPC_CHANNELS.VIDEO_STATUS, params),
 
   onStreamEvent: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, data: StreamEvent) => {

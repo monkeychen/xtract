@@ -1,4 +1,4 @@
-import type { StreamEvent, AppConfigView, XListInfo } from '../types';
+import type { StreamEvent, AppConfigView, XListInfo, LocalVideoStatus, VideoDownloadResult } from '../types';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
 
@@ -71,6 +71,7 @@ class ApiService {
       fetchContentTypes: ['article'],
       onlyLongTweets: true,
       fetchAuthorReplies: false,
+      autoDownloadVideos: false,
       storageRoot: '~/Documents/Xtract',
       dataDir: '~/Documents/Xtract/data',
       articlesDir: '~/Documents/Xtract/articles',
@@ -105,6 +106,7 @@ class ApiService {
         fetchContentTypes: effectiveContentTypes,
         onlyLongTweets: !effectiveContentTypes.includes('short'),
         fetchAuthorReplies: updates.FETCH_AUTHOR_REPLIES !== undefined ? updates.FETCH_AUTHOR_REPLIES === 'true' : current.fetchAuthorReplies,
+        autoDownloadVideos: updates.AUTO_DOWNLOAD_VIDEOS !== undefined ? updates.AUTO_DOWNLOAD_VIDEOS === 'true' : current.autoDownloadVideos,
         storageRoot: newStorageRoot,
         dataDir: `${newStorageRoot}/data`,
         articlesDir: `${newStorageRoot}/articles`,
@@ -303,6 +305,43 @@ class ApiService {
       return window.xtractAPI.selectDirectory(defaultPath);
     }
     return null;
+  }
+
+  async downloadVideo(params: {
+    tweetId: string;
+    authorUsername: string;
+    videoUrl: string;
+  }): Promise<VideoDownloadResult> {
+    if (this.hasNativeApi() && window.xtractAPI.downloadVideo) {
+      return window.xtractAPI.downloadVideo(params);
+    }
+    return {
+      success: false,
+      videoUrl: params.videoUrl,
+      error: '浏览器降级演示模式下不支持本地下载，请使用桌面端。',
+    };
+  }
+
+  async cancelVideoDownload(videoUrl: string): Promise<{ canceled: boolean }> {
+    if (this.hasNativeApi() && window.xtractAPI.cancelVideoDownload) {
+      return window.xtractAPI.cancelVideoDownload(videoUrl);
+    }
+    return { canceled: false };
+  }
+
+  async getVideoStatus(params: {
+    tweetId: string;
+    authorUsername: string;
+    videoUrls: string[];
+  }): Promise<Record<string, LocalVideoStatus>> {
+    if (this.hasNativeApi() && window.xtractAPI.getVideoStatus) {
+      return window.xtractAPI.getVideoStatus(params);
+    }
+    const res: Record<string, LocalVideoStatus> = {};
+    for (const url of params.videoUrls) {
+      res[url] = { downloaded: false };
+    }
+    return res;
   }
 
   async searchTweets(query: string, options: { searchType?: 'live' | 'top'; limit?: number; minLikes?: number } = {}) {
