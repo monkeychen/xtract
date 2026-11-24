@@ -29,6 +29,14 @@ X_CT0=你的ct0
 HTTP_PROXY=http://127.0.0.1:8118
 
 # ==========================================
+# 2.5 抓取过滤与媒体归档配置 (v0.1.3+)
+# ==========================================
+# 批量拉取内容类型（逗号分隔，支持 article / note / short；默认仅拉取 X Article）
+FETCH_CONTENT_TYPES=article
+# 导出单篇归档时是否自动下载视频至本地 videos/ 目录（默认 false，桌面端播放器可随时单点下载）
+AUTO_DOWNLOAD_VIDEOS=false
+
+# ==========================================
 # 3. 多大模型调度与双轨认证 (Multi-LLM & Dual-Track Auth)
 # ==========================================
 # 模型提供商：gemini | openai | deepseek | qwen | qwen-token-plan | zhipu | zhipu-code-plan | minimax | kimi | custom

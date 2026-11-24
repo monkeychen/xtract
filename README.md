@@ -1,6 +1,6 @@
 # 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
 
-[![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](docs/prd/v0.1.0.md)
+[![Version](https://img.shields.io/badge/version-0.1.3-informational.svg)](docs/prd/v0.1.3.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -28,9 +28,9 @@
 | :--- | :--- |
 | **抗脆弱抓取** | 零逆向成本，完全免疫 X 前端改版 |
 | **四维情报源** | 关注流 / 博主追踪 / X 列表 / 全网搜索，列表间物理隔离互不串扰 |
-| **高信噪比过滤** | 点赞门槛全链路过滤水帖，默认只留长推文与专栏 |
+| **高信噪比过滤** | 点赞门槛 + 拉取内容类型多选（短推 / 长推 / X Article，默认仅抓 X Article） |
 | **抓取与总结解耦** | 推文先落库去重，LLM 按需处理；改 Prompt 重出早报是本地秒级操作，不重爬、不烧 Token |
-| **自包含归档** | 导出为 `output/{作者}/{推文ID}/index.md` + 同级配图目录，不依赖外部服务 |
+| **自包含归档与本地视频** | 导出为 `articles/{作者}/{推文ID}/index.md` + `images/` + `videos/`，支持按需流式下载 MP4 与离线秒播 |
 | **7 大模型统一调度** | Gemini / OpenAI / DeepSeek / 千问 / 智谱 / MiniMax / Kimi，支持 API-Key 与账号订阅免 Key 双轨认证 |
 
 ---
@@ -131,10 +131,10 @@ pnpm dev:cli -- --help
 | 目的 | 命令 |
 | :--- | :--- |
 | 拉取关注流 + 生成早报 | `XT --fetch-only --report-only` |
-| 关键词全网实时搜索 | `XT --search "AI Agent" --min-likes 50` |
-| 抓取某博主全部推文 | `XT --user karpathy` |
+| 关键词全网实时搜索（含短/长推） | `XT --search "AI Agent" --content-types article,note,short --min-likes 50` |
+| 抓取某博主全部推文 | `XT --user karpathy --all-tweets` |
 | 抓取指定 X 列表 | `XT --x-list 2100985900734062922` |
-| 查看/同步单篇推文全文 | `XT --view <推文ID或URL>` |
+| 查看/同步单篇推文并下载视频 | `XT --view <推文ID或URL> --download-videos` |
 | 全网热搜趋势看板 | `XT --trends` |
 | 全自动趋势深度研报 | `XT --trends-digest --hours 24` |
 | 检索本地已抓推文 | `XT --list 50` |

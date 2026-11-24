@@ -60,6 +60,10 @@ Options:
   --list [limit]                        查看已抓取推文列表 (默认 20 条)
   --view <tweetId>                      查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档
   --no-export-md                        查看单篇推文时关闭自动导出 Markdown
+  --download-videos                     导出单推 / 批量归档时一并流式下载 MP4 视频至本地 videos/ 目录
+  --no-download-videos                  强制跳过视频下载（覆盖 AUTO_DOWNLOAD_VIDEOS=true 配置）
+  --content-types <types>               指定批量抓取的内容类型（逗号分隔：article,note,short；默认读取 FETCH_CONTENT_TYPES，缺省仅抓 article）
+  --all-tweets                          快捷别名，等价于 --content-types article,note,short
   --delete [tweetIds...]                级联删除推文及本地文件：可传多个 ID/URL 批量删除，也可仅搭配 --user/--since 等筛选条件
   --since <date>                        起始日期过滤 (YYYY-MM-DD)
   --until <date>                        截止日期过滤 (YYYY-MM-DD)
@@ -195,8 +199,8 @@ Options:
 支持传入**推文 ID** 或 **X 原文链接**。如果本地数据库已有则秒级展示；如果本地未检索到，系统会**自动从 X 在线实时抓取**、解析其连帖 Thread 并落库保存后展示。
 
 系统**默认自动导出为单篇独立 Markdown 文档**（受参数 `--no-export-md` 控制）：
-- **Page Bundle 自包含归档**：默认自动落盘为 `output/{author}/{tweet_id}/index.md`，正文及连帖所有图片下载保存在同级 `images/` 子目录，正文相对引用 `images/...`，完全自包含，随处移动不丢图。
-- **视频提供在线直链**：视频保留高清 MP4 播放与下载链接，不占用海量本地存储。
+- **Page Bundle 自包含归档**：默认自动落盘为 `articles/{author}/{tweet_id}/index.md`，正文及连帖所有图片保存在同级 `images/` 子目录，视频按需落盘至同级 `videos/` 子目录，正文自动关联相对路径，完全自包含、随处移动不丢图不丢视频。
+- **视频按需本地下载**：默认保留高清 MP4 直链（不静默耗流量）；传入 `--download-videos`（或在配置中开启 `AUTO_DOWNLOAD_VIDEOS=true`）即可纯 Node.js 流式下载全形态视频（短推、长推、X Article 原生 `ApiVideo` 及文章内嵌推文视频）至 `videos/` 并自动更新 `index.md` 相对路径链接。
 - **完整连帖展开**：若目标推文是作者的多条连帖（Thread），自动合并整理为结构化各章节展开。
 - **长专栏 X Article 无损提取**：自动还原富文本排版、标题层级、引用块及内联图表。
 - **灵活目录配置**：默认输出至 `output/{author}/{tweet_id}/`，可配合 `-o / --output` 指定存放目录或自定义文件名。

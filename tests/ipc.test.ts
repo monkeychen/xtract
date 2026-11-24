@@ -147,7 +147,7 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.reportsDir).toBe('string');
     expect(typeof config.configEnvPath).toBe('string');
     expect(typeof config.appVersion).toBe('string');
-    expect(config.appVersion).toBe('0.1.2');
+    expect(config.appVersion).toBe('0.1.3');
     // 子目录由 path.join 生成，Windows 上是反斜杠——断言必须用同源构造而非字面斜杠模板串
     expect(config.dataDir).toBe(path.join(config.storageRoot, 'data'));
     expect(config.articlesDir).toBe(path.join(config.storageRoot, 'articles'));
@@ -219,7 +219,7 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(res).toBe('/Users/test/SelectedDirectory');
   });
 
-  it('CONFIG_GET 必须在开发态屏蔽 Electron 内核版本，永远返回业务版本 0.1.2', async () => {
+  it('CONFIG_GET 必须在开发态屏蔽 Electron 内核版本，永远返回业务版本 0.1.3', async () => {
     const electron = await import('electron');
     // 模拟开发态：未打包，app.getVersion() 返回 Electron 引擎版本
     (electron.app as any).isPackaged = false;
@@ -229,18 +229,18 @@ describe('Preload & IPC Communication Bridge', () => {
     registerIpcHandlers(undefined, { force: true });
 
     const config = await xtractApiImplementation.getConfig();
-    expect(config.appVersion).toBe('0.1.2');
+    expect(config.appVersion).toBe('0.1.3');
     expect(config.appVersion).not.toBe('42.11.8');
 
     // 模拟打包态：已打包，app.getVersion() 返回打包应用版本
     (electron.app as any).isPackaged = true;
-    (electron.app as any).getVersion = vi.fn(() => '0.1.2-packaged');
+    (electron.app as any).getVersion = vi.fn(() => '0.1.3-packaged');
 
     _resetRegisteredForTest();
     registerIpcHandlers(undefined, { force: true });
 
     const packagedConfig = await xtractApiImplementation.getConfig();
-    expect(packagedConfig.appVersion).toBe('0.1.2-packaged');
+    expect(packagedConfig.appVersion).toBe('0.1.3-packaged');
   });
 
   it('UT-7: IPC VIDEO_STATUS, VIDEO_DOWNLOAD, VIDEO_DOWNLOAD_CANCEL and AUTO_DOWNLOAD_VIDEOS config', async () => {

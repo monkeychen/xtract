@@ -38,7 +38,7 @@ output/
 node_modules/
 .pnpm-store/
 out/
-release/
+/release/
 dist-electron/
 *.tsbuildinfo
 
