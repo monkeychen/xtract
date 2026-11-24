@@ -315,6 +315,8 @@ describe('Preload & IPC Communication Bridge', () => {
       const cancelRes = await xtractApiImplementation.cancelVideoDownload(videoUrl);
       expect(cancelRes).toEqual({ canceled: false });
     } finally {
+      // Windows 上删除含 SQLite 文件的临时目录前必须先关闭 Storage 句柄，否则触发 EPERM
+      _resetRegisteredForTest();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       if (origRoot === undefined) delete process.env.XTRACT_STORAGE_ROOT;
       else process.env.XTRACT_STORAGE_ROOT = origRoot;

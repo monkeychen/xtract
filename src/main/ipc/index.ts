@@ -29,8 +29,21 @@ import type {
 } from '../types.js';
 
 let isRegistered = false;
+let activeStorage: Storage | null = null;
+
+function closeActiveStorage(): void {
+  if (activeStorage) {
+    try {
+      activeStorage.close();
+    } catch {
+      // ignore close errors
+    }
+    activeStorage = null;
+  }
+}
 
 export function _resetRegisteredForTest(): void {
+  closeActiveStorage();
   isRegistered = false;
 }
 
@@ -41,9 +54,11 @@ export function registerIpcHandlers(
   if (isRegistered && !options?.force) {
     return;
   }
+  closeActiveStorage();
   isRegistered = true;
 
   let storage = new Storage();
+  activeStorage = storage;
   let pipeline = new Pipeline(storage);
 
   // Helper for masking sensitive tokens
@@ -161,7 +176,9 @@ export function registerIpcHandlers(
       Config.savePersistentConfig(normalizedUpdates);
 
       if (normalizedUpdates.XTRACT_STORAGE_ROOT !== undefined) {
+        closeActiveStorage();
         storage = new Storage();
+        activeStorage = storage;
         pipeline = new Pipeline(storage);
       }
 
