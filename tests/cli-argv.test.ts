@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveUserArgs, isCliMode, resolveVersion } from '../src/main/cli/argv.js';
+import { resolveUserArgs, isCliMode, resolveVersion, resolveCliContentTypes } from '../src/main/cli/argv.js';
 
 /**
  * CLI / GUI 模式判定
@@ -97,5 +97,36 @@ describe('resolveVersion', () => {
 
   it('空白字符串不应被当作有效版本', () => {
     expect(resolveVersion(() => '   ', () => '0.1.0')).toBe('0.1.0');
+  });
+});
+
+describe('UT-8: resolveCliContentTypes (--content-types 与 --all-tweets)', () => {
+  it('两者均未传时返回 undefined（沿用环境变量/config.env 配置）', () => {
+    expect(resolveCliContentTypes({})).toBeUndefined();
+  });
+
+  it('--content-types 正确解析并规范化合法组合', () => {
+    expect(resolveCliContentTypes({ contentTypes: 'note,article' })).toEqual(['article', 'note']);
+    expect(resolveCliContentTypes({ contentTypes: 'short' })).toEqual(['short']);
+    expect(resolveCliContentTypes({ contentTypes: 'article,note,short' })).toEqual([
+      'article',
+      'note',
+      'short',
+    ]);
+  });
+
+  it('--content-types 遇到非法值或空字符串时立即抛错并提示合法枚举', () => {
+    expect(() => resolveCliContentTypes({ contentTypes: 'article,video' })).toThrow(/video/);
+    expect(() => resolveCliContentTypes({ contentTypes: '   ' })).toThrow(/article.*note.*short/i);
+  });
+
+  it('--all-tweets 映射为全量三类内容', () => {
+    expect(resolveCliContentTypes({ allTweets: true })).toEqual(['article', 'note', 'short']);
+  });
+
+  it('优先级：--content-types 高于 --all-tweets', () => {
+    expect(resolveCliContentTypes({ contentTypes: 'article', allTweets: true })).toEqual([
+      'article',
+    ]);
   });
 });

@@ -9,7 +9,12 @@ import {
   formatTweetDetail,
 } from './cli/format.js';
 import { isTweetContentIncomplete } from './client/parser.js';
-import { resolveUserArgs, resolveVersion, normalizeTweetIdInputs } from './cli/argv.js';
+import {
+  resolveUserArgs,
+  resolveVersion,
+  normalizeTweetIdInputs,
+  resolveCliContentTypes,
+} from './cli/argv.js';
 import { createRequire } from 'node:module';
 
 // Dual-mode dispatcher: determine CLI vs GUI
@@ -95,7 +100,11 @@ if (isCLI) {
     .option('--min-likes <n>', '最低点赞门槛过滤', '0')
     .option('--min-retweets <n>', '最低转发门槛过滤', '0')
     .option('--timeout <seconds>', '网络请求与页面加载超时时间（秒）')
-    .option('--all-tweets', '不过滤普通短推文，抓取包含短推文在内的全量推文（默认仅抓取长推文 Note Tweet 与专栏文章 X Article）')
+    .option(
+      '--content-types <types>',
+      '指定批量拉取的内容类型，逗号分隔：article,note,short（默认按配置，未配置时仅拉取 article）'
+    )
+    .option('--all-tweets', '拉取全量内容类型（等价于 --content-types article,note,short）')
     .option('--author-replies', '抓取/同步单篇推文时，一并拉取作者本人的追加评论/推文串 (Thread Replies)')
     .option('--no-author-replies', '抓取/同步单篇推文时，不抓取作者的追加评论（仅保留主推文本体）')
     // LLM Options
@@ -119,9 +128,6 @@ if (isCLI) {
     const pages = options.pages ? parseInt(options.pages, 10) : undefined;
     const timeout = options.timeout ? parseInt(options.timeout, 10) : undefined;
     const top = parseInt(options.top || '10', 10);
-    if (options.allTweets) {
-      process.env.FETCH_ONLY_LONG_TWEETS = 'false';
-    }
 
     // CLI author replies option priority: CLI flags > env > default(false)
     let fetchAuthorReplies = Config.FETCH_AUTHOR_REPLIES;
@@ -143,6 +149,13 @@ if (isCLI) {
     };
 
     try {
+      const cliContentTypes = resolveCliContentTypes({
+        contentTypes: options.contentTypes,
+        allTweets: Boolean(options.allTweets),
+      });
+      if (cliContentTypes) {
+        process.env.FETCH_CONTENT_TYPES = cliContentTypes.join(',');
+      }
       // 1. Auth verification
       if (options.checkAuth) {
         const auth = await client.verifyAuth(timeout);

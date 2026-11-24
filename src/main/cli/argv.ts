@@ -1,3 +1,6 @@
+import { ALL_TWEET_CONTENT_TYPES, type TweetContentType } from '../types.js';
+import { parseContentTypes } from '../client/parser.js';
+
 /**
  * CLI / GUI 模式判定的纯函数
  *
@@ -87,4 +90,21 @@ export function resolveVersion(readAppVersion: () => string | null, readPkgVersi
     /* 读取失败 */
   }
   return '0.0.0';
+}
+
+/**
+ * 解析 CLI 内容类型覆盖参数，优先级：--content-types > --all-tweets > undefined（沿用配置）。
+ * 若 --content-types 包含非法枚举或为空，直接抛错。
+ */
+export function resolveCliContentTypes(options: {
+  contentTypes?: string;
+  allTweets?: boolean;
+}): TweetContentType[] | undefined {
+  if (options.contentTypes !== undefined) {
+    return parseContentTypes(options.contentTypes, { strict: true });
+  }
+  if (options.allTweets) {
+    return [...ALL_TWEET_CONTENT_TYPES];
+  }
+  return undefined;
 }
