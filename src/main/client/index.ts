@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page, type Response } from 'playwright-core';
 import { Config } from '../config.js';
-import type { Tweet, TrendTopic, XListInfo } from '../types.js';
+import {
+  ALL_TWEET_CONTENT_TYPES,
+  type Tweet,
+  type TweetContentType,
+  type TrendTopic,
+  type XListInfo,
+} from '../types.js';
 import {
   parseTweetResult,
   parseTweetResultsByRestIds,
@@ -12,6 +18,9 @@ import {
   isArticleTweet,
   isNoteTweet,
   isLongContentTweet,
+  classifyTweetContentType,
+  matchesContentTypes,
+  parseContentTypes,
   isTweetContentIncomplete,
 } from './parser.js';
 
@@ -25,8 +34,33 @@ export {
   isArticleTweet,
   isNoteTweet,
   isLongContentTweet,
+  classifyTweetContentType,
+  matchesContentTypes,
+  parseContentTypes,
   isTweetContentIncomplete,
 };
+
+export function resolveContentTypes(options?: {
+  contentTypes?: readonly TweetContentType[];
+  onlyLongTweets?: boolean;
+}): TweetContentType[] {
+  if (options?.contentTypes && options.contentTypes.length > 0) {
+    return parseContentTypes(options.contentTypes);
+  }
+  if (options?.onlyLongTweets !== undefined) {
+    return options.onlyLongTweets ? ['article', 'note'] : [...ALL_TWEET_CONTENT_TYPES];
+  }
+  return Config.FETCH_CONTENT_TYPES;
+}
+
+function formatContentTypesLabel(types: readonly TweetContentType[]): string {
+  const labels: Record<TweetContentType, string> = {
+    article: '专栏文章 (X Article)',
+    note: '长推文 (Note Tweet)',
+    short: '普通短推文',
+  };
+  return types.map((t) => labels[t]).join('、');
+}
 
 /**
  * X 列表滚动加载的停止判据（纯函数，便于单测）。
@@ -56,6 +90,8 @@ export interface FetchTimelineOptions {
   maxPages?: number;
   pageDelay?: number;
   timeout?: number;
+  contentTypes?: TweetContentType[];
+  /** @deprecated 请优先使用 contentTypes */
   onlyLongTweets?: boolean;
 }
 
@@ -63,6 +99,8 @@ export interface FetchUserOptions {
   limit?: number;
   pageDelay?: number;
   timeout?: number;
+  contentTypes?: TweetContentType[];
+  /** @deprecated 请优先使用 contentTypes */
   onlyLongTweets?: boolean;
 }
 
@@ -71,6 +109,8 @@ export interface FetchSearchOptions {
   limit?: number;
   pageDelay?: number;
   timeout?: number;
+  contentTypes?: TweetContentType[];
+  /** @deprecated 请优先使用 contentTypes */
   onlyLongTweets?: boolean;
 }
 
@@ -597,10 +637,7 @@ export class XClient {
         }
       }
 
-      const onlyLong =
-        options?.onlyLongTweets !== undefined
-          ? options.onlyLongTweets
-          : Config.FETCH_ONLY_LONG_TWEETS;
+      const contentTypes = resolveContentTypes(options);
 
       // Paginate by scrolling if user requested more and we haven't reached limit
       for (let pIdx = 1; pIdx < maxPages; pIdx++) {
@@ -608,7 +645,7 @@ export class XClient {
           let countSoFar = 0;
           for (const instList of capturedInstructions) {
             const batch = parseTimelineInstructions(instList);
-            countSoFar += onlyLong ? batch.filter(isLongContentTweet).length : batch.length;
+            countSoFar += batch.filter((t) => matchesContentTypes(t, contentTypes)).length;
           }
           if (countSoFar >= limit) {
             break;
@@ -624,10 +661,7 @@ export class XClient {
       await browser.close();
     }
 
-    const onlyLong =
-      options?.onlyLongTweets !== undefined
-        ? options.onlyLongTweets
-        : Config.FETCH_ONLY_LONG_TWEETS;
+    const contentTypes = resolveContentTypes(options);
 
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
@@ -636,15 +670,15 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          if (!onlyLong || isLongContentTweet(t)) {
+          if (matchesContentTypes(t, contentTypes)) {
             allTweets.push(t);
           }
         }
       }
     }
 
-    if (onlyLong) {
-      process.stderr.write(`ℹ️ 过滤规则生效：仅抓取长推文 (Note Tweet) 与专栏文章 (X Article)\n`);
+    if (contentTypes.length < ALL_TWEET_CONTENT_TYPES.length) {
+      process.stderr.write(`ℹ️ 过滤规则生效：仅抓取${formatContentTypesLabel(contentTypes)}\n`);
     }
 
     return limit ? allTweets.slice(0, limit) : allTweets;
@@ -663,10 +697,7 @@ export class XClient {
     const pageDelay = options?.pageDelay || 2.0;
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
-    const onlyLong =
-      options?.onlyLongTweets !== undefined
-        ? options.onlyLongTweets
-        : Config.FETCH_ONLY_LONG_TWEETS;
+    const contentTypes = resolveContentTypes(options);
 
     process.stderr.write(
       `⏳ 正在通过推特双轨机制拉取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`
@@ -681,13 +712,13 @@ export class XClient {
         limit: Math.max(limit, 20),
         pageDelay,
         timeout: Math.min(timeout, 25),
-        onlyLongTweets: onlyLong,
+        contentTypes,
       });
 
       const matched = searchTweets.filter(
         (t) =>
           t.author_username.toLowerCase() === cleanUser.toLowerCase() &&
-          (!onlyLong || isLongContentTweet(t))
+          matchesContentTypes(t, contentTypes)
       );
 
       if (matched.length > 0) {
@@ -765,7 +796,7 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          if (!onlyLong || isLongContentTweet(t)) {
+          if (matchesContentTypes(t, contentTypes)) {
             allTweets.push(t);
           }
         }
@@ -924,10 +955,7 @@ export class XClient {
       await browser.close();
     }
 
-    const onlyLong =
-      options?.onlyLongTweets !== undefined
-        ? options.onlyLongTweets
-        : Config.FETCH_ONLY_LONG_TWEETS;
+    const contentTypes = resolveContentTypes(options);
 
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
@@ -936,7 +964,7 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          if (!onlyLong || isLongContentTweet(t)) {
+          if (matchesContentTypes(t, contentTypes)) {
             allTweets.push(t);
           }
         }
@@ -1016,10 +1044,7 @@ export class XClient {
       await session.close();
     }
 
-    const onlyLong =
-      options?.onlyLongTweets !== undefined
-        ? options.onlyLongTweets
-        : Config.FETCH_ONLY_LONG_TWEETS;
+    const contentTypes = resolveContentTypes(options);
 
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
@@ -1028,7 +1053,7 @@ export class XClient {
       for (const t of batch) {
         if (!seenIds.has(t.tweet_id)) {
           seenIds.add(t.tweet_id);
-          if (!onlyLong || isLongContentTweet(t)) {
+          if (matchesContentTypes(t, contentTypes)) {
             allTweets.push(t);
           }
         }

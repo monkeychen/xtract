@@ -137,7 +137,7 @@ describe('Pipeline and Summarizer Modules', () => {
     if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
   });
 
-  it('Pipeline fetchAndStore passes limit correctly to client', async () => {
+  it('Pipeline fetchAndStore passes limit and default contentTypes (article) correctly to client', async () => {
     const tmpDb = path.join(os.tmpdir(), `test_pipe_limit_${Date.now()}.db`);
     const storage = new Storage(tmpDb);
 
@@ -145,11 +145,11 @@ describe('Pipeline and Summarizer Modules', () => {
       tweet_id: `f_${i}`,
       author_name: `User ${i}`,
       author_username: `user_${i}`,
-      text: `Tweet content ${i}`,
+      text: `# Article ${i}\n\nLong article body.`,
       created_at: new Date().toISOString(),
       like_count: 10,
       retweet_count: 1,
-      is_note_tweet: true,
+      is_article: true,
     }));
 
     const mockClient: any = {
@@ -162,7 +162,7 @@ describe('Pipeline and Summarizer Modules', () => {
     expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
       maxPages: 1,
       limit: 20,
-      onlyLongTweets: true,
+      contentTypes: ['article'],
       timeout: undefined,
     });
     expect(fetched).toBe(20);
@@ -170,5 +170,162 @@ describe('Pipeline and Summarizer Modules', () => {
 
     storage.close();
     if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+  });
+
+  it('UT-5: Pipeline filters four batch sources by FETCH_CONTENT_TYPES (default article only)', async () => {
+    const orig = process.env.FETCH_CONTENT_TYPES;
+    delete process.env.FETCH_CONTENT_TYPES;
+
+    const tmpDb = path.join(os.tmpdir(), `test_pipe_ct_${Date.now()}.db`);
+    const storage = new Storage(tmpDb);
+
+    const mixedTweets: Tweet[] = [
+      {
+        tweet_id: 'art_1',
+        author_name: 'Author',
+        author_username: 'author',
+        text: '# Deep Dive Article\n\nContent',
+        created_at: '2026-11-23T08:00:00Z',
+        like_count: 50,
+        retweet_count: 10,
+        is_article: true,
+      },
+      {
+        tweet_id: 'note_1',
+        author_name: 'Author',
+        author_username: 'author',
+        text: 'Long note tweet content. '.repeat(20),
+        created_at: '2026-11-23T08:01:00Z',
+        like_count: 50,
+        retweet_count: 10,
+        is_note_tweet: true,
+      },
+      {
+        tweet_id: 'short_1',
+        author_name: 'Author',
+        author_username: 'author',
+        text: 'Quick short update',
+        created_at: '2026-11-23T08:02:00Z',
+        like_count: 50,
+        retweet_count: 10,
+      },
+    ];
+
+    const mockClient: any = {
+      fetchFollowingTimeline: vi.fn().mockResolvedValue(mixedTweets),
+      fetchUserTimeline: vi.fn().mockResolvedValue(mixedTweets),
+      fetchListTimeline: vi.fn().mockResolvedValue(mixedTweets),
+      fetchSearchTimeline: vi.fn().mockResolvedValue(mixedTweets),
+    };
+
+    try {
+      const pipeline = new Pipeline(storage, mockClient);
+
+      // 1. Default (article only): only art_1 should be inserted
+      const userRes = await pipeline.fetchUserAndStore('author', 20);
+      expect(mockClient.fetchUserTimeline).toHaveBeenCalledWith('author', {
+        limit: 20,
+        timeout: undefined,
+        contentTypes: ['article'],
+      });
+      expect(userRes.inserted).toBe(1);
+      expect(storage.getTweetById('art_1')).not.toBeNull();
+      expect(storage.getTweetById('note_1')).toBeNull();
+      expect(storage.getTweetById('short_1')).toBeNull();
+
+      // 2. List source also passes contentTypes
+      await pipeline.fetchListAndStore('1234567890', 20);
+      expect(mockClient.fetchListTimeline).toHaveBeenCalledWith('1234567890', {
+        limit: 20,
+        timeout: undefined,
+        contentTypes: ['article'],
+      });
+
+      // 3. Configure article + note: note_1 is now inserted while short_1 remains filtered out
+      process.env.FETCH_CONTENT_TYPES = 'article,note';
+      const searchRes = await pipeline.fetchSearchAndStore('AI', { limit: 20 });
+      expect(mockClient.fetchSearchTimeline).toHaveBeenCalledWith('AI', {
+        searchType: 'live',
+        limit: 20,
+        timeout: undefined,
+        contentTypes: ['article', 'note'],
+      });
+      expect(searchRes.inserted).toBe(1); // note_1 newly inserted, art_1 skipped
+      expect(storage.getTweetById('note_1')).not.toBeNull();
+      expect(storage.getTweetById('short_1')).toBeNull();
+    } finally {
+      if (orig === undefined) delete process.env.FETCH_CONTENT_TYPES;
+      else process.env.FETCH_CONTENT_TYPES = orig;
+      storage.close();
+      if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+    }
+  });
+
+  it('UT-6: Exemptions - single tweet sync and trends digest ignore default article-only filter', async () => {
+    const orig = process.env.FETCH_CONTENT_TYPES;
+    const origRoot = process.env.XTRACT_STORAGE_ROOT;
+    delete process.env.FETCH_CONTENT_TYPES; // default: ['article']
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract_pipe_exempt_'));
+    process.env.XTRACT_STORAGE_ROOT = tmpRoot;
+    const tmpDb = path.join(tmpRoot, 'data', 'tweets.db');
+    const storage = new Storage(tmpDb);
+
+    const shortTweet: Tweet = {
+      tweet_id: '999999001',
+      author_name: 'ShortAuthor',
+      author_username: 'shortauthor',
+      text: 'Breaking news short tweet!',
+      created_at: new Date().toISOString(),
+      like_count: 300,
+      retweet_count: 80,
+    };
+
+    const mockClient: any = {
+      fetchTweetThread: vi.fn().mockResolvedValue([shortTweet]),
+      fetchExploreTrends: vi.fn().mockResolvedValue([{ rank: 1, name: 'AI News', query: 'AI News' }]),
+      fetchSearchTimeline: vi.fn().mockResolvedValue([shortTweet]),
+    };
+
+    const mockLLM: BaseLLMProvider = {
+      providerName: 'MockLLM',
+      modelName: 'mock-model',
+      defaultModel: 'mock-model',
+      generate: vi
+        .fn()
+        .mockResolvedValueOnce('{"AI News": "AI News"}')
+        .mockResolvedValueOnce('# Trends Digest Report'),
+    };
+
+    try {
+      const pipeline = new Pipeline(storage, mockClient);
+
+      // 1. Single tweet sync must store short tweet despite default article-only config
+      await pipeline.fetchTweetAndStore('999999001');
+      expect(storage.getTweetById('999999001')).not.toBeNull();
+
+      // 2. Trends digest internal search must explicitly allow all content types
+      const summarizer = new Summarizer({ llmInstance: mockLLM });
+      await pipeline.runTrendsDigest({
+        category: 'tech',
+        top: 1,
+        hours: 24,
+        summarizerInstance: summarizer,
+      });
+
+      expect(mockClient.fetchSearchTimeline).toHaveBeenCalledWith(
+        expect.stringContaining('AI News'),
+        expect.objectContaining({
+          contentTypes: ['article', 'note', 'short'],
+        })
+      );
+    } finally {
+      if (orig === undefined) delete process.env.FETCH_CONTENT_TYPES;
+      else process.env.FETCH_CONTENT_TYPES = orig;
+      if (origRoot === undefined) delete process.env.XTRACT_STORAGE_ROOT;
+      else process.env.XTRACT_STORAGE_ROOT = origRoot;
+      storage.close();
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

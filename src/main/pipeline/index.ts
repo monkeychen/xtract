@@ -2,9 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
-import { XClient, isLongContentTweet } from '../client/index.js';
+import { XClient, matchesContentTypes } from '../client/index.js';
 import { Summarizer } from './summarizer.js';
-import type { Tweet, TrendTopic, StreamChunk } from '../types.js';
+import {
+  ALL_TWEET_CONTENT_TYPES,
+  type Tweet,
+  type TweetContentType,
+  type TrendTopic,
+  type StreamChunk,
+} from '../types.js';
 
 export { Summarizer };
 
@@ -105,11 +111,12 @@ export class Pipeline {
     const targetDesc = limit ? `目标 ${limit} 条 (至多 ${effectivePages} 页)` : `计划拉取 ${effectivePages} 页`;
     process.stderr.write(`⏳ 开始从 X (Following 时间线) 抓取推文，${targetDesc}...\n`);
 
+    const contentTypes = Config.FETCH_CONTENT_TYPES;
     const tweets = await this.client.fetchFollowingTimeline({
       maxPages: effectivePages,
       limit,
       timeout: actualTimeout,
-      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+      contentTypes,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条推文\n`);
@@ -119,7 +126,7 @@ export class Pipeline {
       const rawPath = path.join(Config.RAW_DIR, `raw_${nowStr}.json`);
       fs.writeFileSync(rawPath, JSON.stringify(tweets, null, 2), 'utf-8');
 
-      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const targetTweets = tweets.filter((t) => matchesContentTypes(t, contentTypes));
       const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'following');
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
@@ -139,10 +146,11 @@ export class Pipeline {
     const cleanUser = username.replace(/^@/, '').trim();
     process.stderr.write(`⏳ 开始抓取博主 @${cleanUser} 的最新推文（目标 ${limit} 篇）...\n`);
 
+    const contentTypes = Config.FETCH_CONTENT_TYPES;
     const tweets = await this.client.fetchUserTimeline(cleanUser, {
       limit,
       timeout,
-      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+      contentTypes,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条 @${cleanUser} 的推文\n`);
@@ -150,7 +158,7 @@ export class Pipeline {
     let inserted = 0;
     let skipped = 0;
     if (fetchedCount > 0) {
-      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const targetTweets = tweets.filter((t) => matchesContentTypes(t, contentTypes));
       ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'user'));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
@@ -175,10 +183,11 @@ export class Pipeline {
       });
     }
 
+    const contentTypes = Config.FETCH_CONTENT_TYPES;
     const tweets = await this.client.fetchListTimeline(listIdOrUrl, {
       limit,
       timeout,
-      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+      contentTypes,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从列表拉取到 ${fetchedCount} 条推文\n`);
@@ -186,7 +195,7 @@ export class Pipeline {
     let inserted = 0;
     let skipped = 0;
     if (fetchedCount > 0) {
-      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const targetTweets = tweets.filter((t) => matchesContentTypes(t, contentTypes));
       ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'list', cleanListId));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
@@ -253,6 +262,7 @@ export class Pipeline {
       minLikes?: number;
       minRetweets?: number;
       timeout?: number;
+      contentTypes?: TweetContentType[];
     }
   ): Promise<FetchAndStoreResult> {
     const searchType = options?.searchType || 'live';
@@ -260,6 +270,7 @@ export class Pipeline {
     const minLikes = options?.minLikes || 0;
     const minRetweets = options?.minRetweets || 0;
     const timeout = options?.timeout;
+    const contentTypes = options?.contentTypes?.length ? options.contentTypes : Config.FETCH_CONTENT_TYPES;
 
     const typeStr = searchType === 'top' ? '热门' : '实时最新';
     process.stderr.write(`⏳ 开始在 X 搜索 ('${query}', ${typeStr})，目标 ${limit} 篇...\n`);
@@ -268,7 +279,7 @@ export class Pipeline {
       searchType,
       limit,
       timeout,
-      onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
+      contentTypes,
     });
     const fetchedCount = tweets.length;
     process.stderr.write(`✓ 成功从搜索拉取到 ${fetchedCount} 条推文\n`);
@@ -286,7 +297,7 @@ export class Pipeline {
     let inserted = 0;
     let skipped = 0;
     if (fetchedCount > 0) {
-      const targetTweets = Config.FETCH_ONLY_LONG_TWEETS ? tweets.filter(isLongContentTweet) : tweets;
+      const targetTweets = tweets.filter((t) => matchesContentTypes(t, contentTypes));
       ({ inserted, skipped } = this.storage.saveTweets(targetTweets, 'search'));
       process.stderr.write(
         `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
@@ -472,6 +483,8 @@ export class Pipeline {
             minLikes,
             minRetweets,
             timeout: timeout || 25,
+            // 趋势研报热点实时讨论绝大多数为短推/长推，不受默认「仅拉取文章」配置限制
+            contentTypes: [...ALL_TWEET_CONTENT_TYPES],
           })
         ).tweets;
       } catch (err: any) {
