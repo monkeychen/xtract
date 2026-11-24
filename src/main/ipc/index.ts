@@ -11,7 +11,7 @@ import { createCliShortcut, runPowerShellForReal } from '../cli/shortcut.js';
 import os from 'node:os';
 import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
-import { isTweetContentIncomplete } from '../client/parser.js';
+import { isTweetContentIncomplete, parseContentTypes } from '../client/parser.js';
 import type { Tweet, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../types.js';
 
 let isRegistered = false;
@@ -107,6 +107,7 @@ export function registerIpcHandlers(
       hasXCredentials: Config.hasXCredentials(),
       xAuthTokenMasked: mask(Config.X_AUTH_TOKEN),
       xCt0Masked: mask(Config.X_CT0),
+      fetchContentTypes: Config.FETCH_CONTENT_TYPES,
       onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
       fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
       storageRoot: Config.STORAGE_ROOT,
@@ -120,12 +121,19 @@ export function registerIpcHandlers(
   ipcMain.handle(
     IPC_CHANNELS.CONFIG_UPDATE,
     async (_event, updates: Record<string, string>) => {
-      for (const [key, value] of Object.entries(updates)) {
+      const normalizedUpdates: Record<string, string> = { ...updates };
+      if (normalizedUpdates.FETCH_CONTENT_TYPES !== undefined) {
+        const parsedTypes = parseContentTypes(normalizedUpdates.FETCH_CONTENT_TYPES);
+        normalizedUpdates.FETCH_CONTENT_TYPES = parsedTypes.join(',');
+        normalizedUpdates.FETCH_ONLY_LONG_TWEETS = String(!parsedTypes.includes('short'));
+      }
+
+      for (const [key, value] of Object.entries(normalizedUpdates)) {
         process.env[key] = value;
       }
 
-      if (updates.XTRACT_STORAGE_ROOT !== undefined) {
-        const customRoot = updates.XTRACT_STORAGE_ROOT.trim();
+      if (normalizedUpdates.XTRACT_STORAGE_ROOT !== undefined) {
+        const customRoot = normalizedUpdates.XTRACT_STORAGE_ROOT.trim();
         if (customRoot) {
           process.env.XTRACT_STORAGE_ROOT = customRoot;
         } else {
@@ -135,9 +143,9 @@ export function registerIpcHandlers(
 
       // 确保目录结构存在并持久化写入 <storageRoot>/config.env
       Config.ensureDirectories();
-      Config.savePersistentConfig(updates);
+      Config.savePersistentConfig(normalizedUpdates);
 
-      if (updates.XTRACT_STORAGE_ROOT !== undefined) {
+      if (normalizedUpdates.XTRACT_STORAGE_ROOT !== undefined) {
         storage = new Storage();
         pipeline = new Pipeline(storage);
       }
@@ -186,6 +194,7 @@ export function registerIpcHandlers(
           hasXCredentials: Config.hasXCredentials(),
           xAuthTokenMasked: mask(process.env.X_AUTH_TOKEN || Config.X_AUTH_TOKEN),
           xCt0Masked: mask(process.env.X_CT0 || Config.X_CT0),
+          fetchContentTypes: Config.FETCH_CONTENT_TYPES,
           onlyLongTweets: Config.FETCH_ONLY_LONG_TWEETS,
           fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
           storageRoot: Config.STORAGE_ROOT,

@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import type { AppConfigView } from '../types.js';
+import React, { useState, useEffect, useRef } from 'react';
+import type { AppConfigView, TweetContentType } from '../types.js';
 import { api } from '../services/api.js';
 import { InfoTip } from './InfoTip.js';
+
+const CONTENT_TYPE_OPTIONS: Array<{ value: TweetContentType; label: string }> = [
+  { value: 'article', label: '专栏文章' },
+  { value: 'note', label: '长推文' },
+  { value: 'short', label: '普通短推文' },
+];
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -24,7 +30,9 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [apiKey, setApiKey] = useState('');
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
-  const [onlyLongTweets, setOnlyLongTweets] = useState(true);
+  const [contentTypes, setContentTypes] = useState<TweetContentType[]>(['article']);
+  const [contentTypeGuardMsg, setContentTypeGuardMsg] = useState(false);
+  const guardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fetchAuthorReplies, setFetchAuthorReplies] = useState(false);
   const [storageRoot, setStorageRoot] = useState('~/Documents/Xtract');
   const [isSaving, setIsSaving] = useState(false);
@@ -46,7 +54,12 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         setModel(cfg.llmModel || 'gemini-3.8-flash');
         setReasoningEnabled(cfg.reasoningEnabled !== false);
         setReasoningEffort(cfg.reasoningEffort || 'high');
-        setOnlyLongTweets(cfg.onlyLongTweets !== false);
+        setContentTypes(
+          Array.isArray(cfg.fetchContentTypes) && cfg.fetchContentTypes.length > 0
+            ? cfg.fetchContentTypes
+            : ['article']
+        );
+        setContentTypeGuardMsg(false);
         setFetchAuthorReplies(cfg.fetchAuthorReplies === true);
         setStorageRoot(cfg.storageRoot || '~/Documents/Xtract');
       });
@@ -79,8 +92,30 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     }
   };
 
+  const handleToggleContentType = (type: TweetContentType) => {
+    if (contentTypes.includes(type)) {
+      if (contentTypes.length === 1) {
+        setContentTypeGuardMsg(true);
+        if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+        guardTimerRef.current = setTimeout(() => setContentTypeGuardMsg(false), 2500);
+        return;
+      }
+      setContentTypes(contentTypes.filter((t) => t !== type));
+    } else {
+      const next = CONTENT_TYPE_OPTIONS.map((o) => o.value).filter(
+        (v) => v === type || contentTypes.includes(v)
+      );
+      setContentTypes(next);
+    }
+    setContentTypeGuardMsg(false);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
+    const orderedTypes = CONTENT_TYPE_OPTIONS.map((o) => o.value).filter((v) =>
+      contentTypes.includes(v)
+    );
+    const effectiveTypes: TweetContentType[] = orderedTypes.length > 0 ? orderedTypes : ['article'];
     const updates: Record<string, string> = {
       HTTP_PROXY: proxy,
       LLM_PROVIDER: provider,
@@ -88,7 +123,8 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       LLM_MODEL: model,
       LLM_REASONING_ENABLED: String(reasoningEnabled),
       LLM_REASONING_EFFORT: reasoningEffort,
-      FETCH_ONLY_LONG_TWEETS: String(onlyLongTweets),
+      FETCH_CONTENT_TYPES: effectiveTypes.join(','),
+      FETCH_ONLY_LONG_TWEETS: String(!effectiveTypes.includes('short')),
       FETCH_AUTHOR_REPLIES: String(fetchAuthorReplies),
       XTRACT_STORAGE_ROOT: storageRoot,
     };
@@ -403,37 +439,71 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <h3 className="serif-title" style={{ fontSize: '15px', margin: '0 0 10px 0', color: 'var(--ink)' }}>
               抓取过滤规则
             </h3>
-            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ paddingRight: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
-                    仅抓取长推文与专栏文章
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginTop: '2px', lineHeight: 1.4 }}>
-                    默认开启。自动过滤普通短推文与闲聊碎碎念，仅保留长推文 (Note Tweet) 和专栏文章 (X Article)
-                  </div>
+            <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span>拉取内容类型</span>
+                  <InfoTip text="控制关注流、博主追踪、列表与关键词搜索批量拉取的推文形态（默认仅拉取 X Article 专栏文章）。单推链接精准同步与趋势研报热点挖掘不受此过滤限制。" />
                 </div>
-                <label className="switch" style={{ flexShrink: 0 }}>
-                  <input
-                    type="checkbox"
-                    id="only-long-tweets-toggle"
-                    checked={onlyLongTweets}
-                    onChange={(e) => setOnlyLongTweets(e.target.checked)}
-                  />
-                  <span className="slider" />
-                </label>
+                <span style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>
+                  已选 {contentTypes.length} 项
+                </span>
               </div>
+
+              <div
+                role="group"
+                aria-label="拉取内容类型多选"
+                style={{ display: 'flex', gap: '8px', marginTop: '10px' }}
+              >
+                {CONTENT_TYPE_OPTIONS.map((opt) => {
+                  const active = contentTypes.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      id={`content-type-${opt.value}`}
+                      className={`fmt-chip ${active ? 'active' : ''}`}
+                      aria-pressed={active}
+                      style={{ flex: 1, justifyContent: 'center', padding: '6px 10px' }}
+                      onClick={() => handleToggleContentType(opt.value)}
+                    >
+                      <span style={{ fontSize: '11px', display: 'inline-block', width: '11px', textAlign: 'center' }}>
+                        {active ? '✓' : ''}
+                      </span>
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {contentTypeGuardMsg && (
+                <div
+                  id="content-type-guard-msg"
+                  role="alert"
+                  style={{
+                    marginTop: '8px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    background: 'var(--amber-wash)',
+                    color: 'var(--amber)',
+                    fontSize: '11.5px',
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>⚠️</span>
+                  <span>至少保留一种拉取类型</span>
+                </div>
+              )}
             </div>
 
             <div className="surface" style={{ padding: '14px', background: 'var(--paper-sunken)', border: '1px solid var(--line)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ paddingRight: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
-                    抓取作者追评与追加回复
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--ink-soft)', marginTop: '2px', lineHeight: 1.4 }}>
-                    单篇推文抓取时，是否一并拉取作者本人在下方追加的连续回复/长串推文（默认关闭，仅抓取推文本体）
-                  </div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span>抓取作者追评与追加回复</span>
+                  <InfoTip text="单篇推文抓取时，是否一并拉取作者本人在下方追加的连续回复/长串推文（默认关闭，仅保留主推文本体）。" />
                 </div>
                 <label className="switch" style={{ flexShrink: 0 }}>
                   <input

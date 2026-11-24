@@ -68,6 +68,7 @@ class ApiService {
       hasXCredentials: true,
       xAuthTokenMasked: '2a8f••••••••78b9',
       xCt0Masked: 'c901••••••••55aa',
+      fetchContentTypes: ['article'],
       onlyLongTweets: true,
       fetchAuthorReplies: false,
       storageRoot: '~/Documents/Xtract',
@@ -85,6 +86,12 @@ class ApiService {
     await new Promise((resolve) => setTimeout(resolve, 400));
     const current = await this.getConfig();
     const newStorageRoot = updates.XTRACT_STORAGE_ROOT || current.storageRoot;
+    const nextContentTypes = updates.FETCH_CONTENT_TYPES
+      ? (updates.FETCH_CONTENT_TYPES.split(',')
+          .map((s) => s.trim())
+          .filter((s) => s === 'article' || s === 'note' || s === 'short') as AppConfigView['fetchContentTypes'])
+      : current.fetchContentTypes;
+    const effectiveContentTypes = nextContentTypes.length > 0 ? nextContentTypes : (['article'] as AppConfigView['fetchContentTypes']);
     return {
       success: true,
       config: {
@@ -95,7 +102,8 @@ class ApiService {
         llmAuthMode: updates.LLM_AUTH_MODE || current.llmAuthMode,
         llmModel: updates.LLM_MODEL || current.llmModel,
         httpProxy: updates.HTTP_PROXY || current.httpProxy,
-        onlyLongTweets: updates.FETCH_ONLY_LONG_TWEETS !== undefined ? updates.FETCH_ONLY_LONG_TWEETS !== 'false' : current.onlyLongTweets,
+        fetchContentTypes: effectiveContentTypes,
+        onlyLongTweets: !effectiveContentTypes.includes('short'),
         fetchAuthorReplies: updates.FETCH_AUTHOR_REPLIES !== undefined ? updates.FETCH_AUTHOR_REPLIES === 'true' : current.fetchAuthorReplies,
         storageRoot: newStorageRoot,
         dataDir: `${newStorageRoot}/data`,

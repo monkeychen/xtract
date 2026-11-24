@@ -170,7 +170,7 @@ export interface FetchFollowingOptions {
 | **T1.1** | 新增 `TweetContentType` 类型、`classifyTweetContentType` / `matchesContentTypes` / `parseContentTypes` 纯函数与 `Config.FETCH_CONTENT_TYPES`（TDD） | AC5.1 | 无 | ✅ 完成（`vitest content-type-filter.test.ts` 5/5 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T1.2** | `XClient` 与 `Pipeline` 四维批量抓取升级为 `contentTypes` 透传过滤，并落实单推同步 & 趋势研报双豁免契约（TDD） | AC5.3, AC5.4 | T1.1 | ✅ 完成（`vitest pipeline.test.ts` 7/7 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T1.3** | CLI 新增 `--content-types <types>` 校验解析与 `--all-tweets` 兼容别名（TDD） | AC5.5 | T1.1, T1.2 | ✅ 完成（`vitest cli-argv.test.ts` 20/20 pass, CLI `--content-types bogus` 准确报错 exit 1） |
-| **T1.4** | IPC 契约（`preload`/`ipc`/`renderer api`）与 `SettingsDrawer` 多选芯片 + 防呆拦截 + `InfoTip` 精简，并补齐单元测试与 GUI E2E（TDD） | AC5.2 | T1.1 | ⬜ 待开始 |
+| **T1.4** | IPC 契约（`preload`/`ipc`/`renderer api`）与 `SettingsDrawer` 多选芯片 + 防呆拦截 + `InfoTip` 精简，并补齐单元测试与 GUI E2E（TDD） | AC5.2 | T1.1 | ✅ 完成（`ipc.test.ts` 9/9 + `gui-workbench.e2e.test.ts` 19/19 pass, `eslint` 0 err, `tsc` 0 err） |
 | **T1.5** | M1 自动化门禁验收（`pnpm verify` 全量通过并补充验收记录） | AC5.1–AC5.5 | T1.1–T1.4 | ⬜ 待开始 |
 
 ---

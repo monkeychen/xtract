@@ -132,6 +132,7 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(typeof config.reasoningEnabled).toBe('boolean');
     expect(typeof config.fetchAuthorReplies).toBe('boolean');
     expect(config.fetchAuthorReplies).toBe(false);
+    expect(config.fetchContentTypes).toEqual(['article']);
     expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
     expect(typeof config.storageRoot).toBe('string');
     expect(typeof config.dataDir).toBe('string');
@@ -156,12 +157,15 @@ describe('Preload & IPC Communication Bridge', () => {
     const res = await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'false',
       LLM_REASONING_EFFORT: 'low',
+      FETCH_CONTENT_TYPES: 'article,note',
       FETCH_AUTHOR_REPLIES: 'true',
       XTRACT_STORAGE_ROOT: customRoot,
     });
     expect(res.success).toBe(true);
     expect(res.config.reasoningEnabled).toBe(false);
     expect(res.config.reasoningEffort).toBe('low');
+    expect(res.config.fetchContentTypes).toEqual(['article', 'note']);
+    expect(res.config.onlyLongTweets).toBe(true);
     expect(res.config.fetchAuthorReplies).toBe(true);
     expect(res.config.storageRoot).toBe(customRoot);
     expect(res.config.dataDir).toBe(path.join(customRoot, 'data'));
@@ -169,10 +173,14 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(res.config.reportsDir).toBe(path.join(customRoot, 'reports'));
     expect(res.config.configEnvPath).toBe(path.join(customRoot, 'config.env'));
 
+    const reloaded = await xtractApiImplementation.getConfig();
+    expect(reloaded.fetchContentTypes).toEqual(['article', 'note']);
+
     // Restore default
     await xtractApiImplementation.updateConfig({
       LLM_REASONING_ENABLED: 'true',
       LLM_REASONING_EFFORT: 'high',
+      FETCH_CONTENT_TYPES: 'article',
       FETCH_AUTHOR_REPLIES: 'false',
       XTRACT_STORAGE_ROOT: '',
     });

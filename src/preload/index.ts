@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './channels.js';
-import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../main/types.js';
+import type { Tweet, TweetContentType, TrendTopic, DeleteFilter, DeleteResult, XListInfo, TweetQueryOptions } from '../main/types.js';
 
 export interface StreamEvent {
   taskId: string;
@@ -22,6 +22,7 @@ export interface AppConfigView {
   hasXCredentials: boolean;
   xAuthTokenMasked: string;
   xCt0Masked: string;
+  fetchContentTypes: TweetContentType[];
   onlyLongTweets: boolean;
   fetchAuthorReplies: boolean;
   storageRoot: string;

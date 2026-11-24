@@ -260,7 +260,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           hasXCredentials: true,
           xAuthTokenMasked: '••••••••',
           xCt0Masked: '••••••••',
-          onlyLongTweets: true,
+          fetchContentTypes: (window as any).__savedContentTypes || ['article'],
+          onlyLongTweets: !((window as any).__savedContentTypes || ['article']).includes('short'),
           fetchAuthorReplies: false,
           storageRoot: '~/Documents/Xtract',
           dataDir: '~/Documents/Xtract/data',
@@ -268,28 +269,39 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           reportsDir: '~/Documents/Xtract/reports',
           configEnvPath: '~/Documents/Xtract/config.env',
         }),
-        updateConfig: async (updates: any) => ({
-          success: true,
-          config: {
-            appVersion: '0.1.2',
-            httpProxy: updates?.HTTP_PROXY || 'http://127.0.0.1:8118',
-            llmProvider: 'qwen-token-plan',
-            llmAuthMode: 'account',
-            llmModel: 'qwen3.8-flash',
-            reasoningEnabled: true,
-            reasoningEffort: updates?.LLM_REASONING_EFFORT || 'high',
-            hasXCredentials: true,
-            xAuthTokenMasked: '••••••••',
-            xCt0Masked: '••••••••',
-            onlyLongTweets: true,
-            fetchAuthorReplies: updates?.FETCH_AUTHOR_REPLIES === 'true',
-            storageRoot: updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract',
-            dataDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/data`,
-            articlesDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/articles`,
-            reportsDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/reports`,
-            configEnvPath: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/config.env`,
-          },
-        }),
+        updateConfig: async (updates: any) => {
+          (window as any).__lastConfigUpdates = updates;
+          if (updates?.FETCH_CONTENT_TYPES) {
+            (window as any).__savedContentTypes = String(updates.FETCH_CONTENT_TYPES)
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+          }
+          const nextTypes = (window as any).__savedContentTypes || ['article'];
+          return {
+            success: true,
+            config: {
+              appVersion: '0.1.2',
+              httpProxy: updates?.HTTP_PROXY || 'http://127.0.0.1:8118',
+              llmProvider: 'qwen-token-plan',
+              llmAuthMode: 'account',
+              llmModel: 'qwen3.8-flash',
+              reasoningEnabled: true,
+              reasoningEffort: updates?.LLM_REASONING_EFFORT || 'high',
+              hasXCredentials: true,
+              xAuthTokenMasked: '••••••••',
+              xCt0Masked: '••••••••',
+              fetchContentTypes: nextTypes,
+              onlyLongTweets: !nextTypes.includes('short'),
+              fetchAuthorReplies: updates?.FETCH_AUTHOR_REPLIES === 'true',
+              storageRoot: updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract',
+              dataDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/data`,
+              articlesDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/articles`,
+              reportsDir: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/reports`,
+              configEnvPath: `${updates?.XTRACT_STORAGE_ROOT || '~/Documents/Xtract'}/config.env`,
+            },
+          };
+        },
         selectDirectory: async () => '/tmp/custom_xtract',
         onStreamEvent: (callback: any) => {
           (window as any).__streamCallback = callback;
@@ -600,22 +612,29 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(200);
     expect(await page.locator('.fmt-chip.active', { hasText: '标准' }).isVisible()).toBe(true);
 
-    // Verify 抓取过滤规则 switch is visible and checked by default
+    // Verify 抓取过滤规则：默认仅选中「专栏文章」，支持多选与至少保留 1 项防呆拦截
     const filterRuleHeader = page.locator('div', { hasText: '抓取过滤规则' }).first();
     expect(await filterRuleHeader.isVisible()).toBe(true);
-    expect(await page.locator('div', { hasText: '仅抓取长推文与专栏文章' }).first().isVisible()).toBe(true);
+    expect(await page.locator('div', { hasText: '拉取内容类型' }).first().isVisible()).toBe(true);
 
-    const longTweetsToggle = page.locator('#only-long-tweets-toggle');
-    expect(await longTweetsToggle.isChecked()).toBe(true);
+    const articleChip = page.locator('#content-type-article');
+    const noteChip = page.locator('#content-type-note');
+    const shortChip = page.locator('#content-type-short');
+    expect(await articleChip.getAttribute('aria-pressed')).toBe('true');
+    expect(await noteChip.getAttribute('aria-pressed')).toBe('false');
+    expect(await shortChip.getAttribute('aria-pressed')).toBe('false');
 
-    // Toggle switch via slider and back
-    const toggleSlider = page.locator('label.switch:has(#only-long-tweets-toggle) .slider');
-    await toggleSlider.click();
+    // Attempt to uncheck last selected item -> blocked with guard hint
+    await articleChip.click();
     await page.waitForTimeout(100);
-    expect(await longTweetsToggle.isChecked()).toBe(false);
-    await toggleSlider.click();
+    expect(await articleChip.getAttribute('aria-pressed')).toBe('true');
+    expect(await page.locator('#content-type-guard-msg').isVisible()).toBe(true);
+
+    // Multi-select Note Tweet -> guard hint clears and both are active
+    await noteChip.click();
     await page.waitForTimeout(100);
-    expect(await longTweetsToggle.isChecked()).toBe(true);
+    expect(await noteChip.getAttribute('aria-pressed')).toBe('true');
+    expect(await page.locator('#content-type-guard-msg').isVisible()).toBe(false);
 
     // Verify 抓取作者追评开关 is visible and UNCHECKED by default (default false)
     expect(await page.locator('div', { hasText: '抓取作者追评与追加回复' }).first().isVisible()).toBe(true);
@@ -652,6 +671,19 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.locator('button', { hasText: '保存' }).click();
     await page.waitForTimeout(800);
 
+    expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
+
+    // Verify FETCH_CONTENT_TYPES was submitted and persists on reopen
+    const submittedUpdates = await page.evaluate(() => (window as any).__lastConfigUpdates);
+    expect(submittedUpdates?.FETCH_CONTENT_TYPES).toBe('article,note');
+
+    await page.locator('button', { hasText: '⚙️ 设置' }).click();
+    await page.waitForTimeout(250);
+    expect(await page.locator('#content-type-article').getAttribute('aria-pressed')).toBe('true');
+    expect(await page.locator('#content-type-note').getAttribute('aria-pressed')).toBe('true');
+    expect(await page.locator('#content-type-short').getAttribute('aria-pressed')).toBe('false');
+    await page.locator('#settings-drawer .secondary-button', { hasText: '取消' }).click();
+    await page.waitForTimeout(150);
     expect(await page.locator('#settings-drawer').isVisible()).toBe(false);
   });
 
