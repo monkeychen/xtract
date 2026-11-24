@@ -61,16 +61,20 @@ export async function downloadImage(
       },
       signal: controller.signal,
     };
+    let fetchFn: typeof fetch = fetch;
     if (Config.HTTP_PROXY && !(process as any).versions?.electron) {
       try {
-        const { ProxyAgent } = await import('undici');
+        // 必须与 ProxyAgent 同源导入 undici.fetch，避免 Node 内置 undici 与项目依赖 undici 版本不一致导致
+        // `TypeError: invalid onRequestStart method`
+        const { fetch: undiciFetch, ProxyAgent } = await import('undici');
         fetchOptions.dispatcher = new ProxyAgent(Config.HTTP_PROXY);
+        fetchFn = undiciFetch as unknown as typeof fetch;
       } catch {
         // ignore
       }
     }
 
-    const res = await fetch(url, fetchOptions);
+    const res = await fetchFn(url, fetchOptions);
 
     if (res.ok) {
       const buffer = Buffer.from(await res.arrayBuffer());

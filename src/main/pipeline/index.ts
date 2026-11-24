@@ -60,6 +60,7 @@ export interface FetchAndStoreResult {
 export interface BatchExportItem {
   tweetId: string;
   filePath: string;
+  downloadedVideos?: string[];
 }
 
 export interface BatchExportResult {
@@ -232,7 +233,11 @@ export class Pipeline {
    */
   async exportTweetsByIds(
     tweetIds: string[],
-    options?: { timeout?: number; fetchAuthorReplies?: boolean }
+    options?: {
+      timeout?: number;
+      fetchAuthorReplies?: boolean;
+      downloadVideos?: boolean;
+    }
   ): Promise<BatchExportResult> {
     const exported: BatchExportItem[] = [];
     const failed: Array<{ tweetId: string; error: string }> = [];
@@ -242,11 +247,25 @@ export class Pipeline {
         if (!this.storage.getTweetById(tweetId)) {
           await this.fetchTweetAndStore(tweetId, options);
         }
-        const { filePath } = await this.storage.exportSingleTweetMarkdown(tweetId, {
+        const exportRes = await this.storage.exportSingleTweetMarkdown(tweetId, {
           downloadImages: true,
+          downloadVideos: options?.downloadVideos,
           fetchAuthorReplies: options?.fetchAuthorReplies,
+          onVideoProgress: options?.downloadVideos
+            ? (p) => {
+                if (p.percent === 100 || p.percent % 25 === 0) {
+                  process.stderr.write(
+                    `⬇️ [${tweetId}] 下载视频 (${p.index + 1}/${p.total}): ${p.percent}%\n`
+                  );
+                }
+              }
+            : undefined,
         });
-        exported.push({ tweetId, filePath });
+        const item: BatchExportItem = { tweetId, filePath: exportRes.filePath };
+        if (exportRes.downloadedVideos && exportRes.downloadedVideos.length > 0) {
+          item.downloadedVideos = exportRes.downloadedVideos;
+        }
+        exported.push(item);
       } catch (err: any) {
         failed.push({ tweetId, error: err?.message || String(err) });
       }

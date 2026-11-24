@@ -9,6 +9,8 @@ import {
   type XListInfo,
 } from '../types.js';
 import {
+  extractSsrTweetPayloadsFromHtml,
+  mergeRawTweetPayload,
   parseTweetResult,
   parseTweetResultsByRestIds,
   parseTimelineInstructions,
@@ -1080,116 +1082,215 @@ export class XClient {
     }
 
     const cleanId = match[1];
-    const targetUrl = `https://x.com/i/status/${cleanId}`;
+    const fullUrlMatch = tweetIdOrUrl.match(/https?:\/\/(?:x|twitter)\.com\/([^/?#]+)\/status\/(\d{5,})/i);
+    const targetUrl = fullUrlMatch
+      ? `https://x.com/${fullUrlMatch[1]}/status/${fullUrlMatch[2]}`
+      : `https://x.com/i/status/${cleanId}`;
     const timeout = options?.timeout || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
     const shouldFetchReplies = options?.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
 
-    const capturedTweets: Tweet[] = [];
-    let rawMainTweetResult: any = null;
-    const embeddedTweetsMap = new Map<string, Tweet>();
-    const expectedArticleTweetIds = new Set<string>();
-    const browser = await this.launchBrowser(true);
-
-    try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
-
-      page.on('response', async (res: Response) => {
-        const url = res.url();
-        if (
-          url.includes('/graphql/') &&
-          (url.includes('TweetDetail') || url.includes('TweetResult') || url.includes('TweetResultsByRestIds')) &&
-          res.status() === 200
-        ) {
-          try {
-            const data = await res.json();
-
-            // 1. TweetResultsByRestIds (数组形态：Article 内嵌推文卡片批量查询)
-            if (url.includes('TweetResultsByRestIds') || Array.isArray(data?.data?.tweetResult)) {
-              const batchTweets = parseTweetResultsByRestIds(data);
-              for (const bt of batchTweets) {
-                if (bt && bt.tweet_id) {
-                  embeddedTweetsMap.set(bt.tweet_id, bt);
-                  capturedTweets.push(bt);
-                }
-              }
-            }
-
-            // 2. 单篇主推文或结果
-            if (data?.data?.tweetResult?.result) {
-              const rawResult = data.data.tweetResult.result;
-              const t = parseTweetResult(rawResult);
-              if (t && t.tweet_id) {
-                if (t.tweet_id === cleanId) {
-                  rawMainTweetResult = rawResult;
-                  const inner =
-                    rawResult.__typename === 'TweetWithVisibilityResults'
-                      ? rawResult.tweet
-                      : rawResult;
-                  const articleResult = inner?.article?.article_results?.result;
-                  if (Array.isArray(articleResult?.content_state?.entityMap)) {
-                    for (const e of articleResult.content_state.entityMap) {
-                      if (e?.value?.type === 'TWEET' && e?.value?.data?.tweetId) {
-                        expectedArticleTweetIds.add(String(e.value.data.tweetId));
-                      }
-                    }
-                  }
-                }
-                capturedTweets.push(t);
-              }
-            }
-
-            // 3. 时间线指令 (包含追评及对话流)
-            const inst = extractTimelineInstructions(data);
-            if (inst.length > 0) {
-              const instTweets = parseTimelineInstructions(inst);
-              capturedTweets.push(...instTweets);
-            }
-          } catch {
-            // ignore
-          }
-        }
-      });
-
-      process.stderr.write(`🌐 正在打开推文页面 ${targetUrl} 并获取内容...\n`);
-      await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
-
-      let mainCapturedAt = -1;
-      for (let i = 0; i < Math.max(30, timeout); i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        if (capturedTweets.length > 0) {
-          const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
-          if (hasMain) {
-            if (mainCapturedAt < 0) mainCapturedAt = i;
-            const waitElapsed = i - mainCapturedAt;
-            // 若主推文为包含内嵌推文的 Article，最多留 6 秒等待所有 TweetResultsByRestIds 补齐
-            if (
-              expectedArticleTweetIds.size > 0 &&
-              embeddedTweetsMap.size < expectedArticleTweetIds.size &&
-              waitElapsed < 6
-            ) {
-              if (waitElapsed === 2 || waitElapsed === 4) {
-                await page.evaluate(() => window.scrollBy(0, 1200)).catch(() => {});
-              }
-              continue;
-            }
-            if (!shouldFetchReplies) {
-              await new Promise((r) => setTimeout(r, 1000));
-              break;
-            } else if (shouldFetchReplies) {
-              await new Promise((r) => setTimeout(r, 2000));
-              break;
-            }
-          }
+    const collectExpectedArticleTweetIds = (rawResult: any, expectedSet: Set<string>) => {
+      const inner =
+        rawResult?.__typename === 'TweetWithVisibilityResults' ? rawResult.tweet : rawResult;
+      const articleResult = inner?.article?.article_results?.result;
+      const rawEntityMap =
+        articleResult?.content_state?.entityMap ?? articleResult?.content_state?.entity_map;
+      const entries = Array.isArray(rawEntityMap)
+        ? rawEntityMap
+        : rawEntityMap && typeof rawEntityMap === 'object'
+          ? Object.values(rawEntityMap)
+          : [];
+      for (const e of entries as any[]) {
+        const val = e?.value ?? e;
+        const tid = val?.data?.tweetId ?? val?.data?.tweet_id;
+        if (val?.type === 'TWEET' && tid) {
+          expectedSet.add(String(tid));
         }
       }
-    } finally {
-      await browser.close();
+    };
+
+    const runAttempt = async (headless: boolean): Promise<{
+      capturedTweets: Tweet[];
+      rawMainTweetResult: any;
+      embeddedTweetsMap: Map<string, Tweet>;
+      hitHttp403: boolean;
+    }> => {
+      const capturedTweets: Tweet[] = [];
+      let rawMainTweetResult: any = null;
+      const embeddedTweetsMap = new Map<string, Tweet>();
+      const expectedArticleTweetIds = new Set<string>();
+      let hitHttp403 = false;
+      const browser = await this.launchBrowser(headless);
+
+      try {
+        const context = await this.setupContext(browser, timeoutMs);
+        const page = await context.newPage();
+
+        page.on('response', async (res: Response) => {
+          const url = res.url();
+          const status = res.status();
+          const contentType = res.headers()['content-type'] || '';
+
+          if (status === 403 && url.includes(`/status/${cleanId}`)) {
+            hitHttp403 = true;
+            return;
+          }
+
+          // A. X 新版前端 x-web (TanStack Router SSR) 首屏 HTML 内联载荷
+          if (status === 200 && contentType.includes('text/html') && url.includes(`/status/${cleanId}`)) {
+            try {
+              const html = await res.text();
+              const ssrPayloads = extractSsrTweetPayloadsFromHtml(html);
+              for (const [restId, rawMerged] of ssrPayloads.entries()) {
+                if (restId === cleanId) {
+                  rawMainTweetResult = rawMainTweetResult
+                    ? mergeRawTweetPayload(rawMainTweetResult, rawMerged, cleanId)
+                    : rawMerged;
+                  collectExpectedArticleTweetIds(rawMainTweetResult, expectedArticleTweetIds);
+                  const parsedMain = parseTweetResult(rawMainTweetResult, embeddedTweetsMap);
+                  if (parsedMain && parsedMain.tweet_id) {
+                    capturedTweets.push(parsedMain);
+                  }
+                } else {
+                  const parsedEmbedded = parseTweetResult(rawMerged);
+                  if (parsedEmbedded && parsedEmbedded.tweet_id) {
+                    embeddedTweetsMap.set(parsedEmbedded.tweet_id, parsedEmbedded);
+                    capturedTweets.push(parsedEmbedded);
+                  }
+                }
+              }
+            } catch {
+              // ignore SSR parse errors
+            }
+            return;
+          }
+
+          // B. 经典 /graphql/ 网络流拦截
+          if (
+            url.includes('/graphql/') &&
+            (url.includes('TweetDetail') || url.includes('TweetResult') || url.includes('TweetResultsByRestIds')) &&
+            status === 200
+          ) {
+            try {
+              const data = await res.json();
+
+              // 1. TweetResultsByRestIds (数组形态：Article 内嵌推文卡片批量查询)
+              if (url.includes('TweetResultsByRestIds') || Array.isArray(data?.data?.tweetResult)) {
+                const batchTweets = parseTweetResultsByRestIds(data);
+                for (const bt of batchTweets) {
+                  if (bt && bt.tweet_id) {
+                    embeddedTweetsMap.set(bt.tweet_id, bt);
+                    capturedTweets.push(bt);
+                  }
+                }
+              }
+
+              // 2. 单篇主推文或结果（兼容 tweetResult 与 tweet_result_by_rest_id）
+              const singleWrapper = data?.data?.tweetResult || data?.data?.tweet_result_by_rest_id;
+              if (singleWrapper?.result) {
+                const rawResult = singleWrapper.result;
+                const fallbackId = singleWrapper.rest_id ? String(singleWrapper.rest_id) : undefined;
+                const normalizedRaw = mergeRawTweetPayload(null, rawResult, fallbackId);
+                const t = parseTweetResult(normalizedRaw);
+                if (t && t.tweet_id) {
+                  if (t.tweet_id === cleanId) {
+                    rawMainTweetResult = rawMainTweetResult
+                      ? mergeRawTweetPayload(rawMainTweetResult, normalizedRaw, cleanId)
+                      : normalizedRaw;
+                    collectExpectedArticleTweetIds(rawMainTweetResult, expectedArticleTweetIds);
+                  }
+                  capturedTweets.push(t);
+                }
+              }
+
+              // 3. 时间线指令 (包含追评及对话流)
+              const inst = extractTimelineInstructions(data);
+              if (inst.length > 0) {
+                const instTweets = parseTimelineInstructions(inst);
+                capturedTweets.push(...instTweets);
+              }
+            } catch {
+              // ignore
+            }
+          }
+        });
+
+        process.stderr.write(
+          headless
+            ? `🌐 正在打开推文页面 ${targetUrl} 并获取内容...\n`
+            : `🌐 正在通过可见浏览器窗口打开 ${targetUrl} 获取内容...\n`
+        );
+        await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
+
+        let mainCapturedAt = -1;
+        for (let i = 0; i < Math.max(30, timeout); i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          if (capturedTweets.length > 0) {
+            const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
+            if (hasMain) {
+              if (mainCapturedAt < 0) mainCapturedAt = i;
+              const waitElapsed = i - mainCapturedAt;
+              // 若主推文为包含内嵌推文的 Article，最多留 6 秒等待所有 TweetResultsByRestIds 补齐
+              if (
+                expectedArticleTweetIds.size > 0 &&
+                embeddedTweetsMap.size < expectedArticleTweetIds.size &&
+                waitElapsed < 6
+              ) {
+                if (waitElapsed === 2 || waitElapsed === 4) {
+                  await page.evaluate(() => window.scrollBy(0, 1200)).catch(() => {});
+                }
+                continue;
+              }
+              if (!shouldFetchReplies) {
+                await new Promise((r) => setTimeout(r, 1000));
+                break;
+              } else if (shouldFetchReplies) {
+                await new Promise((r) => setTimeout(r, 2000));
+                break;
+              }
+            }
+          }
+        }
+      } finally {
+        await browser.close();
+      }
+
+      return { capturedTweets, rawMainTweetResult, embeddedTweetsMap, hitHttp403 };
+    };
+
+    let attemptResult: {
+      capturedTweets: Tweet[];
+      rawMainTweetResult: any;
+      embeddedTweetsMap: Map<string, Tweet>;
+      hitHttp403: boolean;
+    };
+
+    try {
+      attemptResult = await runAttempt(true);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      if (msg.includes('ERR_HTTP_RESPONSE_CODE_FAILURE')) {
+        process.stderr.write(
+          `⚠️ X 新版前端拒绝了无头模式访问 (HTTP 403)，正在自动切换为可见浏览器窗口重试...\n`
+        );
+        attemptResult = await runAttempt(false);
+      } else {
+        throw err;
+      }
     }
 
-    // 若抓取到了内嵌推文，且主推文为 Article，用完整内嵌推文字典重新富化主推文正文
-    if (rawMainTweetResult && embeddedTweetsMap.size > 0) {
+    if (attemptResult.hitHttp403 && !attemptResult.capturedTweets.some((t) => t.tweet_id === cleanId)) {
+      process.stderr.write(
+        `⚠️ X 新版前端拒绝了无头模式访问 (HTTP 403)，正在自动切换为可见浏览器窗口重试...\n`
+      );
+      attemptResult = await runAttempt(false);
+    }
+
+    const { capturedTweets, rawMainTweetResult, embeddedTweetsMap } = attemptResult;
+
+    // 若存在合并后的原始主推文（尤其是含内嵌推文或 SSR 分片合并的 Article），用最终合并体重新解析
+    if (rawMainTweetResult) {
       const enrichedMain = parseTweetResult(rawMainTweetResult, embeddedTweetsMap);
       if (enrichedMain && enrichedMain.tweet_id) {
         const idx = capturedTweets.findIndex((t) => t.tweet_id === cleanId);

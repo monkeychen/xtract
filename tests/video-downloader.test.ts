@@ -157,6 +157,76 @@ describe('T2.2: Streaming Video Downloader & Page Bundle Video Integration', () 
     expect(fs.existsSync(`${destPath}.part`)).toBe(false);
   });
 
+  it('UT-4e: downloadVideoStream routes external URL through ProxyAgent via same-package undici.fetch', async () => {
+    // 真实本地 HTTP 代理：接收绝对 URI 请求并返回 MP4 字节流，回归验证 Node 全局 fetch 与 undici v8 ProxyAgent 不兼容问题
+    const proxyServer = http.createServer((req, res) => {
+      expect(req.url).toContain('video.twimg.test');
+      expect(req.headers.referer).toBe('https://x.com/');
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(SAMPLE_BYTES.length),
+      });
+      res.end(SAMPLE_BYTES);
+    });
+
+    const proxyUrl = await new Promise<string>((resolve) => {
+      proxyServer.listen(0, '127.0.0.1', () => {
+        const addr = proxyServer.address();
+        const port = typeof addr === 'object' && addr ? addr.port : 0;
+        resolve(`http://127.0.0.1:${port}`);
+      });
+    });
+
+    try {
+      const bundleDir = path.join(tmpRoot, 'bundle_proxy');
+      const url = 'http://video.twimg.test/amplify_video/999888777/vid/proxied.mp4';
+      const destPath = resolveVideoDestPath(bundleDir, url);
+
+      const res = await downloadVideoStream({ url, destPath, proxyUrl });
+      expect(res.success).toBe(true);
+      expect(res.sizeBytes).toBe(SAMPLE_BYTES.length);
+      expect(fs.existsSync(destPath)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => proxyServer.close(() => resolve()));
+    }
+  });
+
+  it('UT-4f: downloadVideoStream uses chunk-inactivity stall timeout (keeps active streams alive, aborts stalled ones)', async () => {
+    // 1. Active stream: 4 chunks x 15ms (~60ms+) with stallTimeoutMs=120ms succeeds even if total > 50ms
+    const activeDir = path.join(tmpRoot, 'bundle_active_stall');
+    const activeUrl = `${baseUrl}/amplify_video/2121343472368074752/vid/sample.mp4?tag=stall`;
+    const activeDest = resolveVideoDestPath(activeDir, activeUrl);
+    const activeRes = await downloadVideoStream({ url: activeUrl, destPath: activeDest, timeoutMs: 200 });
+    expect(activeRes.success).toBe(true);
+
+    // 2. Truly stalled stream: sends headers + 1 chunk then hangs -> aborts on stallTimeoutMs and cleans .part
+    const stallServer = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': '1048576' });
+      res.write(Buffer.alloc(1024, 0x43));
+      // intentionally never ends
+    });
+    const stallUrl = await new Promise<string>((resolve) => {
+      stallServer.listen(0, '127.0.0.1', () => {
+        const addr = stallServer.address();
+        const port = typeof addr === 'object' && addr ? addr.port : 0;
+        resolve(`http://127.0.0.1:${port}/stalled.mp4`);
+      });
+    });
+
+    try {
+      const stallDir = path.join(tmpRoot, 'bundle_stalled');
+      const stallDest = resolveVideoDestPath(stallDir, stallUrl);
+      const stallRes = await downloadVideoStream({ url: stallUrl, destPath: stallDest, timeoutMs: 120 });
+      expect(stallRes.success).toBe(false);
+      expect(stallRes.error).toContain('超时');
+      expect(fs.existsSync(stallDest)).toBe(false);
+      expect(fs.existsSync(`${stallDest}.part`)).toBe(false);
+    } finally {
+      stallServer.closeAllConnections?.();
+      await new Promise<void>((resolve) => stallServer.close(() => resolve()));
+    }
+  });
+
   it('UT-5: Storage.exportSingleTweetMarkdown downloads videos, updates index.md links, auto-links pre-downloaded videos, and deleteTweets cascades videos/', async () => {
     const dbPath = path.join(tmpRoot, 'storage_vid.db');
     const articlesDir = path.join(tmpRoot, 'articles');

@@ -14,6 +14,7 @@ import {
   resolveVersion,
   normalizeTweetIdInputs,
   resolveCliContentTypes,
+  resolveCliDownloadVideos,
 } from './cli/argv.js';
 import { createRequire } from 'node:module';
 
@@ -81,6 +82,8 @@ if (isCLI) {
     .option('--list [limit]', '查看已抓取推文列表 (默认 20 条)')
     .option('--view <tweetId>', '查看指定 ID 或 URL 的推文全文详情，并默认导出为独立 Markdown 文档')
     .option('--no-export-md', '查看单篇推文时关闭自动导出 Markdown')
+    .option('--download-videos', '查看或导出推文时，将推文及专栏内嵌推文中的视频流式下载至 Page Bundle videos/ 目录')
+    .option('--no-download-videos', '本次查看或导出不下载视频（覆盖 AUTO_DOWNLOAD_VIDEOS 配置）')
     .option('--delete [tweetIds...]', '级联删除推文及本地文件：可传多个 ID/URL 批量删除，也可仅搭配 --user/--since 等筛选条件')
     .option('--since <date>', '起始日期过滤 (YYYY-MM-DD)')
     .option('--until <date>', '截止日期过滤 (YYYY-MM-DD)')
@@ -134,6 +137,12 @@ if (isCLI) {
     if (options.authorReplies !== undefined) {
       fetchAuthorReplies = Boolean(options.authorReplies);
     }
+
+    // CLI download videos option priority: CLI flags > env > default(false)
+    const downloadVideos = resolveCliDownloadVideos({
+      downloadVideos: options.downloadVideos,
+      configDefault: Config.AUTO_DOWNLOAD_VIDEOS,
+    });
 
     const storage = new Storage();
     const client = new XClient(timeout);
@@ -207,7 +216,13 @@ if (isCLI) {
             : `已指定 --author-replies，正在拉取作者完整追加回复推文串`;
           process.stderr.write(`🔍 ${msg}，正在从 X 实时抓取完整内容...\n`);
           try {
-            await pipeline.fetchTweetAndStore(tweetId, {
+            const fetchTarget =
+              options.view.includes('/status/')
+                ? options.view.trim()
+                : tweet?.author_username
+                ? `https://x.com/${tweet.author_username}/status/${tweetId}`
+                : tweetId;
+            await pipeline.fetchTweetAndStore(fetchTarget, {
               timeout,
               fetchAuthorReplies,
             });
@@ -223,23 +238,45 @@ if (isCLI) {
         }
 
         let exportedMdPath: string | null = null;
+        let downloadedVideos: string[] = [];
         if (options.exportMd !== false) {
-          const { filePath } = await storage.exportSingleTweetMarkdown(tweetId, {
+          const exportRes = await storage.exportSingleTweetMarkdown(tweetId, {
             outputPath: options.output,
             downloadImages: true,
+            downloadVideos,
             fetchAuthorReplies,
+            onVideoProgress: downloadVideos
+              ? (p) => {
+                  if (p.percent === 100 || p.percent % 25 === 0) {
+                    process.stderr.write(
+                      `⬇️ 正在下载视频 (${p.index + 1}/${p.total}): ${p.percent}%\n`
+                    );
+                  }
+                }
+              : undefined,
           });
-          exportedMdPath = filePath;
+          exportedMdPath = exportRes.filePath;
+          downloadedVideos = exportRes.downloadedVideos;
         }
 
         if (isJson) {
           process.stdout.write(
-            JSON.stringify({ tweet, exportedMarkdown: exportedMdPath }, null, 2) + '\n'
+            JSON.stringify(
+              { tweet, exportedMarkdown: exportedMdPath, downloadedVideos },
+              null,
+              2
+            ) + '\n'
           );
         } else {
           process.stdout.write(formatTweetDetail(tweet));
           if (exportedMdPath) {
             process.stdout.write(`🎉 推文已导出为 Markdown 文档: ${exportedMdPath}\n`);
+          }
+          if (downloadedVideos.length > 0) {
+            process.stdout.write(`🎬 已下载 ${downloadedVideos.length} 个本地视频至 Page Bundle:\n`);
+            for (const v of downloadedVideos) {
+              process.stdout.write(`  - ${v}\n`);
+            }
           }
           if (!fetchAuthorReplies) {
             process.stderr.write(
@@ -369,13 +406,27 @@ if (isCLI) {
           );
         }
 
-        const result = await pipeline.exportTweetsByIds(ids, { timeout, fetchAuthorReplies });
+        const result = await pipeline.exportTweetsByIds(ids, {
+          timeout,
+          fetchAuthorReplies,
+          downloadVideos,
+        });
+        const allDownloadedVideos = result.exported.flatMap((item) => item.downloadedVideos || []);
 
         if (isJson) {
-          process.stdout.write(JSON.stringify({ status: 'ok', ...result }, null, 2) + '\n');
+          process.stdout.write(
+            JSON.stringify(
+              { status: 'ok', ...result, downloadedVideos: allDownloadedVideos },
+              null,
+              2
+            ) + '\n'
+          );
         } else {
           for (const item of result.exported) {
-            process.stdout.write(`✅ 已导出 [${item.tweetId}] → ${item.filePath}\n`);
+            const vidHint = item.downloadedVideos?.length
+              ? `（含 ${item.downloadedVideos.length} 个本地视频）`
+              : '';
+            process.stdout.write(`✅ 已导出 [${item.tweetId}] → ${item.filePath}${vidHint}\n`);
           }
           for (const f of result.failed) {
             process.stderr.write(`❌ 导出失败 [${f.tweetId}]: ${f.error}\n`);

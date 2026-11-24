@@ -99,4 +99,30 @@ describe('Pipeline.exportTweetsByIds（批量导出，逐条容错）', () => {
     expect(res).toEqual({ exported: [], failed: [] });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('exportTweetsByIds 透传 downloadVideos 并保留每个条目的 downloadedVideos 清单', async () => {
+    const storage = {
+      getTweetById: vi.fn((id: string) => ({ tweet_id: id, author_username: 'a', text: 't' })),
+      exportSingleTweetMarkdown: vi.fn(async (id: string) => ({
+        filePath: `/tmp/bundle/${id}/index.md`,
+        downloadedImagesCount: 0,
+        downloadedVideosCount: 1,
+        downloadedVideos: [`/tmp/bundle/${id}/videos/v1.mp4`],
+      })),
+    };
+    const pipeline = new Pipeline(storage as any, {} as any);
+    const res = await pipeline.exportTweetsByIds(['10001'], { downloadVideos: true });
+
+    expect(storage.exportSingleTweetMarkdown).toHaveBeenCalledWith(
+      '10001',
+      expect.objectContaining({ downloadImages: true, downloadVideos: true })
+    );
+    expect(res.exported).toEqual([
+      {
+        tweetId: '10001',
+        filePath: '/tmp/bundle/10001/index.md',
+        downloadedVideos: ['/tmp/bundle/10001/videos/v1.mp4'],
+      },
+    ]);
+  });
 });

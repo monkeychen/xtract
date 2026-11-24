@@ -108,3 +108,16 @@ export function resolveCliContentTypes(options: {
   }
   return undefined;
 }
+
+/**
+ * 解析 CLI 视频下载开关，优先级：--download-videos / --no-download-videos > AUTO_DOWNLOAD_VIDEOS 配置 > false。
+ */
+export function resolveCliDownloadVideos(options: {
+  downloadVideos?: boolean;
+  configDefault: boolean;
+}): boolean {
+  if (options.downloadVideos !== undefined) {
+    return Boolean(options.downloadVideos);
+  }
+  return Boolean(options.configDefault);
+}

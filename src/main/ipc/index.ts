@@ -552,7 +552,12 @@ export function registerIpcHandlers(
 
       if (!tweet || isIncomplete || args.forceRefresh) {
         try {
-          await pipeline.fetchTweetAndStore(cleanId);
+          const fetchTarget = args.tweetIdOrUrl.includes('/status/')
+            ? args.tweetIdOrUrl.trim()
+            : tweet?.author_username
+            ? `https://x.com/${tweet.author_username}/status/${cleanId}`
+            : cleanId;
+          await pipeline.fetchTweetAndStore(fetchTarget);
           tweet = storage.getTweetById(cleanId);
         } catch (err: any) {
           process.stderr.write(`⚠️ 单篇推文在线同步未完全成功: ${err?.message || err}\n`);

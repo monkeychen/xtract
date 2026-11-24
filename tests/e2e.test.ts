@@ -71,6 +71,8 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
     expect(stdout).toContain('--min-likes');
     expect(stdout).toContain('--min-retweets');
     expect(stdout).toContain('--provider');
+    expect(stdout).toContain('--content-types');
+    expect(stdout).toContain('--download-videos');
   }, 15000);
 
   it('E2E: --list --json returns pure valid JSON array from SQLite', async () => {
@@ -92,6 +94,7 @@ describe('End-to-End (E2E) CLI & Pipeline Integration', () => {
     expect(parsed).toHaveProperty('tweet');
     expect(parsed.tweet.tweet_id).toBe('2100170356271255650');
     expect(parsed).toHaveProperty('exportedMarkdown');
+    expect(Array.isArray(parsed.downloadedVideos)).toBe(true);
     if (parsed.exportedMarkdown) {
       expect(fs.existsSync(parsed.exportedMarkdown)).toBe(true);
     }

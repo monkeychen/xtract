@@ -18,6 +18,7 @@ export interface ParsedArticleEntity {
   posterUrl?: string;
   tweetId?: string;
   tweetUrl?: string;
+  markdown?: string;
 }
 
 function isVideoMediaUrl(url?: string): boolean {
@@ -94,70 +95,93 @@ export function formatArticleContent(
     lines.push(`> **核心摘要 / 提要**:\n> ${articleResult.summary_text.replace(/\n/g, '\n> ')}\n`);
   }
 
-  // Cover image
-  if (articleResult.cover_media?.media_info?.original_img_url) {
-    const coverUrl = articleResult.cover_media.media_info.original_img_url;
+  // Cover image (supports both legacy cover_media and x-web cover_media_results)
+  const coverUrl =
+    articleResult.cover_media?.media_info?.original_img_url ||
+    articleResult.cover_media_results?.result?.media_info?.original_img_url;
+  if (coverUrl) {
     if (!mediaUrls.includes(coverUrl)) mediaUrls.push(coverUrl);
     lines.push(`![封面图](${coverUrl})\n`);
   }
 
-  // Media map for atomic image & native video blocks
+  // Media map for atomic image & native video blocks (supports media_entities & media_entities_results)
   const mediaMap: Record<
     string,
     { type: 'IMAGE' | 'VIDEO'; imageUrl?: string; videoUrl?: string; posterUrl?: string }
   > = {};
-  if (Array.isArray(articleResult.media_entities)) {
-    for (const m of articleResult.media_entities) {
-      const info = m.media_info || {};
-      const variants = info.variants || info.video_info?.variants || [];
-      const mp4s = Array.isArray(variants)
-        ? variants.filter((v: any) => v?.content_type === 'video/mp4' && v?.url)
-        : [];
-      if (m.media_id && mp4s.length > 0) {
-        mp4s.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-        const bestVideoUrl = mp4s[0].url;
-        const posterUrl = info.preview_image?.original_img_url || info.original_img_url || undefined;
-        mediaMap[m.media_id] = { type: 'VIDEO', videoUrl: bestVideoUrl, posterUrl };
-        if (posterUrl && !mediaUrls.includes(posterUrl)) mediaUrls.push(posterUrl);
-        if (!mediaUrls.includes(bestVideoUrl)) mediaUrls.push(bestVideoUrl);
-        continue;
-      }
+  const rawMediaEntities = Array.isArray(articleResult.media_entities)
+    ? articleResult.media_entities
+    : Array.isArray(articleResult.media_entities_results)
+      ? articleResult.media_entities_results
+      : [];
+  for (const rawItem of rawMediaEntities) {
+    const m = rawItem?.result || rawItem;
+    if (!m) continue;
+    const mediaId = m.media_id ? String(m.media_id) : '';
+    const info = m.media_info || {};
+    const variants = info.variants || info.video_info?.variants || [];
+    const mp4s = Array.isArray(variants)
+      ? variants.filter((v: any) => v?.content_type === 'video/mp4' && v?.url)
+      : [];
+    if (mediaId && mp4s.length > 0) {
+      mp4s.sort(
+        (a: any, b: any) =>
+          Number(b.bit_rate ?? b.bitrate ?? 0) - Number(a.bit_rate ?? a.bitrate ?? 0)
+      );
+      const bestVideoUrl = mp4s[0].url;
+      const posterUrl = info.preview_image?.original_img_url || info.original_img_url || undefined;
+      mediaMap[mediaId] = { type: 'VIDEO', videoUrl: bestVideoUrl, posterUrl };
+      if (posterUrl && !mediaUrls.includes(posterUrl)) mediaUrls.push(posterUrl);
+      if (!mediaUrls.includes(bestVideoUrl)) mediaUrls.push(bestVideoUrl);
+      continue;
+    }
 
-      const url = info.original_img_url;
-      if (m.media_id && url) {
-        mediaMap[m.media_id] = { type: 'IMAGE', imageUrl: url };
-        if (!mediaUrls.includes(url)) mediaUrls.push(url);
-      }
+    const url = info.original_img_url;
+    if (mediaId && url) {
+      mediaMap[mediaId] = { type: 'IMAGE', imageUrl: url };
+      if (!mediaUrls.includes(url)) mediaUrls.push(url);
     }
   }
 
-  // Parse all Draft.js entities: IMAGE, VIDEO, DIVIDER, TWEET, etc.
+  // Parse all Draft.js entities: IMAGE, VIDEO, DIVIDER, MARKDOWN, TWEET, etc.
+  // Supports both camelCase (entityMap / mediaItems / mediaId / tweetId) and x-web SSR snake_case (entity_map / media_items / media_id / tweet_id)
   const entityMap: Record<string, ParsedArticleEntity> = {};
-  if (Array.isArray(articleResult.content_state?.entityMap)) {
-    for (const item of articleResult.content_state.entityMap) {
-      const entType = item.value?.type;
-      const data = item.value?.data || {};
+  const rawEntityMap =
+    articleResult.content_state?.entityMap ?? articleResult.content_state?.entity_map;
+  const entityEntries: Array<{ key: string; value: any }> = Array.isArray(rawEntityMap)
+    ? rawEntityMap.map((item: any) => ({ key: String(item.key), value: item.value }))
+    : rawEntityMap && typeof rawEntityMap === 'object'
+      ? Object.entries(rawEntityMap).map(([key, value]) => ({ key: String(key), value }))
+      : [];
 
-      if (entType === 'DIVIDER') {
-        entityMap[item.key] = { type: 'DIVIDER' };
-      } else if (entType === 'TWEET') {
-        const tweetId = data.tweetId ? String(data.tweetId) : '';
-        const tweetUrl = data.url || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
-        entityMap[item.key] = { type: 'TWEET', tweetId, tweetUrl };
-      } else {
-        const mediaId = data.mediaItems?.[0]?.mediaId;
-        const mapped = mediaId ? mediaMap[mediaId] : undefined;
-        if (mapped?.type === 'VIDEO' && mapped.videoUrl) {
-          entityMap[item.key] = {
-            type: 'VIDEO',
-            videoUrl: mapped.videoUrl,
-            posterUrl: mapped.posterUrl,
-          };
-        } else if (mapped?.type === 'IMAGE' && mapped.imageUrl) {
-          entityMap[item.key] = { type: 'IMAGE', imageUrl: mapped.imageUrl };
-        } else if (entType) {
-          entityMap[item.key] = { type: entType };
-        }
+  for (const item of entityEntries) {
+    const entType = item.value?.type;
+    const data = item.value?.data || {};
+
+    if (entType === 'DIVIDER') {
+      entityMap[item.key] = { type: 'DIVIDER' };
+    } else if (entType === 'MARKDOWN' && typeof data.markdown === 'string' && data.markdown.trim()) {
+      entityMap[item.key] = { type: 'MARKDOWN', markdown: data.markdown };
+    } else if (entType === 'TWEET') {
+      const rawTweetId = data.tweetId ?? data.tweet_id;
+      const tweetId = rawTweetId ? String(rawTweetId) : '';
+      const tweetUrl = data.url || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
+      entityMap[item.key] = { type: 'TWEET', tweetId, tweetUrl };
+    } else {
+      const mediaItems = data.mediaItems || data.media_items;
+      const rawMediaId = mediaItems?.[0]?.mediaId ?? mediaItems?.[0]?.media_id;
+      const mediaId = rawMediaId ? String(rawMediaId) : '';
+      const mapped = mediaId ? mediaMap[mediaId] : undefined;
+      if (mapped?.type === 'VIDEO' && mapped.videoUrl) {
+        entityMap[item.key] = {
+          type: 'VIDEO',
+          videoUrl: mapped.videoUrl,
+          posterUrl: mapped.posterUrl,
+        };
+      } else if (mapped?.type === 'IMAGE' && mapped.imageUrl) {
+        entityMap[item.key] = { type: 'IMAGE', imageUrl: mapped.imageUrl };
+      } else if (entType) {
+        entityMap[item.key] = { type: entType };
       }
     }
   }
@@ -190,20 +214,27 @@ export function formatArticleContent(
       } else if (t === 'ordered-list-item') {
         lines.push(`1. ${text}`);
       } else if (t === 'atomic') {
-        for (const er of b.entityRanges || []) {
+        for (const er of b.entityRanges || b.entity_ranges || []) {
           const ent = entityMap[String(er.key)];
           if (!ent) continue;
 
           if (ent.type === 'DIVIDER') {
             lines.push('\n---\n');
+          } else if (ent.type === 'MARKDOWN' && ent.markdown) {
+            lines.push(`${ent.markdown.trimEnd()}\n`);
           } else if (ent.type === 'VIDEO' && ent.videoUrl) {
             lines.push(`${formatVideoMarkdownLine(ent.videoUrl, ent.posterUrl)}\n`);
           } else if (ent.imageUrl) {
             lines.push(`![](${ent.imageUrl})\n`);
           } else if (ent.type === 'TWEET') {
             const tweetId = ent.tweetId || '';
-            const tweetUrl = ent.tweetUrl || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
             const tweetInfo = tweetId ? getEmbeddedTweet(tweetId) : undefined;
+            const resolvedTweetUrl =
+              ent.tweetUrl && !ent.tweetUrl.includes('/i/status/')
+                ? ent.tweetUrl
+                : tweetInfo?.author_username && tweetId
+                  ? `https://x.com/${tweetInfo.author_username}/status/${tweetId}`
+                  : ent.tweetUrl || (tweetId ? `https://x.com/i/status/${tweetId}` : '');
 
             if (tweetInfo) {
               const headerParts: string[] = [];
@@ -233,13 +264,13 @@ export function formatArticleContent(
                   }
                 }
               }
-              if (tweetUrl) {
+              if (resolvedTweetUrl) {
                 cardLines.push('>');
-                cardLines.push(`> 🔗 [原文链接](${tweetUrl})`);
+                cardLines.push(`> 🔗 [原文链接](${resolvedTweetUrl})`);
               }
               lines.push(cardLines.join('\n') + '\n');
-            } else if (tweetUrl) {
-              lines.push(`> 🔗 **引用推文**: [${tweetUrl}](${tweetUrl})\n`);
+            } else if (resolvedTweetUrl) {
+              lines.push(`> 🔗 **引用推文**: [${resolvedTweetUrl}](${resolvedTweetUrl})\n`);
             }
           }
         }
@@ -336,8 +367,16 @@ export function parseTweetResult(
     tweetResult = tweetResult.tweet || {};
   }
 
-  const legacy = tweetResult.legacy;
-  if (!legacy) return null;
+  const legacy = tweetResult.legacy || {};
+  const details = tweetResult.details || {};
+  const counts = tweetResult.counts || {};
+  const hasCorePayload = Boolean(
+    tweetResult.legacy ||
+      tweetResult.details ||
+      tweetResult.article?.article_results?.result ||
+      tweetResult.note_tweet?.note_tweet_results?.result
+  );
+  if (!hasCorePayload) return null;
 
   // Author info (supports user_results.result.core and legacy schema)
   const userResults = tweetResult.core?.user_results?.result || {};
@@ -365,17 +404,19 @@ export function parseTweetResult(
 
   if (!fullText) {
     const noteTweet = tweetResult.note_tweet?.note_tweet_results?.result || {};
-    fullText = noteTweet.text || legacy.full_text || '';
+    fullText = noteTweet.text || legacy.full_text || details.full_text || '';
   }
 
   // Collect primary URL entities & Media entities for rich markdown conversion
   const primaryUrlEntities: UrlEntity[] = [
     ...(legacy.entities?.urls || []),
+    ...(tweetResult.url_entities || []),
     ...(tweetResult.note_tweet?.note_tweet_results?.result?.entity_set?.urls || []),
   ];
   const primaryMediaEntities: Array<{ url?: string; media_url_https?: string; type?: string; video_info?: any }> = [
     ...(legacy.extended_entities?.media || []),
     ...(legacy.entities?.media || []),
+    ...(Array.isArray(tweetResult.media_entities2) ? tweetResult.media_entities2 : []),
   ];
 
   // Retweet info
@@ -478,7 +519,10 @@ export function parseTweetResult(
         const variants = m.video_info?.variants || [];
         const mp4s = variants.filter((v: any) => v.content_type === 'video/mp4');
         if (mp4s.length > 0) {
-          mp4s.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+          mp4s.sort(
+            (a: any, b: any) =>
+              Number(b.bit_rate ?? b.bitrate ?? 0) - Number(a.bit_rate ?? a.bitrate ?? 0)
+          );
           const bestUrl = mp4s[0].url;
           if (bestUrl) {
             if (!videoUrl) videoUrl = bestUrl;
@@ -511,22 +555,28 @@ export function parseTweetResult(
       /\.\.\.\s*https:\/\/t\.co\/\S+$/i.test(fullText)
   );
 
+  const rawCreatedAt =
+    legacy.created_at ||
+    (details.created_at_ms !== undefined && details.created_at_ms !== null
+      ? new Date(Number(details.created_at_ms)).toISOString()
+      : undefined);
+
   return {
-    tweet_id: String(tweetResult.rest_id || ''),
+    tweet_id: String(tweetResult.rest_id || legacy.id_str || ''),
     author_id: String(authorId),
     author_name: authorName,
     author_username: authorUsername,
     text: fullText,
-    created_at: normalizeTweetDate(legacy.created_at),
+    created_at: normalizeTweetDate(rawCreatedAt),
     is_retweet: isRetweet,
     retweeted_author: retweetedAuthor,
     retweeted_text: retweetedText,
     is_quote: isQuote,
     quoted_author: quotedAuthor,
     quoted_text: quotedText,
-    like_count: Number(legacy.favorite_count || 0),
-    retweet_count: Number(legacy.retweet_count || 0),
-    reply_count: Number(legacy.reply_count || 0),
+    like_count: Number(legacy.favorite_count ?? counts.favorite_count ?? 0),
+    retweet_count: Number(legacy.retweet_count ?? counts.retweet_count ?? 0),
+    reply_count: Number(legacy.reply_count ?? counts.reply_count ?? 0),
     view_count: Number(tweetResult.views?.count || 0),
     urls,
     media_urls: mediaUrls,
@@ -535,6 +585,145 @@ export function parseTweetResult(
     is_note_tweet: isNoteTweet,
     is_article: isArticle,
   };
+}
+
+/**
+ * 合并同一推文的多段 SSR / GraphQL 局部载荷（例如 x-web TanStack Router SSR 会将
+ * 元数据 counts/details 与完整文章 content_state 拆在两个 Result.Ok 块中下发）。
+ */
+export function mergeRawTweetPayload(existing: any, incoming: any, fallbackRestId?: string): any {
+  const unwrap = (raw: any) =>
+    raw?.__typename === 'TweetWithVisibilityResults' ? raw.tweet || {} : raw || {};
+  const a = unwrap(existing);
+  const b = unwrap(incoming);
+
+  const mergedRestId = String(b.rest_id || a.rest_id || fallbackRestId || '');
+
+  const aArt = a.article?.article_results?.result;
+  const bArt = b.article?.article_results?.result;
+  let mergedArticle = b.article || a.article;
+  if (aArt || bArt) {
+    const aBlocks = Array.isArray(aArt?.content_state?.blocks) ? aArt.content_state.blocks.length : 0;
+    const bBlocks = Array.isArray(bArt?.content_state?.blocks) ? bArt.content_state.blocks.length : 0;
+    const primaryArt = bBlocks >= aBlocks ? bArt : aArt;
+    const secondaryArt = bBlocks >= aBlocks ? aArt : bArt;
+    mergedArticle = {
+      ...(secondaryArt ? a.article || b.article : {}),
+      ...(bBlocks >= aBlocks ? b.article : a.article),
+      article_results: {
+        ...(bBlocks >= aBlocks ? b.article?.article_results : a.article?.article_results),
+        result: {
+          ...(secondaryArt || {}),
+          ...(primaryArt || {}),
+          cover_media: primaryArt?.cover_media || secondaryArt?.cover_media,
+          cover_media_results: primaryArt?.cover_media_results || secondaryArt?.cover_media_results,
+          media_entities:
+            Array.isArray(primaryArt?.media_entities) && primaryArt.media_entities.length > 0
+              ? primaryArt.media_entities
+              : secondaryArt?.media_entities,
+          media_entities_results:
+            Array.isArray(primaryArt?.media_entities_results) && primaryArt.media_entities_results.length > 0
+              ? primaryArt.media_entities_results
+              : secondaryArt?.media_entities_results,
+        },
+      },
+    };
+  }
+
+  const aUser = a.core?.user_results?.result;
+  const bUser = b.core?.user_results?.result;
+  const mergedCore =
+    aUser || bUser
+      ? {
+          ...(a.core || {}),
+          ...(b.core || {}),
+          user_results: {
+            ...(a.core?.user_results || {}),
+            ...(b.core?.user_results || {}),
+            result: {
+              ...(aUser || {}),
+              ...(bUser || {}),
+              core: { ...(aUser?.core || {}), ...(bUser?.core || {}) },
+              legacy: { ...(aUser?.legacy || {}), ...(bUser?.legacy || {}) },
+            },
+          },
+        }
+      : b.core || a.core;
+
+  return {
+    ...a,
+    ...b,
+    rest_id: mergedRestId || undefined,
+    core: mergedCore,
+    counts: a.counts || b.counts ? { ...(a.counts || {}), ...(b.counts || {}) } : undefined,
+    details: a.details || b.details ? { ...(a.details || {}), ...(b.details || {}) } : undefined,
+    legacy:
+      a.legacy || b.legacy
+        ? {
+            ...(a.legacy || {}),
+            ...(b.legacy || {}),
+            entities: { ...(a.legacy?.entities || {}), ...(b.legacy?.entities || {}) },
+            extended_entities: b.legacy?.extended_entities || a.legacy?.extended_entities,
+          }
+        : undefined,
+    views: b.views?.count ? b.views : a.views || b.views,
+    media_entities2:
+      Array.isArray(b.media_entities2) && b.media_entities2.length > 0
+        ? b.media_entities2
+        : a.media_entities2 || b.media_entities2,
+    url_entities:
+      Array.isArray(b.url_entities) && b.url_entities.length > 0
+        ? b.url_entities
+        : a.url_entities || b.url_entities,
+    note_tweet: b.note_tweet || a.note_tweet,
+    quoted_status_result: b.quoted_status_result || a.quoted_status_result,
+    article: mergedArticle,
+  };
+}
+
+/**
+ * 从 X 新版前端 `x-web`（TanStack Router SSR）HTML 中提取所有内联 `Result.Ok` 推文/专栏原始载荷，
+ * 并按 rest_id 合并分片结果（如元数据分片 + 完整文章 content_state 分片 + 内嵌推文分片）。
+ */
+export function extractSsrTweetPayloadsFromHtml(html: string): Map<string, any> {
+  const mergedById = new Map<string, any>();
+  if (!html || !html.includes('Result.Ok')) return mergedById;
+
+  const regex = /kind:"Result\.Ok",value:"((?:[^"\\]|\\.)*)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    try {
+      // JS 字符串字面量转合法 JSON 字符串：\xHH -> \u00HH，\' -> '
+      const normalizedLiteral = match[1]
+        .replace(/\\x([0-9a-fA-F]{2})/g, '\\u00$1')
+        .replace(/\\'/g, "'");
+      const decodedJsonText = JSON.parse(`"${normalizedLiteral}"`);
+      const payload = JSON.parse(decodedJsonText);
+      const data = payload?.data;
+      if (!data || typeof data !== 'object') continue;
+
+      const candidates = [data.tweet_result_by_rest_id, data.tweetResult];
+      for (const wrapper of candidates) {
+        if (!wrapper) continue;
+        const list = Array.isArray(wrapper) ? wrapper : [wrapper];
+        for (const item of list) {
+          const rawResult = item?.result;
+          if (!rawResult || typeof rawResult !== 'object') continue;
+          const inner =
+            rawResult.__typename === 'TweetWithVisibilityResults' ? rawResult.tweet : rawResult;
+          const restId = String(inner?.rest_id || item?.rest_id || '').trim();
+          if (!restId) continue;
+
+          const existing = mergedById.get(restId);
+          mergedById.set(restId, existing ? mergeRawTweetPayload(existing, rawResult, restId) : mergeRawTweetPayload(null, rawResult, restId));
+        }
+      }
+    } catch {
+      // 跳过非 JSON 或无法解析的 SSR 分片
+    }
+  }
+
+  return mergedById;
 }
 
 /**

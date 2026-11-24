@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { resolveUserArgs, isCliMode, resolveVersion, resolveCliContentTypes } from '../src/main/cli/argv.js';
+import {
+  resolveUserArgs,
+  isCliMode,
+  resolveVersion,
+  resolveCliContentTypes,
+  resolveCliDownloadVideos,
+} from '../src/main/cli/argv.js';
 
 /**
  * CLI / GUI 模式判定
@@ -128,5 +134,20 @@ describe('UT-8: resolveCliContentTypes (--content-types 与 --all-tweets)', () =
     expect(resolveCliContentTypes({ contentTypes: 'article', allTweets: true })).toEqual([
       'article',
     ]);
+  });
+});
+
+describe('UT-8 (M2): resolveCliDownloadVideos (--download-videos / --no-download-videos)', () => {
+  it('未传 CLI 参数时遵循 configDefault（默认 false）', () => {
+    expect(resolveCliDownloadVideos({ configDefault: false })).toBe(false);
+    expect(resolveCliDownloadVideos({ configDefault: true })).toBe(true);
+  });
+
+  it('显式 --download-videos 覆盖 configDefault=false', () => {
+    expect(resolveCliDownloadVideos({ downloadVideos: true, configDefault: false })).toBe(true);
+  });
+
+  it('显式 --no-download-videos 覆盖 configDefault=true', () => {
+    expect(resolveCliDownloadVideos({ downloadVideos: false, configDefault: true })).toBe(false);
   });
 });

@@ -100,7 +100,8 @@ export async function downloadVideoStream(
   options: DownloadVideoStreamOptions
 ): Promise<VideoDownloadResult> {
   const { url, destPath, signal, onProgress } = options;
-  const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
+  // 空闲卡顿超时（默认 60 秒无新字节到达才判定超时），避免 4K 长视频持续高速下载时被固定总时长误杀
+  const stallTimeoutMs = options.timeoutMs ?? 60 * 1000;
 
   // 1. 幂等跳过：已完整落盘则直接返回
   try {
@@ -145,15 +146,21 @@ export async function downloadVideoStream(
     signal.addEventListener('abort', onExternalAbort, { once: true });
   }
 
-  const timer = setTimeout(() => {
-    timedOut = true;
-    internalController.abort();
-  }, timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const resetStallTimer = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timedOut = true;
+      internalController.abort();
+    }, stallTimeoutMs);
+  };
+  resetStallTimer();
 
   let ws: fs.WriteStream | null = null;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   try {
+    const { fetch: undiciFetch, ProxyAgent } = await import('undici');
     const fetchOptions: Record<string, unknown> = {
       headers: {
         Referer: 'https://x.com/',
@@ -164,11 +171,13 @@ export async function downloadVideoStream(
 
     const effectiveProxy = options.proxyUrl !== undefined ? options.proxyUrl : Config.HTTP_PROXY;
     if (effectiveProxy && !isLoopbackUrl(url)) {
-      const { ProxyAgent } = await import('undici');
+      // 必须使用同源 undici.fetch + undici.ProxyAgent：Node 24 全局 fetch 内置旧版 undici，
+      // 传入 undici v8 的 ProxyAgent 会抛 "invalid onRequestStart method"
       fetchOptions.dispatcher = new ProxyAgent(effectiveProxy);
     }
 
-    const res = await fetch(url, fetchOptions as RequestInit);
+    const res = await undiciFetch(url, fetchOptions as any);
+    resetStallTimer();
 
     if (!res.ok) {
       return {
@@ -197,6 +206,7 @@ export async function downloadVideoStream(
       const { done, value } = await reader.read();
       if (done) break;
       if (value && value.byteLength > 0) {
+        resetStallTimer();
         downloadedBytes += value.byteLength;
         const canContinue = ws.write(value);
         if (!canContinue) {
@@ -276,7 +286,7 @@ export async function downloadVideoStream(
       error: `视频下载失败：${rawMsg}（请检查本地网络代理设置）`,
     };
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     if (signal) {
       signal.removeEventListener('abort', onExternalAbort);
     }
