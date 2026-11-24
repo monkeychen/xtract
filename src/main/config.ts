@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import dotenv from 'dotenv';
-import type { XListInfo } from './types.js';
+import type { XListInfo, TweetContentType } from './types.js';
+import { parseContentTypes } from './client/parser.js';
 
 import { fileURLToPath } from 'node:url';
 
@@ -360,9 +361,13 @@ export class Config {
   static get FETCH_TIMEOUT(): number {
     return parseInt(process.env.FETCH_TIMEOUT || '60', 10);
   }
-  // Crawl Filter Settings (默认仅抓取长推文 Note Tweet 与专栏文章 X Article)
+  // Crawl Content Types (细粒度内容类型多选配置，默认仅抓取专栏文章 X Article)
+  static get FETCH_CONTENT_TYPES(): TweetContentType[] {
+    return parseContentTypes(process.env.FETCH_CONTENT_TYPES);
+  }
+  // @deprecated 由 FETCH_CONTENT_TYPES 派生保留兼容
   static get FETCH_ONLY_LONG_TWEETS(): boolean {
-    return (process.env.FETCH_ONLY_LONG_TWEETS || 'true').toLowerCase().trim() !== 'false';
+    return !this.FETCH_CONTENT_TYPES.includes('short');
   }
   // Single Tweet Author Replies Filter (单篇推文抓取时是否抓取作者追评/追加回复，默认关闭)
   static get FETCH_AUTHOR_REPLIES(): boolean {

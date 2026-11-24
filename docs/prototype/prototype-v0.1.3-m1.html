@@ -1,0 +1,647 @@
+<!-- doc: prototype | product: v0.1.3 | milestone: m1 | status: approved -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xtract v0.1.3 M1 原型 — 拉取内容类型可配置</title>
+  <style>
+    :root {
+      --paper: #faf7f0;
+      --paper-raised: #fffdf8;
+      --paper-sunken: #f3ede1;
+      --ink: #211c15;
+      --ink-soft: #6c6354;
+      --ink-faint: #a59c89;
+      --cinnabar: #b5462f;
+      --cinnabar-soft: #c9603f;
+      --cinnabar-wash: #f6e7df;
+      --jade: #3f6b51;
+      --jade-wash: #e6efe7;
+      --amber: #9a6b1e;
+      --amber-wash: #f3e9d4;
+      --line: rgba(33, 28, 21, 0.10);
+      --line-strong: rgba(33, 28, 21, 0.18);
+      --shadow-soft: 0 1px 2px rgba(33, 28, 21, 0.04), 0 8px 24px rgba(33, 28, 21, 0.06);
+      --shadow-drawer: -6px 0 32px rgba(33, 28, 21, 0.14);
+      --font-serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+      --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 左侧预览说明画布（模拟被遮罩的主工作台背景 + 状态切换器） */
+    .stage-bg {
+      flex: 1;
+      padding: 36px 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(181, 70, 47, 0.05), transparent 50%),
+        var(--paper);
+    }
+
+    .stage-header h1 {
+      font-family: var(--font-serif);
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--cinnabar);
+      margin-bottom: 8px;
+    }
+
+    .stage-subtitle {
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      max-width: 480px;
+    }
+
+    .demo-controls {
+      margin-top: 28px;
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 20px;
+      max-width: 460px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .demo-controls h3 {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      margin-bottom: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .preset-btn {
+      font-size: 12px;
+      padding: 5px 11px;
+      border-radius: 6px;
+      border: 1px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+    .preset-btn:hover {
+      border-color: var(--cinnabar);
+      color: var(--cinnabar);
+      background: var(--cinnabar-wash);
+    }
+
+    .live-payload {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      background: var(--paper-sunken);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--ink-soft);
+      white-space: pre-wrap;
+    }
+
+    /* 抽屉面板（像素级复刻 Xtract SettingsDrawer） */
+    .drawer-panel {
+      width: 440px;
+      max-width: 100vw;
+      height: 100vh;
+      background: var(--paper-raised);
+      border-left: 1px solid var(--line-strong);
+      box-shadow: var(--shadow-drawer);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .drawer-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--paper);
+    }
+
+    .serif-title {
+      font-family: var(--font-serif);
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .version-pill {
+      font-size: 11px;
+      color: var(--ink-soft);
+      font-family: var(--font-mono);
+      background: var(--paper-raised);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+    }
+
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-family: var(--font-serif);
+      font-size: 15px;
+      margin: 0 0 10px 0;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .surface {
+      background: var(--paper-sunken);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .surface-muted {
+      opacity: 0.58;
+    }
+
+    .row-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .item-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* InfoTip 复刻 */
+    .info-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 1px solid var(--line-strong);
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 700;
+      font-family: var(--font-serif);
+      cursor: help;
+      background: var(--paper-raised);
+      flex-shrink: 0;
+    }
+
+    .info-tip:hover .info-popover,
+    .info-tip:focus-within .info-popover {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .info-popover {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%) translateY(4px);
+      width: 260px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--paper);
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 400;
+      line-height: 1.5;
+      box-shadow: 0 6px 20px rgba(33, 28, 21, 0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.14s ease;
+      z-index: 40;
+      text-align: left;
+    }
+
+    /* 多选内容类型芯片 */
+    .chip-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .fmt-chip {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--paper-raised);
+      border: 1px solid var(--line-strong);
+      color: var(--ink-soft);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.14s ease;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .fmt-chip:hover {
+      border-color: var(--cinnabar-soft);
+      color: var(--ink);
+    }
+
+    .fmt-chip.active {
+      background: var(--cinnabar-wash);
+      border-color: var(--cinnabar);
+      color: var(--cinnabar);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(181, 70, 47, 0.12);
+    }
+
+    .chip-check {
+      font-size: 11px;
+      display: inline-block;
+      width: 11px;
+      text-align: center;
+    }
+
+    /* 防呆内联提示 */
+    .guard-hint {
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--amber-wash);
+      color: var(--amber);
+      font-size: 11.5px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .guard-hint.visible {
+      display: flex;
+      animation: fadeSlide 0.18s ease;
+    }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(-2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Switch 复刻 */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(33, 28, 21, 0.18);
+      border-radius: 999px;
+      transition: 0.2s;
+      cursor: pointer;
+    }
+    .slider::before {
+      content: "";
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.2s;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    }
+    .switch input:checked + .slider { background: var(--cinnabar); }
+    .switch input:checked + .slider::before { transform: translateX(16px); }
+
+    /* Footer */
+    .drawer-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--paper);
+    }
+
+    .secondary-button {
+      background: var(--paper-raised);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line-strong);
+      cursor: pointer;
+    }
+    .secondary-button:hover {
+      border-color: var(--cinnabar-soft);
+      color: var(--cinnabar);
+      background: var(--cinnabar-wash);
+    }
+
+    .cta-button {
+      background: var(--cinnabar);
+      color: #fff;
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 7px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(181, 70, 47, 0.22);
+    }
+    .cta-button:hover { background: var(--cinnabar-soft); }
+
+    .badge-ok {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--jade-wash);
+      color: var(--jade);
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 44px;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      box-shadow: 0 4px 16px rgba(33, 28, 21, 0.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+
+  <div class="stage-bg">
+    <div class="stage-header">
+      <div class="eyebrow">XTRACT V0.1.3 · MILESTONE 1 PROTOTYPE</div>
+      <h1>设置抽屉：拉取内容类型可配置</h1>
+      <p class="stage-subtitle">
+        右侧为「设置抽屉」高保真交互预览。默认仅勾选 <strong>专栏文章</strong>，支持自由多选与「至少保留 1 项」防呆拦截，说明文案收敛至 <strong>i</strong> 图标浮层。
+      </p>
+
+      <div class="demo-controls">
+        <h3>交互状态快速切换</h3>
+        <div class="preset-row">
+          <button class="preset-btn" onclick="applyPreset(['article'])">默认：仅文章</button>
+          <button class="preset-btn" onclick="applyPreset(['article', 'note'])">文章 + 长推</button>
+          <button class="preset-btn" onclick="applyPreset(['article', 'note', 'short'])">全部类型</button>
+          <button class="preset-btn" onclick="triggerGuardDemo()">演示防呆拦截</button>
+        </div>
+        <div id="live-payload" class="live-payload"></div>
+      </div>
+    </div>
+
+    <div style="font-size: 12px; color: var(--ink-faint);">
+      对照文档：docs/spec/spec-v0.1.3-m1.md · 覆盖 F5 / AC5.2
+    </div>
+  </div>
+
+  <aside class="drawer-panel" id="settings-drawer">
+    <div class="drawer-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <h2 class="serif-title" style="font-size: 18px;">设置</h2>
+        <span class="version-pill">v0.1.3</span>
+      </div>
+      <button class="secondary-button" style="padding: 4px 8px;">✕</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- 简略上下文占位：上方区块 -->
+      <div class="section surface-muted">
+        <h3 class="section-title">X 账号 / 模型服务</h3>
+        <div class="surface" style="background: var(--paper);">
+          <div class="row-between">
+            <span style="font-size: 12.5px; color: var(--ink-soft);">当前账号会话与模型配置（沿用现有设计）</span>
+            <span class="badge-ok">已连接</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 本里程碑核心焦点：抓取过滤规则 -->
+      <div class="section">
+        <h3 class="section-title">抓取过滤规则</h3>
+
+        <div class="surface">
+          <div class="row-between">
+            <div class="item-label">
+              <span>拉取内容类型</span>
+              <span class="info-tip" tabindex="0" aria-label="拉取内容类型说明">
+                i
+                <span class="info-popover">
+                  控制关注流、博主追踪、列表与关键词搜索批量拉取的推文形态（默认仅拉取 X Article 专栏文章）。单推链接精准同步与趋势研报热点挖掘不受此过滤限制。
+                </span>
+              </span>
+            </div>
+            <span id="selected-summary" style="font-size: 11.5px; color: var(--ink-faint);">已选 1 项</span>
+          </div>
+
+          <div class="chip-group" role="group" aria-label="拉取内容类型多选">
+            <button
+              type="button"
+              id="content-type-article"
+              class="fmt-chip active"
+              aria-pressed="true"
+              onclick="toggleType('article')"
+            >
+              <span class="chip-check" id="check-article">✓</span>
+              <span>专栏文章</span>
+            </button>
+            <button
+              type="button"
+              id="content-type-note"
+              class="fmt-chip"
+              aria-pressed="false"
+              onclick="toggleType('note')"
+            >
+              <span class="chip-check" id="check-note"></span>
+              <span>长推文</span>
+            </button>
+            <button
+              type="button"
+              id="content-type-short"
+              class="fmt-chip"
+              aria-pressed="false"
+              onclick="toggleType('short')"
+            >
+              <span class="chip-check" id="check-short"></span>
+              <span>普通短推文</span>
+            </button>
+          </div>
+
+          <div id="content-type-guard-msg" class="guard-hint" role="alert">
+            <span>⚠️</span>
+            <span>至少保留一种拉取类型</span>
+          </div>
+        </div>
+
+        <div class="surface">
+          <div class="row-between">
+            <div class="item-label">
+              <span>抓取作者追评与追加回复</span>
+              <span class="info-tip" tabindex="0" aria-label="追评抓取说明">
+                i
+                <span class="info-popover">
+                  单篇推文抓取时，是否一并拉取作者本人在下方追加的连续回复 / 长串推文（默认关闭，仅保留主推文本体）。
+                </span>
+              </span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="fetch-author-replies-toggle" onchange="renderPayload()" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 简略上下文占位：下方区块 -->
+      <div class="section surface-muted">
+        <h3 class="section-title">数据存储位置 / 网络代理</h3>
+        <div class="surface" style="background: var(--paper); font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft);">
+          ~/Documents/Xtract · http://127.0.0.1:8118
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <span style="font-size: 12px; color: var(--ink-soft); font-family: var(--font-mono);">Xtract v0.1.3</span>
+      <div style="display: flex; gap: 10px;">
+        <button class="secondary-button" onclick="applyPreset(['article'])">取消</button>
+        <button class="cta-button" onclick="saveDemo()">保存</button>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    const ORDER = ['article', 'note', 'short'];
+    let selected = new Set(['article']);
+    let guardTimer = null;
+
+    function syncUI() {
+      for (const t of ORDER) {
+        const btn = document.getElementById('content-type-' + t);
+        const chk = document.getElementById('check-' + t);
+        const active = selected.has(t);
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', String(active));
+        chk.textContent = active ? '✓' : '';
+      }
+      document.getElementById('selected-summary').textContent = `已选 ${selected.size} 项`;
+      renderPayload();
+    }
+
+    function showGuardHint() {
+      const el = document.getElementById('content-type-guard-msg');
+      el.classList.add('visible');
+      if (guardTimer) clearTimeout(guardTimer);
+      guardTimer = setTimeout(() => el.classList.remove('visible'), 2500);
+    }
+
+    function toggleType(type) {
+      if (selected.has(type)) {
+        if (selected.size === 1) {
+          showGuardHint();
+          return;
+        }
+        selected.delete(type);
+      } else {
+        selected.add(type);
+      }
+      document.getElementById('content-type-guard-msg').classList.remove('visible');
+      syncUI();
+    }
+
+    function applyPreset(list) {
+      selected = new Set(list);
+      document.getElementById('content-type-guard-msg').classList.remove('visible');
+      syncUI();
+    }
+
+    function triggerGuardDemo() {
+      applyPreset(['article']);
+      toggleType('article');
+    }
+
+    function renderPayload() {
+      const ordered = ORDER.filter((t) => selected.has(t));
+      const replies = document.getElementById('fetch-author-replies-toggle').checked;
+      document.getElementById('live-payload').textContent =
+        `// 保存时提交至 IPC config:update & config.env\n` +
+        `FETCH_CONTENT_TYPES=${ordered.join(',')}\n` +
+        `FETCH_AUTHOR_REPLIES=${replies}\n` +
+        `// 派生兼容值\n` +
+        `onlyLongTweets=${!selected.has('short')}`;
+    }
+
+    function saveDemo() {
+      const ordered = ORDER.filter((t) => selected.has(t));
+      const toast = document.getElementById('toast');
+      toast.textContent = `✓ 已保存配置：FETCH_CONTENT_TYPES=${ordered.join(',')}`;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    syncUI();
+  </script>
+</body>
+</html>

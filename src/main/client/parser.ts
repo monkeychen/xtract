@@ -1,4 +1,11 @@
-import type { Tweet, TrendTopic, XListInfo } from '../types.js';
+import {
+  ALL_TWEET_CONTENT_TYPES,
+  DEFAULT_TWEET_CONTENT_TYPES,
+  type Tweet,
+  type TweetContentType,
+  type TrendTopic,
+  type XListInfo,
+} from '../types.js';
 
 /**
  * Formats rich X Article content (Draft.js blocks & entities) into Markdown text with images.
@@ -713,6 +720,87 @@ export function isNoteTweet(tweet: Partial<Tweet>): boolean {
  */
 export function isLongContentTweet(tweet: Partial<Tweet>): boolean {
   return isArticleTweet(tweet) || isNoteTweet(tweet);
+}
+
+/**
+ * Classifies a tweet into one mutually exclusive content type with priority: article > note > short.
+ */
+export function classifyTweetContentType(tweet: Partial<Tweet>): TweetContentType {
+  if (isArticleTweet(tweet)) return 'article';
+  if (isNoteTweet(tweet)) return 'note';
+  return 'short';
+}
+
+/**
+ * Checks whether a tweet matches any of the allowed content types.
+ */
+export function matchesContentTypes(
+  tweet: Partial<Tweet>,
+  allowedTypes: readonly TweetContentType[]
+): boolean {
+  if (!allowedTypes || allowedTypes.length === 0) return false;
+  if (
+    allowedTypes.includes('article') &&
+    allowedTypes.includes('note') &&
+    allowedTypes.includes('short')
+  ) {
+    return true;
+  }
+  return allowedTypes.includes(classifyTweetContentType(tweet));
+}
+
+/**
+ * Parses and normalizes content type configuration from a comma-separated string or string array.
+ * - Lenient mode (default): drops invalid entries, deduplicates in canonical order (article, note, short),
+ *   and falls back to ['article'] if nothing valid remains.
+ * - Strict mode (CLI): throws an explicit error on empty input or unknown content type tokens.
+ */
+export function parseContentTypes(
+  raw: string | readonly string[] | undefined,
+  options?: { strict?: boolean }
+): TweetContentType[] {
+  const strict = Boolean(options?.strict);
+  const tokens = (
+    Array.isArray(raw)
+      ? raw.flatMap((item) => String(item).split(','))
+      : typeof raw === 'string'
+      ? raw.split(',')
+      : []
+  )
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (tokens.length === 0) {
+    if (strict) {
+      throw new Error(
+        `内容类型不能为空，请从以下合法类型中选择（逗号分隔）：${ALL_TWEET_CONTENT_TYPES.join(', ')}`
+      );
+    }
+    return [...DEFAULT_TWEET_CONTENT_TYPES];
+  }
+
+  const validSet = new Set<TweetContentType>();
+  const invalidTokens: string[] = [];
+
+  for (const token of tokens) {
+    if ((ALL_TWEET_CONTENT_TYPES as readonly string[]).includes(token)) {
+      validSet.add(token as TweetContentType);
+    } else {
+      invalidTokens.push(token);
+    }
+  }
+
+  if (strict && invalidTokens.length > 0) {
+    throw new Error(
+      `无效的内容类型 '${invalidTokens.join(', ')}'。合法类型仅支持：${ALL_TWEET_CONTENT_TYPES.join(', ')}`
+    );
+  }
+
+  if (validSet.size === 0) {
+    return [...DEFAULT_TWEET_CONTENT_TYPES];
+  }
+
+  return ALL_TWEET_CONTENT_TYPES.filter((t) => validSet.has(t));
 }
 
 /**

@@ -1,3 +1,8 @@
+export type TweetContentType = 'article' | 'note' | 'short';
+
+export const ALL_TWEET_CONTENT_TYPES: readonly TweetContentType[] = ['article', 'note', 'short'];
+export const DEFAULT_TWEET_CONTENT_TYPES: readonly TweetContentType[] = ['article'];
+
 export interface Tweet {
   tweet_id: string;
   author_id?: string;
