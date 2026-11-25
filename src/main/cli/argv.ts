@@ -61,14 +61,17 @@ export function isCliMode(argv: string[], ctx: ArgvContext): boolean {
 
 /**
  * 清洗批量 ID/URL 入参（--delete / --export-ids 的多值形式）：
- * 支持逗号分隔、完整推文 URL 与混合输入；提取片段中的首个连续数字 ID（≥5 位），
+ * 支持逗号分隔、完整推文 URL 与混合输入；优先提取 `/status/<id>` 后的推文 ID，
+ * 避免用户名中含 5 位以上数字（如 `bobolv235824`）被误匹配；
  * 去重并保持首次出现顺序，丢弃无 ID 的噪声参数。
  */
 export function normalizeTweetIdInputs(inputs: string[] | undefined): string[] {
   const ids: string[] = [];
   for (const raw of inputs ?? []) {
     for (const piece of raw.split(',')) {
-      const id = piece.match(/\d{5,}/)?.[0];
+      const trimmed = piece.trim();
+      const id =
+        trimmed.match(/\/status(?:es)?\/(\d{5,})/i)?.[1] ?? trimmed.match(/\d{5,}/)?.[0];
       if (id && !ids.includes(id)) ids.push(id);
     }
   }

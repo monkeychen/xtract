@@ -29,6 +29,7 @@ date: 2026-11-25
 - 修复 `fetchListTimeline` 误将 `list_by_rest_id_v2` 首段元信息分片判定为「列表不存在」的缺陷。
 - 修复纯转发帖（`RT @xxx: ...`）因携带他人 `/i/article/` 链接而被误判为 X Article 的问题，前后端统一排除纯转发壳。
 - 修复关注流抓取混入未关注「为你推荐 (For You)」账号的问题：在协议层严格隔离 `HomeLatestTimeline*`（关注流）与 `HomeTimeline*`（推荐流），并对「正在关注」标签点击做 `aria-selected="true"` 二次确认。
+- 修复用户名含 5 位以上数字（如 `@bobolv235824`）时，推文 URL 提取正则误把用户名中的数字当成推文 ID 导致无法同步全文的缺陷（统一优先匹配 `/status/<id>`）。
 
 ### Removed
 - 移除单推同步中遇 403 自动弹出可见 Chrome 窗口的临时回退逻辑。
@@ -54,7 +55,7 @@ date: 2026-11-25
 
 ### 4.2 五道自动化质量门禁（`pnpm verify` @ `0.1.4`）
 - `pnpm lint`：✅ 0 Error
-- `pnpm test`：✅ **29/29 测试文件、369/369 测试用例通过**（含 23/23 GUI E2E Flow）
+- `pnpm test`：✅ **29/29 测试文件、371/371 测试用例通过**（含 23/23 GUI E2E Flow）
 - `tsc --noEmit` & `pnpm build`：✅ 0 Error
 - `pnpm pack:dir && pnpm smoke`：✅ **4/4 通过**（`Xtract --version` 输出 `0.1.4`）
 

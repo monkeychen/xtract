@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config } from '../config.js';
-import { normalizeTweetDate, isArticleTweet, isNoteTweet, isLongContentTweet } from '../client/parser.js';
+import { normalizeTweetDate, isArticleTweet, isNoteTweet, isLongContentTweet, extractTweetId } from '../client/parser.js';
 import {
   downloadVideoStream,
   getLocalVideoIfExists,
@@ -1035,7 +1035,7 @@ export class Storage {
     const params: unknown[] = [];
 
     if (tweetId) {
-      const match = tweetId.match(/\d{5,}/)?.[0] || tweetId.trim();
+      const match = extractTweetId(tweetId) || tweetId.trim();
       sql += ' AND tweet_id = ?';
       params.push(match);
     }

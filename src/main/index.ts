@@ -8,7 +8,7 @@ import {
   formatTrendsTable,
   formatTweetDetail,
 } from './cli/format.js';
-import { isTweetContentIncomplete } from './client/parser.js';
+import { isTweetContentIncomplete, extractTweetId } from './client/parser.js';
 import {
   resolveUserArgs,
   resolveVersion,
@@ -203,7 +203,7 @@ if (isCLI) {
 
       // 4. View single tweet
       if (options.view) {
-        const tweetId = options.view.match(/\d{5,}/)?.[0] || options.view.trim();
+        const tweetId = extractTweetId(options.view) || options.view.trim();
         let tweet = storage.getTweetById(tweetId);
         const isIncomplete = tweet ? isTweetContentIncomplete(tweet) : true;
         const threadTweets = tweet ? storage.getThreadTweets(tweetId) : [];

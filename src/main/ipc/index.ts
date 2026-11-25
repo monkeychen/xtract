@@ -17,7 +17,7 @@ import { createCliShortcut, runPowerShellForReal } from '../cli/shortcut.js';
 import os from 'node:os';
 import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
-import { isTweetContentIncomplete, parseContentTypes } from '../client/parser.js';
+import { extractTweetId, isTweetContentIncomplete, parseContentTypes } from '../client/parser.js';
 import type {
   Tweet,
   LocalVideoStatus,
@@ -594,7 +594,7 @@ export function registerIpcHandlers(
       _event,
       args: { tweetIdOrUrl: string; exportMd?: boolean; outputPath?: string; forceRefresh?: boolean }
     ) => {
-      const cleanId = args.tweetIdOrUrl.match(/\d{5,}/)?.[0] || args.tweetIdOrUrl.trim();
+      const cleanId = extractTweetId(args.tweetIdOrUrl) || args.tweetIdOrUrl.trim();
       let tweet = storage.getTweetById(cleanId);
 
       // Check if text is truncated Note Tweet or incomplete X Article, or is explicitly requested to refresh

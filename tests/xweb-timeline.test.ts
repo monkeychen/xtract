@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import {
   classifyTweetContentType,
+  extractTweetId,
   extractTimelineInstructions,
   extractSsrTimelineTweetsFromHtml,
   isArticleTweet,
@@ -336,5 +337,17 @@ describe('x-web SSR & Timeline Schema Compatibility (v0.1.4)', () => {
       expect(isFollowingTimelineUrl(url)).toBe(false);
       expect(isRecommendedTimelineUrl(url)).toBe(false);
     }
+  });
+
+  it('6. extractTweetId prioritizes /status/<id> over digits in author username (e.g. bobolv235824)', () => {
+    // 复现真实链接 https://x.com/bobolv235824/status/2125213113838711213
+    expect(extractTweetId('https://x.com/bobolv235824/status/2125213113838711213')).toBe(
+      '2125213113838711213'
+    );
+    expect(extractTweetId('https://twitter.com/user999999/statuses/18888001?s=20')).toBe('18888001');
+    expect(extractTweetId('https://x.com/i/status/2125213113838711213')).toBe('2125213113838711213');
+    expect(extractTweetId('2125213113838711213')).toBe('2125213113838711213');
+    expect(extractTweetId('1234')).toBeNull();
+    expect(extractTweetId('')).toBeNull();
   });
 });

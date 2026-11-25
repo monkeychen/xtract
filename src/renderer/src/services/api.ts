@@ -290,7 +290,10 @@ class ApiService {
       return window.xtractAPI.viewTweet(tweetIdOrUrl, options);
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
-    const cleanId = tweetIdOrUrl.match(/\d{5,}/)?.[0] || tweetIdOrUrl;
+    const cleanId =
+      tweetIdOrUrl.match(/\/status(?:es)?\/(\d{5,})/i)?.[1] ||
+      tweetIdOrUrl.match(/\d{5,}/)?.[0] ||
+      tweetIdOrUrl;
     const tweet = MOCK_TWEETS.find((t) => t.tweet_id === cleanId) || MOCK_TWEETS[0];
     return {
       tweet,

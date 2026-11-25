@@ -12,6 +12,7 @@ import {
   extractSsrPayloadsFromHtml,
   extractSsrTimelineTweetsFromHtml,
   extractSsrTweetPayloadsFromHtml,
+  extractTweetId,
   mergeRawTweetPayload,
   parseTweetResult,
   parseTweetResultsByRestIds,
@@ -1349,13 +1350,11 @@ export class XClient {
       );
     }
 
-    const match = tweetIdOrUrl.match(/(\d{5,})/);
-    if (!match) {
+    const cleanId = extractTweetId(tweetIdOrUrl);
+    if (!cleanId) {
       throw new Error(`无效的推文 ID 或 URL：'${tweetIdOrUrl}'。`);
     }
-
-    const cleanId = match[1];
-    const fullUrlMatch = tweetIdOrUrl.match(/https?:\/\/(?:x|twitter)\.com\/([^/?#]+)\/status\/(\d{5,})/i);
+    const fullUrlMatch = tweetIdOrUrl.match(/https?:\/\/(?:x|twitter)\.com\/([^/?#]+)\/status(?:es)?\/(\d{5,})/i);
     const targetUrl = fullUrlMatch
       ? `https://x.com/${fullUrlMatch[1]}/status/${fullUrlMatch[2]}`
       : `https://x.com/i/status/${cleanId}`;

@@ -1028,6 +1028,22 @@ export function normalizeTweetDate(rawDate?: string): string {
 const RETWEET_PREFIX_PATTERN = /^RT @[A-Za-z0-9_]+:\s/;
 
 /**
+ * 从推文 URL 或纯数字 ID 中提取真实推文 ID：
+ * 优先匹配 `/status/<digits>`（或 `/statuses/<digits>`），避免用户名中含 5 位以上数字
+ * （如 `https://x.com/bobolv235824/status/2125213113838711213` 中的 `235824`）被误匹配为推文 ID。
+ * 仅当输入不含 `/status/` 路径时，回退匹配首段 ≥5 位数字。
+ */
+export function extractTweetId(input: string | undefined | null): string | null {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+  const statusMatch = trimmed.match(/\/status(?:es)?\/(\d{5,})/i);
+  if (statusMatch) return statusMatch[1];
+  const bareMatch = trimmed.match(/(\d{5,})/);
+  return bareMatch ? bareMatch[1] : null;
+}
+
+/**
  * Determines whether a tweet contains or represents an X Article (Twitter Article / Long-form).
  * Pure retweet shells (`RT @handle: ...`) carrying someone else's `/i/article/` link are NOT X Articles.
  */

@@ -3,6 +3,7 @@ import {
   resolveUserArgs,
   isCliMode,
   resolveVersion,
+  normalizeTweetIdInputs,
   resolveCliContentTypes,
   resolveCliDownloadVideos,
 } from '../src/main/cli/argv.js';
@@ -149,5 +150,16 @@ describe('UT-8 (M2): resolveCliDownloadVideos (--download-videos / --no-download
 
   it('显式 --no-download-videos 覆盖 configDefault=true', () => {
     expect(resolveCliDownloadVideos({ downloadVideos: false, configDefault: true })).toBe(false);
+  });
+});
+
+describe('normalizeTweetIdInputs (URL 用户名含数字不误判)', () => {
+  it('优先提取 /status/ 后的真实推文 ID，而不是用户名中的 5+ 位数字', () => {
+    expect(
+      normalizeTweetIdInputs([
+        'https://x.com/bobolv235824/status/2125213113838711213',
+        '18888001,https://twitter.com/user123456/status/19999002?s=20',
+      ])
+    ).toEqual(['2125213113838711213', '18888001', '19999002']);
   });
 });
