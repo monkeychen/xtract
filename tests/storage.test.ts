@@ -781,6 +781,85 @@ describe('Storage Module', () => {
     expect(storage.getTweetById('article_keep_1')).not.toBeNull();
     expect(fs.existsSync(longBundleFile)).toBe(true);
   });
+
+  it('test_query_tweets_sort_by_options', () => {
+    const tweets: Partial<Tweet>[] = [
+      {
+        tweet_id: 's_old_viral',
+        author_username: 'a1',
+        text: 'Oldest published, most likes, fetched last',
+        created_at: '2026-09-01T10:00:00.000Z',
+        like_count: 900,
+        view_count: 5000,
+      },
+      {
+        tweet_id: 's_mid_views',
+        author_username: 'a2',
+        text: 'Middle published, most views, fetched first',
+        created_at: '2026-09-15T10:00:00.000Z',
+        like_count: 200,
+        view_count: 80000,
+      },
+      {
+        tweet_id: 's_new_quiet',
+        author_username: 'a3',
+        text: 'Newest published, fewest likes, fetched middle',
+        created_at: '2026-09-28T10:00:00.000Z',
+        like_count: 10,
+        view_count: 300,
+      },
+    ];
+    storage.saveTweets(tweets, 'following');
+
+    // Set deterministic fetched_at values so fetched_at order differs from created_at
+    (storage as any).db
+      .prepare(`UPDATE tweets SET fetched_at = ? WHERE tweet_id = ?`)
+      .run('2026-10-01T01:00:00.000Z', 's_mid_views');
+    (storage as any).db
+      .prepare(`UPDATE tweets SET fetched_at = ? WHERE tweet_id = ?`)
+      .run('2026-10-01T02:00:00.000Z', 's_new_quiet');
+    (storage as any).db
+      .prepare(`UPDATE tweets SET fetched_at = ? WHERE tweet_id = ?`)
+      .run('2026-10-01T03:00:00.000Z', 's_old_viral');
+
+    // 1. Default / created_at: newest published first
+    expect(storage.queryTweets().map((t) => t.tweet_id)).toEqual([
+      's_new_quiet',
+      's_mid_views',
+      's_old_viral',
+    ]);
+    expect(storage.queryTweets({ sortBy: 'created_at' }).map((t) => t.tweet_id)).toEqual([
+      's_new_quiet',
+      's_mid_views',
+      's_old_viral',
+    ]);
+
+    // 2. fetched_at: most recently fetched first
+    expect(storage.queryTweets({ sortBy: 'fetched_at' }).map((t) => t.tweet_id)).toEqual([
+      's_old_viral',
+      's_new_quiet',
+      's_mid_views',
+    ]);
+
+    // 3. likes: highest like_count first
+    expect(storage.queryTweets({ sortBy: 'likes' }).map((t) => t.tweet_id)).toEqual([
+      's_old_viral',
+      's_mid_views',
+      's_new_quiet',
+    ]);
+
+    // 4. views: highest view_count first
+    expect(storage.queryTweets({ sortBy: 'views' }).map((t) => t.tweet_id)).toEqual([
+      's_mid_views',
+      's_old_viral',
+      's_new_quiet',
+    ]);
+
+    // 5. Unknown / injection value safely falls back to created_at DESC
+    expect(
+      storage.queryTweets({ sortBy: 'created_at; DROP TABLE tweets;--' as any }).map((t) => t.tweet_id)
+    ).toEqual(['s_new_quiet', 's_mid_views', 's_old_viral']);
+  });
 });
 
 

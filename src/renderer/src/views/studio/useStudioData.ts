@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Tweet, XListInfo, StudioJumpAction } from '../../types.js';
+import type { Tweet, TweetSortBy, XListInfo, StudioJumpAction } from '../../types.js';
 import { api } from '../../services/api.js';
 import {
   buildQueryOptions,
@@ -51,8 +51,19 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   const [isSyncingLists, setIsSyncingLists] = useState(false);
   const [streamFilter, setStreamFilter] = useState('');
 
-  // Filtering & Pagination
+  // Filtering, Sorting & Pagination
   const [minLikes, setMinLikes] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<TweetSortBy>(() => {
+    try {
+      const saved = window.localStorage.getItem('xtract:studio:sortBy');
+      if (saved === 'created_at' || saved === 'fetched_at' || saved === 'likes' || saved === 'views') {
+        return saved;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return 'created_at';
+  });
   const [totalDbCount, setTotalDbCount] = useState<number>(0);
 
   // Tweet States
@@ -174,7 +185,8 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     isAppend = false,
     queryParam?: string,
     userParam?: string,
-    listIdParam?: string
+    listIdParam?: string,
+    sortByParam?: TweetSortBy
   ) => {
     setIsLoading(true);
     try {
@@ -189,6 +201,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
         listIdParam,
       });
 
+      const effectiveSortBy = sortByParam ?? sortBy;
       const offset = isAppend ? tweets.length : 0;
       const [data, totalCount] = await Promise.all([
         api.listTweets({
@@ -199,6 +212,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
           query: q,
           user: u,
           listId: lId,
+          sortBy: effectiveSortBy,
         }),
         api.countTweets({
           minLikes,
@@ -284,6 +298,16 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     streamFilterDebounceRef.current = setTimeout(() => {
       loadLocalTweets(50, 'following', false, val);
     }, 250);
+  };
+
+  const handleSortByChange = (nextSort: TweetSortBy) => {
+    setSortBy(nextSort);
+    try {
+      window.localStorage.setItem('xtract:studio:sortBy', nextSort);
+    } catch {
+      // ignore
+    }
+    loadLocalTweets(50, dataSource, false, undefined, undefined, undefined, nextSort);
   };
 
   useEffect(() => {
@@ -710,10 +734,10 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   // 详情栏的专栏/长推文判定（未选中推文时为 null，JSX 内以可选链消费）
   return {
     dataSource, crawlLimit, openMenu, searchQuery, userHandle, userLists, selectedList,
-    customListId, isSyncingLists, streamFilter, minLikes, totalDbCount, tweets, selectedTweet,
+    customListId, isSyncingLists, streamFilter, minLikes, sortBy, totalDbCount, tweets, selectedTweet,
     exportPath, isDetailLoading, checkedIds, isLoading, deleteConfirmOpen, batchDeleteConfirmOpen,
     previewImage, setPreviewImage, toastMessage, crawlProgress,
-    setCrawlLimit, setMinLikes, setOpenMenu, setSelectedList, setCustomListId,
+    setCrawlLimit, setMinLikes, handleSortByChange, setOpenMenu, setSelectedList, setCustomListId,
     setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setCheckedIds,
     filteredTweets, allChecked,
     showToast, loadUserLists, handleSyncOnlineLists, loadLocalTweets, handleSwitchDataSource,

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Tweet } from '../../types.js';
+import type { Tweet, TweetSortBy } from '../../types.js';
 import { classifyTweet, isTweetVideo, type CrawlProgress, type DataSource } from './logic.js';
 import { formatCount, formatRelativeTime, getTweetListDisplayTitle } from './formatters.js';
 
@@ -14,8 +14,10 @@ export interface TweetListPaneProps {
   streamFilter: string;
   searchQuery: string;
   userHandle: string;
+  sortBy: TweetSortBy;
   isLoading: boolean;
   crawlProgress: CrawlProgress | null;
+  onSortByChange: (sortBy: TweetSortBy) => void;
   onSelectTweet: (tweet: Tweet) => void;
   onToggleCheck: (tweetId: string, e: React.MouseEvent<HTMLInputElement>) => void;
   onToggleSelectAll: (checked: boolean) => void;
@@ -39,8 +41,10 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
   streamFilter,
   searchQuery,
   userHandle,
+  sortBy,
   isLoading,
   crawlProgress,
+  onSortByChange,
   onSelectTweet,
   onToggleCheck,
   onToggleSelectAll,
@@ -48,8 +52,8 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
   onCrawl,
 }) => (
   <div className="studio-sidebar">
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper-sunken)' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer' }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: 'var(--paper-sunken)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0 }}>
             <input
               type="checkbox"
               id="check-all"
@@ -60,14 +64,35 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
               {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
             </span>
           </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+            <select
+              id="feed-sort-select"
+              aria-label="排序方式"
+              value={sortBy}
+              onChange={(e) => onSortByChange(e.target.value as TweetSortBy)}
+              style={{
+                fontSize: '11.5px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                border: '1px solid var(--line)',
+                background: 'var(--paper)',
+                color: 'var(--ink-soft)',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="created_at">最新发布</option>
+              <option value="fetched_at">最近抓取</option>
+              <option value="likes">点赞最多</option>
+              <option value="views">浏览最多</option>
+            </select>
+            <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {dataSource === 'following' && '📡 关注流'}
               {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
               {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
               {dataSource === 'lists' && '📋 X 列表'}
             </span>
-            <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>
+            <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)', flexShrink: 0 }}>
               {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条`}
             </span>
           </div>
@@ -156,6 +181,9 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
                   </div>
                   {relTime && <span className="feed-item-time">{relTime}</span>}
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--ink-faint)', flexShrink: 0 }}>
+                    {sortBy === 'views' && (tweet.view_count || 0) > 0 && (
+                      <span>👁️ {formatCount(tweet.view_count || 0)}</span>
+                    )}
                     <span>❤️ {formatCount(tweet.like_count)}</span>
                     {tweet.retweet_count > 0 && <span>🔁 {formatCount(tweet.retweet_count)}</span>}
                   </div>

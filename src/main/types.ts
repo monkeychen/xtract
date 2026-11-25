@@ -86,6 +86,8 @@ export interface DeleteFilter {
   dryRun?: boolean;
 }
 
+export type TweetSortBy = 'created_at' | 'fetched_at' | 'likes' | 'views';
+
 export interface TweetQueryOptions {
   limit?: number;
   offset?: number;
@@ -95,6 +97,7 @@ export interface TweetQueryOptions {
   user?: string;
   query?: string;
   listId?: string;
+  sortBy?: TweetSortBy;
 }
 
 export interface DeleteResult {

@@ -9,6 +9,7 @@ import type {
   DeleteResult,
   XListInfo,
   TweetQueryOptions,
+  TweetSortBy,
 } from '../../main/types';
 import type { StreamEvent, AppConfigView, XtractAPI } from '../../preload/index';
 
@@ -26,6 +27,7 @@ export type {
   XtractAPI,
   XListInfo,
   TweetQueryOptions,
+  TweetSortBy,
 };
 
 export interface ReportItem {

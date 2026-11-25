@@ -220,7 +220,18 @@ class ApiService {
           t.author_name.toLowerCase().includes(q)
       );
     }
-    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    result.sort((a, b) => {
+      if (options.sortBy === 'likes') {
+        return (b.like_count || 0) - (a.like_count || 0);
+      }
+      if (options.sortBy === 'views') {
+        return (b.view_count || 0) - (a.view_count || 0);
+      }
+      if (options.sortBy === 'fetched_at') {
+        return new Date(b.fetched_at || b.created_at).getTime() - new Date(a.fetched_at || a.created_at).getTime();
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
     const offset = options.offset || 0;
     const limit = options.limit || 50;
     return result.slice(offset, offset + limit);

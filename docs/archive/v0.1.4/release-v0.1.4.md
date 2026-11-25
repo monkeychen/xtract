@@ -15,6 +15,9 @@ date: 2026-11-25
 
 ## 2. 变更记录
 
+### Added
+- **左侧文章列表支持多维度切换排序**：新增排序选择器（`最新发布` / `最近抓取` / `点赞最多` / `浏览最多`），直接触发 SQLite 全库重排并自动记忆偏好，选择「浏览最多」时同步在条目右侧展示浏览量。
+
 ### Changed
 - **单推 / X Article 同步升级为纯 HTTP SSR 直取优先**：不启动任何浏览器进程、零弹窗，实测单篇专栏同步耗时从 6–12 秒降至 **0.7–1.2 秒**，并自动一次性捕获内嵌推文与视频直链。
 - **全量时间线与热搜切换为 Electron 内置隐藏窗口（`BrowserWindow({ show: false })` + CDP 网络流拦截）**：在桌面端 GUI 与打包态 CLI 中直接复用 Electron 原生隐藏窗口（零外部 Chrome 进程、零弹窗、默认静音），彻底解决 X 新版 `x-web` 拒绝 `HeadlessChrome`（HTTP 403）的问题。
@@ -48,7 +51,7 @@ date: 2026-11-25
 
 ### 4.2 五道自动化质量门禁（`pnpm verify` @ `0.1.4`）
 - `pnpm lint`：✅ 0 Error
-- `pnpm test`：✅ **29/29 测试文件、362/362 测试用例通过**（含 21/21 GUI E2E Flow）
+- `pnpm test`：✅ **29/29 测试文件、364/364 测试用例通过**（含 22/22 GUI E2E Flow）
 - `tsc --noEmit` & `pnpm build`：✅ 0 Error
 - `pnpm pack:dir && pnpm smoke`：✅ **4/4 通过**（`Xtract --version` 输出 `0.1.4`）
 

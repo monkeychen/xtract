@@ -587,16 +587,31 @@ export class Storage {
     return { whereClauses, params };
   }
 
+  public static resolveOrderBySql(sortBy?: TweetQueryOptions['sortBy']): string {
+    switch (sortBy) {
+      case 'fetched_at':
+        return 'fetched_at DESC, tweet_id DESC';
+      case 'likes':
+        return 'like_count DESC, created_at DESC, tweet_id DESC';
+      case 'views':
+        return 'view_count DESC, created_at DESC, tweet_id DESC';
+      case 'created_at':
+      default:
+        return 'created_at DESC, tweet_id DESC';
+    }
+  }
+
   public queryTweets(options: TweetQueryOptions = {}): Tweet[] {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
 
     const { whereClauses, params } = this.buildWhereClauses(options);
+    const orderBySql = Storage.resolveOrderBySql(options.sortBy);
 
     const sql = `
       SELECT * FROM tweets
       WHERE ${whereClauses.join(' AND ')}
-      ORDER BY created_at DESC, tweet_id DESC
+      ORDER BY ${orderBySql}
       LIMIT ? OFFSET ?
     `;
 

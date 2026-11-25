@@ -215,6 +215,19 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           if (opts?.minLikes) {
             result = result.filter((t) => t.like_count >= opts.minLikes);
           }
+          if (opts?.sortBy === 'likes') {
+            result.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+          } else if (opts?.sortBy === 'views') {
+            result.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+          } else if (opts?.sortBy === 'fetched_at') {
+            result.sort(
+              (a, b) =>
+                new Date((b as any).fetched_at || b.created_at).getTime() -
+                new Date((a as any).fetched_at || a.created_at).getTime()
+            );
+          } else {
+            result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          }
           return result;
         },
         countTweets: async (opts: any) => {
@@ -1171,5 +1184,36 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     // 3. Each embedded video has an independent download button
     expect(await inlinePlayers.nth(0).locator('button.video-download-btn').isVisible()).toBe(true);
     expect(await inlinePlayers.nth(1).locator('button.video-download-btn').isVisible()).toBe(true);
+  });
+
+  it('Flow 22: Tweet List Sort Selector Switches Order (created_at / fetched_at / likes / views)', async () => {
+    await page.locator('#chip-source-following').click();
+    await page.waitForTimeout(300);
+
+    const sortSelect = page.locator('#feed-sort-select');
+    await sortSelect.waitFor({ state: 'visible', timeout: 5000 });
+    expect(await sortSelect.inputValue()).toBe('created_at');
+
+    // Switch to likes DESC -> highest like_count tweet moves to top and IPC receives sortBy: 'likes'
+    await sortSelect.selectOption('likes');
+    await page.waitForTimeout(300);
+    const listCallsAfterLikes = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
+    expect(listCallsAfterLikes[listCallsAfterLikes.length - 1]?.sortBy).toBe('likes');
+
+    // Switch to views DESC -> IPC receives sortBy: 'views'
+    await sortSelect.selectOption('views');
+    await page.waitForTimeout(300);
+    const listCallsAfterViews = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
+    expect(listCallsAfterViews[listCallsAfterViews.length - 1]?.sortBy).toBe('views');
+
+    // Switch to fetched_at DESC -> IPC receives sortBy: 'fetched_at' and persists to localStorage
+    await sortSelect.selectOption('fetched_at');
+    await page.waitForTimeout(300);
+    const savedSort = await page.evaluate(() => window.localStorage.getItem('xtract:studio:sortBy'));
+    expect(savedSort).toBe('fetched_at');
+
+    // Restore default created_at
+    await sortSelect.selectOption('created_at');
+    await page.waitForTimeout(200);
   });
 });
