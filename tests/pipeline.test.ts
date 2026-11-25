@@ -156,20 +156,31 @@ describe('Pipeline and Summarizer Modules', () => {
       fetchFollowingTimeline: vi.fn().mockResolvedValue(mockTweets),
     };
 
-    const pipeline = new Pipeline(storage, mockClient);
-    const [fetched, inserted] = await pipeline.fetchAndStore({ limit: 20, maxPages: 1 });
+    const origContentTypes = process.env.FETCH_CONTENT_TYPES;
+    const origOnlyLong = process.env.ONLY_LONG_TWEETS;
+    delete process.env.FETCH_CONTENT_TYPES;
+    delete process.env.ONLY_LONG_TWEETS;
 
-    expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
-      maxPages: 1,
-      limit: 20,
-      contentTypes: ['article'],
-      timeout: undefined,
-    });
-    expect(fetched).toBe(20);
-    expect(inserted).toBe(20);
+    try {
+      const pipeline = new Pipeline(storage, mockClient);
+      const [fetched, inserted] = await pipeline.fetchAndStore({ limit: 20, maxPages: 1 });
 
-    storage.close();
-    if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+      expect(mockClient.fetchFollowingTimeline).toHaveBeenCalledWith({
+        maxPages: 1,
+        limit: 20,
+        contentTypes: ['article'],
+        timeout: undefined,
+      });
+      expect(fetched).toBe(20);
+      expect(inserted).toBe(20);
+    } finally {
+      if (origContentTypes === undefined) delete process.env.FETCH_CONTENT_TYPES;
+      else process.env.FETCH_CONTENT_TYPES = origContentTypes;
+      if (origOnlyLong === undefined) delete process.env.ONLY_LONG_TWEETS;
+      else process.env.ONLY_LONG_TWEETS = origOnlyLong;
+      storage.close();
+      if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+    }
   });
 
   it('UT-5: Pipeline filters four batch sources by FETCH_CONTENT_TYPES (default article only)', async () => {

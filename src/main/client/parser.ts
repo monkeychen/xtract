@@ -419,24 +419,31 @@ export function parseTweetResult(
     ...(Array.isArray(tweetResult.media_entities2) ? tweetResult.media_entities2 : []),
   ];
 
-  // Retweet info
-  const isRetweet = Boolean(legacy.retweeted_status_result);
+  // Retweet info (supports legacy.retweeted_status_result and x-web retweeted_status_results)
+  const rawRtWrapper =
+    legacy.retweeted_status_result ||
+    tweetResult.retweeted_status_result ||
+    tweetResult.retweeted_status_results;
+  const isRetweet = Boolean(rawRtWrapper);
   let retweetedAuthor = '';
   let retweetedText = '';
   const rtUrlEntities: UrlEntity[] = [];
   const rtMediaEntities: Array<{ url?: string }> = [];
 
   if (isRetweet) {
-    let rtResult = legacy.retweeted_status_result?.result || {};
+    let rtResult = rawRtWrapper?.result || {};
     if (rtResult.__typename === 'TweetWithVisibilityResults') {
       rtResult = rtResult.tweet || {};
     }
     const rtLegacy = rtResult.legacy || {};
+    const rtDetails = rtResult.details || {};
     const rtUser = rtResult.core?.user_results?.result || {};
     retweetedAuthor = rtUser.core?.screen_name || rtUser.legacy?.screen_name || '';
     if (rtLegacy.entities?.urls) rtUrlEntities.push(...rtLegacy.entities.urls);
+    if (Array.isArray(rtResult.url_entities)) rtUrlEntities.push(...rtResult.url_entities);
     if (rtLegacy.extended_entities?.media) rtMediaEntities.push(...rtLegacy.extended_entities.media);
     else if (rtLegacy.entities?.media) rtMediaEntities.push(...rtLegacy.entities.media);
+    if (Array.isArray(rtResult.media_entities2)) rtMediaEntities.push(...rtResult.media_entities2);
 
     // 智能提取被转推内容的专栏长文 (X Article) 或 Note Tweet
     if (rtResult.article?.article_results?.result) {
@@ -449,29 +456,35 @@ export function parseTweetResult(
       }
     } else if (rtResult.note_tweet?.note_tweet_results?.result?.text) {
       retweetedText = rtResult.note_tweet.note_tweet_results.result.text;
+    } else if (rtLegacy.full_text || rtDetails.full_text) {
+      retweetedText = rtLegacy.full_text || rtDetails.full_text;
     }
   }
 
-  // Quote info
-  const isQuote = Boolean(legacy.is_quote_status);
+  // Quote info (supports quoted_status_result and x-web quoted_status_results)
+  const rawQtWrapper = tweetResult.quoted_status_result || tweetResult.quoted_status_results;
+  const isQuote = Boolean(legacy.is_quote_status || rawQtWrapper);
   let quotedAuthor = '';
   let quotedText = '';
   const qtUrlEntities: UrlEntity[] = [];
   const qtMediaEntities: Array<{ url?: string }> = [];
 
-  if (isQuote && tweetResult.quoted_status_result) {
-    let qResult = tweetResult.quoted_status_result?.result || {};
+  if (isQuote && rawQtWrapper) {
+    let qResult = rawQtWrapper?.result || {};
     if (qResult.__typename === 'TweetWithVisibilityResults') {
       qResult = qResult.tweet || {};
     }
     const qLegacy = qResult.legacy || {};
+    const qDetails = qResult.details || {};
     const qUser = qResult.core?.user_results?.result || {};
     quotedAuthor = qUser.core?.screen_name || qUser.legacy?.screen_name || '';
-    quotedText = qLegacy.full_text || '';
+    quotedText = qLegacy.full_text || qDetails.full_text || '';
 
     if (qLegacy.entities?.urls) qtUrlEntities.push(...qLegacy.entities.urls);
+    if (Array.isArray(qResult.url_entities)) qtUrlEntities.push(...qResult.url_entities);
     if (qLegacy.extended_entities?.media) qtMediaEntities.push(...qLegacy.extended_entities.media);
     else if (qLegacy.entities?.media) qtMediaEntities.push(...qLegacy.entities.media);
+    if (Array.isArray(qResult.media_entities2)) qtMediaEntities.push(...qResult.media_entities2);
 
     // 智能提取被引用内容的专栏长文 (X Article) 或 Note Tweet
     if (qResult.article?.article_results?.result) {
@@ -682,12 +695,11 @@ export function mergeRawTweetPayload(existing: any, incoming: any, fallbackRestI
 }
 
 /**
- * 从 X 新版前端 `x-web`（TanStack Router SSR）HTML 中提取所有内联 `Result.Ok` 推文/专栏原始载荷，
- * 并按 rest_id 合并分片结果（如元数据分片 + 完整文章 content_state 分片 + 内嵌推文分片）。
+ * 从 X 新版前端 `x-web`（TanStack Router SSR）HTML 中解码全部 `Result.Ok` JSON 载荷。
  */
-export function extractSsrTweetPayloadsFromHtml(html: string): Map<string, any> {
-  const mergedById = new Map<string, any>();
-  if (!html || !html.includes('Result.Ok')) return mergedById;
+export function extractSsrPayloadsFromHtml(html: string): any[] {
+  const payloads: any[] = [];
+  if (!html || !html.includes('Result.Ok')) return payloads;
 
   const regex = /kind:"Result\.Ok",value:"((?:[^"\\]|\\.)*)"/g;
   let match: RegExpExecArray | null;
@@ -699,27 +711,44 @@ export function extractSsrTweetPayloadsFromHtml(html: string): Map<string, any> 
         .replace(/\\'/g, "'");
       const decodedJsonText = JSON.parse(`"${normalizedLiteral}"`);
       const payload = JSON.parse(decodedJsonText);
-      const data = payload?.data;
-      if (!data || typeof data !== 'object') continue;
-
-      const candidates = [data.tweet_result_by_rest_id, data.tweetResult];
-      for (const wrapper of candidates) {
-        if (!wrapper) continue;
-        const list = Array.isArray(wrapper) ? wrapper : [wrapper];
-        for (const item of list) {
-          const rawResult = item?.result;
-          if (!rawResult || typeof rawResult !== 'object') continue;
-          const inner =
-            rawResult.__typename === 'TweetWithVisibilityResults' ? rawResult.tweet : rawResult;
-          const restId = String(inner?.rest_id || item?.rest_id || '').trim();
-          if (!restId) continue;
-
-          const existing = mergedById.get(restId);
-          mergedById.set(restId, existing ? mergeRawTweetPayload(existing, rawResult, restId) : mergeRawTweetPayload(null, rawResult, restId));
-        }
+      if (payload && typeof payload === 'object') {
+        payloads.push(payload);
       }
     } catch {
       // 跳过非 JSON 或无法解析的 SSR 分片
+    }
+  }
+  return payloads;
+}
+
+/**
+ * 从 X 新版前端 `x-web`（TanStack Router SSR）HTML 中提取所有内联 `Result.Ok` 推文/专栏原始载荷，
+ * 并按 rest_id 合并分片结果（如元数据分片 + 完整文章 content_state 分片 + 内嵌推文分片）。
+ */
+export function extractSsrTweetPayloadsFromHtml(html: string): Map<string, any> {
+  const mergedById = new Map<string, any>();
+  for (const payload of extractSsrPayloadsFromHtml(html)) {
+    const data = payload?.data;
+    if (!data || typeof data !== 'object') continue;
+
+    const candidates = [data.tweet_result_by_rest_id, data.tweetResult];
+    for (const wrapper of candidates) {
+      if (!wrapper) continue;
+      const list = Array.isArray(wrapper) ? wrapper : [wrapper];
+      for (const item of list) {
+        const rawResult = item?.result;
+        if (!rawResult || typeof rawResult !== 'object') continue;
+        const inner =
+          rawResult.__typename === 'TweetWithVisibilityResults' ? rawResult.tweet : rawResult;
+        const restId = String(inner?.rest_id || item?.rest_id || '').trim();
+        if (!restId) continue;
+
+        const existing = mergedById.get(restId);
+        mergedById.set(
+          restId,
+          existing ? mergeRawTweetPayload(existing, rawResult, restId) : mergeRawTweetPayload(null, rawResult, restId)
+        );
+      }
     }
   }
 
@@ -727,30 +756,53 @@ export function extractSsrTweetPayloadsFromHtml(html: string): Map<string, any> 
 }
 
 /**
+ * 从 X 新版前端 `x-web` SSR HTML 中提取时间线推文（适用于 X 列表 / 博主主页 / 搜索结果首屏）。
+ */
+export function extractSsrTimelineTweetsFromHtml(html: string): Tweet[] {
+  const seen = new Set<string>();
+  const tweets: Tweet[] = [];
+  for (const payload of extractSsrPayloadsFromHtml(html)) {
+    const inst = extractTimelineInstructions(payload);
+    if (inst.length === 0) continue;
+    for (const t of parseTimelineInstructions(inst)) {
+      if (t.tweet_id && !seen.has(t.tweet_id)) {
+        seen.add(t.tweet_id);
+        tweets.push(t);
+      }
+    }
+  }
+  return tweets;
+}
+
+/**
  * Extracts tweets from timeline instructions, filtering ads and cursors.
+ * Supports both legacy schema (type / entryId / itemContent / moduleItems)
+ * and x-web schema (__typename / entry_id / content / module_items / TimelinePinEntry).
  */
 export function parseTimelineInstructions(instructions: any[]): Tweet[] {
   const parsedTweets: Tweet[] = [];
   if (!Array.isArray(instructions)) return parsedTweets;
 
   for (const instruction of instructions) {
-    const type = instruction?.type;
+    const type = instruction?.type || instruction?.__typename;
     let entries: any[] = [];
     if (type === 'TimelineAddEntries') {
       entries = instruction.entries || [];
     } else if (type === 'TimelineAddToModule') {
-      entries = instruction.moduleItems || [];
+      entries = instruction.moduleItems || instruction.module_items || [];
+    } else if (type === 'TimelinePinEntry' && instruction.entry) {
+      entries = [instruction.entry];
     }
 
     for (const entry of entries) {
-      const entryId = String(entry?.entryId || '').toLowerCase();
+      const entryId = String(entry?.entryId || entry?.entry_id || '').toLowerCase();
       // Skip promoted ads and cursors
       if (entryId.includes('promoted') || entryId.startsWith('cursor-')) {
         continue;
       }
 
       const content = entry?.content || {};
-      const itemContent = content.itemContent || {};
+      const itemContent = content.itemContent || content.content || {};
       const tweetResults = itemContent.tweet_results?.result;
       if (tweetResults) {
         const t = parseTweetResult(tweetResults);
@@ -762,7 +814,7 @@ export function parseTimelineInstructions(instructions: any[]): Tweet[] {
       // Handle items nested inside modules
       const items = content.items || [];
       for (const subItem of items) {
-        const subIc = subItem?.item?.itemContent || {};
+        const subIc = subItem?.item?.itemContent || subItem?.item?.content || {};
         const subTr = subIc.tweet_results?.result;
         if (subTr) {
           const subTweet = parseTweetResult(subTr);
@@ -787,14 +839,23 @@ export function extractTimelineInstructions(data: any): any[] {
   if (d.list?.tweets_timeline?.timeline?.instructions) {
     return d.list.tweets_timeline.timeline.instructions;
   }
+  if (d.list_by_rest_id_v2?.tweets_timeline?.timeline?.instructions) {
+    return d.list_by_rest_id_v2.tweets_timeline.timeline.instructions;
+  }
   if (d.user?.result?.timeline?.timeline?.instructions) {
     return d.user.result.timeline.timeline.instructions;
   }
   if (d.user?.result?.timeline_v2?.timeline?.instructions) {
     return d.user.result.timeline_v2.timeline.instructions;
   }
+  if (d.user_result_by_screen_name?.result?.profile_user_originals_timeline?.timeline?.instructions) {
+    return d.user_result_by_screen_name.result.profile_user_originals_timeline.timeline.instructions;
+  }
   if (d.home?.home_timeline_urt?.instructions) {
     return d.home.home_timeline_urt.instructions;
+  }
+  if (d.home_timeline?.timeline?.instructions) {
+    return d.home_timeline.timeline.instructions;
   }
   if (d.search_by_raw_query?.search_timeline?.timeline?.instructions) {
     return d.search_by_raw_query.search_timeline.timeline.instructions;

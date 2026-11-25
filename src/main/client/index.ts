@@ -9,6 +9,8 @@ import {
   type XListInfo,
 } from '../types.js';
 import {
+  extractSsrPayloadsFromHtml,
+  extractSsrTimelineTweetsFromHtml,
   extractSsrTweetPayloadsFromHtml,
   mergeRawTweetPayload,
   parseTweetResult,
@@ -25,6 +27,14 @@ import {
   parseContentTypes,
   isTweetContentIncomplete,
 } from './parser.js';
+import {
+  buildXCookieHeader,
+  isElectronRuntime,
+  openElectronHiddenSession,
+  type CrawlPage,
+  type CrawlSession,
+  type InterceptedResponse,
+} from './hidden-browser.js';
 
 export {
   parseTweetResult,
@@ -53,6 +63,74 @@ export function resolveContentTypes(options?: {
     return options.onlyLongTweets ? ['article', 'note'] : [...ALL_TWEET_CONTENT_TYPES];
   }
   return Config.FETCH_CONTENT_TYPES;
+}
+
+function isLoopbackHost(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 纯 Node.js HTTP SSR 直取单推 / X Article（含全部内嵌推文卡片与视频链接）：
+ * - 零浏览器启动、零弹窗，耗时约 0.7~1.2 秒；
+ * - 适用于 X 新版 x-web (TanStack Router SSR) 直出页面。
+ */
+export async function fetchTweetThreadViaHttpSsr(
+  targetUrl: string,
+  cleanId: string,
+  options?: { cookieHeader?: string; proxyUrl?: string; timeoutMs?: number }
+): Promise<Tweet[]> {
+  const cookieHeader = options?.cookieHeader !== undefined ? options.cookieHeader : buildXCookieHeader();
+  const proxyUrl = options?.proxyUrl !== undefined ? options.proxyUrl : Config.HTTP_PROXY;
+  const timeoutMs = options?.timeoutMs ?? 20000;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const { fetch: undiciFetch, ProxyAgent } = await import('undici');
+    const fetchOpts: Record<string, unknown> = {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    };
+    if (proxyUrl && !isLoopbackHost(targetUrl)) {
+      fetchOpts.dispatcher = new ProxyAgent(proxyUrl);
+    }
+
+    const res = await undiciFetch(targetUrl, fetchOpts as any);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const ssrPayloads = extractSsrTweetPayloadsFromHtml(html);
+    if (ssrPayloads.size === 0) return [];
+
+    let rawMain: any = null;
+    const embeddedMap = new Map<string, Tweet>();
+    for (const [restId, rawMerged] of ssrPayloads.entries()) {
+      if (restId === cleanId) {
+        rawMain = rawMerged;
+      } else {
+        const emb = parseTweetResult(rawMerged);
+        if (emb && emb.tweet_id) {
+          embeddedMap.set(emb.tweet_id, emb);
+        }
+      }
+    }
+
+    if (!rawMain) return [];
+    const enrichedMain = parseTweetResult(rawMain, embeddedMap);
+    if (!enrichedMain || !enrichedMain.tweet_id) return [];
+
+    return [enrichedMain, ...Array.from(embeddedMap.values())];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function formatContentTypesLabel(types: readonly TweetContentType[]): string {
@@ -191,7 +269,7 @@ export class XClient {
    * 弹性安全页面导航：具备指数退避重试与网络中断友好诊断
    */
   private async safeNavigate(
-    page: Page,
+    page: CrawlPage | Page,
     url: string,
     options: {
       waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit';
@@ -334,6 +412,58 @@ export class XClient {
   }
 
 
+  /**
+   * 统一零弹窗抓取会话工厂：
+   * - Electron 运行时（桌面工作台 GUI 与打包态 CLI）：优先使用 Electron 原生隐藏窗口 BrowserWindow({ show: false }) + CDP 拦截，
+   *   零弹窗、零外部 Chrome 进程、原生浏览器指纹（规避 x-web 拒绝 HeadlessChrome 403）；
+   * - 纯 Node 运行时（如开发态 `pnpm dev:cli`）：回退到 Playwright 无头会话。
+   */
+  private async openCrawlSession(timeoutMs?: number): Promise<CrawlSession> {
+    const effectiveTimeoutMs = timeoutMs || this.timeoutMs;
+    if (isElectronRuntime()) {
+      return await openElectronHiddenSession(effectiveTimeoutMs);
+    }
+
+    const browser = await this.launchBrowser(true);
+    const context = await this.setupContext(browser, effectiveTimeoutMs);
+    const pwPage = await context.newPage();
+
+    const page: CrawlPage = {
+      on: (event, listener) => {
+        pwPage.on(event, (res: Response) => {
+          const wrapped: InterceptedResponse = {
+            url: () => res.url(),
+            status: () => res.status(),
+            headers: () => res.headers(),
+            text: () => res.text(),
+            json: () => res.json(),
+          };
+          void listener(wrapped);
+        });
+      },
+      goto: async (url, opts) => {
+        await pwPage.goto(url, opts as any);
+      },
+      url: () => pwPage.url(),
+      title: () => pwPage.title(),
+      evaluate: <T = any>(fnOrExpr: (() => T) | string) => pwPage.evaluate(fnOrExpr as any),
+      waitForSelector: async (selector, opts) => {
+        await pwPage.waitForSelector(selector, opts);
+      },
+    };
+
+    return {
+      page,
+      getCookies: async () => {
+        const list = await context.cookies();
+        return list.map((c) => ({ name: c.name, value: c.value }));
+      },
+      close: async () => {
+        await browser.close().catch(() => {});
+      },
+    };
+  }
+
   async verifyAuth(
     options?: { forceBrowser?: boolean; timeoutSeconds?: number } | number
   ): Promise<{ id: string; name: string; screen_name: string }> {
@@ -362,12 +492,11 @@ export class XClient {
     const timeout = timeoutSeconds || this.timeoutSeconds;
     const timeoutMs = timeout * 1000;
 
-    const browser = await this.launchBrowser(true);
+    const crawlSession = await this.openCrawlSession(timeoutMs);
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = crawlSession.page;
 
-      await page.goto('https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
+      await this.safeNavigate(page, 'https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
       
       // Wait for hydration or account switcher
       try {
@@ -383,7 +512,7 @@ export class XClient {
         throw new Error('会话失效（被重定向至登录页）。请重新执行登录。');
       }
 
-      const cookies = await context.cookies();
+      const cookies = await crawlSession.getCookies();
       const hasAuthToken = cookies.some((c) => c.name === 'auth_token');
       if (!hasAuthToken) {
         throw new Error('未检测到有效 auth_token Cookie。');
@@ -436,7 +565,7 @@ export class XClient {
       Config.setCachedUser(authUser);
       return authUser;
     } finally {
-      await browser.close();
+      await crawlSession.close();
     }
   }
 
@@ -450,13 +579,25 @@ export class XClient {
     const targetUrl = `https://x.com/${handle}/lists`;
 
     const capturedLists: XListInfo[] = [];
-    const browser = await this.launchBrowser(true);
+    const crawlSession = await this.openCrawlSession(20000);
     try {
-      const context = await this.setupContext(browser, 20000);
-      const page = await context.newPage();
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
+        const contentType = res.headers()['content-type'] || '';
+        if (res.status() === 200 && contentType.includes('text/html') && url.includes('/lists')) {
+          try {
+            const html = await res.text();
+            for (const payload of extractSsrPayloadsFromHtml(html)) {
+              const found = extractListsFromGraphQL(payload);
+              if (found.length > 0) capturedLists.push(...found);
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (
           url.includes('/graphql/') &&
           (url.includes('ListsManagement') ||
@@ -525,7 +666,7 @@ export class XClient {
     } catch (err) {
       process.stderr.write(`⚠️ 获取 X 线上列表提示: ${err}\n`);
     } finally {
-      await browser.close();
+      await crawlSession.close();
     }
 
     // Merge captured lists with local saved lists (excluding legacy mock IDs)
@@ -562,12 +703,11 @@ export class XClient {
 
     const capturedInstructions: any[][] = [];
 
-    const browser = await this.launchBrowser(true);
+    const crawlSession = await this.openCrawlSession(timeoutMs);
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
         if (
           url.includes('/graphql/') &&
@@ -605,26 +745,28 @@ export class XClient {
         throw new Error('X 认证失败：页面被重定向至登录页。请检查 auth_token 是否过期。');
       }
 
-      // Try finding and clicking "Following" tab
+      // 切换至「正在关注 (Following)」标签页（兼容 Electron 隐藏窗口与 Playwright）
       try {
-        const tabs = page.locator('[role="tab"]');
-        const count = await tabs.count();
-        let clickedTab = false;
-        for (let i = 0; i < count; i++) {
-          const tab = tabs.nth(i);
-          const text = (await tab.textContent()) || '';
-          if (/Following|正在关注|关注/i.test(text)) {
-            process.stderr.write('📌 切换至「正在关注 (Following)」时间线...\n');
-            await tab.click();
-            clickedTab = true;
-            await new Promise((r) => setTimeout(r, 2500));
-            break;
+        const clickedLabel = await page.evaluate(`(() => {
+          const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+          for (const t of tabs) {
+            const txt = (t.textContent || '').trim();
+            if (/Following|正在关注|关注/i.test(txt)) {
+              t.click();
+              return txt;
+            }
           }
-        }
-        if (!clickedTab && count > 1) {
-          // Default: second tab is usually Following
-          const secondTab = tabs.nth(1);
-          await secondTab.click().catch(() => {});
+          if (tabs.length > 1) {
+            tabs[1].click();
+            return (tabs[1].textContent || '').trim() || 'tab[1]';
+          }
+          return '';
+        })()`);
+        if (clickedLabel) {
+          process.stderr.write(`📌 切换至「正在关注 (Following)」时间线 (${clickedLabel})...\n`);
+          // 清空点击前捕获的「为你推荐」批次，确保后续仅保留「正在关注」时间线
+          capturedInstructions.length = 0;
+          await new Promise((r) => setTimeout(r, 2500));
         }
       } catch {
         // ignore tab click error
@@ -660,7 +802,7 @@ export class XClient {
 
       await new Promise((r) => setTimeout(r, 1500));
     } finally {
-      await browser.close();
+      await crawlSession.close();
     }
 
     const contentTypes = resolveContentTypes(options);
@@ -738,13 +880,25 @@ export class XClient {
 
     // 轨道 2：个人主页兜底抓取 (UserTimeline Fallback)
     const capturedInstructions: any[][] = [];
-    const session = await this.createSession(true, timeoutMs);
+    const ssrTweets: Tweet[] = [];
+    const crawlSession = await this.openCrawlSession(timeoutMs);
 
     try {
-      const page = session.page;
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
+        const contentType = res.headers()['content-type'] || '';
+        if (res.status() === 200 && contentType.includes('text/html') && url.toLowerCase().includes(`/${cleanUser.toLowerCase()}`)) {
+          try {
+            const html = await res.text();
+            const parsed = extractSsrTimelineTweetsFromHtml(html);
+            if (parsed.length > 0) ssrTweets.push(...parsed);
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (
           url.includes('/graphql/') &&
           (url.includes('UserOriginalsTimeline') ||
@@ -767,12 +921,12 @@ export class XClient {
 
       const userUrl = `https://x.com/${cleanUser}`;
       process.stderr.write(`🌐 [双轨-备轨] 正在打开博主主页 ${userUrl} 并监听推文流...\n`);
-      await page.goto(userUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await this.safeNavigate(page, userUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
       // Wait for initial batch with gentle scroll assist
       for (let i = 0; i < Math.max(20, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
-        if (capturedInstructions.length > 0) break;
+        if (capturedInstructions.length > 0 || ssrTweets.length > 0) break;
         if (i % 4 === 0) {
           await page.evaluate(() => window.scrollBy(0, 1500)).catch(() => {});
         }
@@ -788,11 +942,19 @@ export class XClient {
 
       await new Promise((r) => setTimeout(r, 2000));
     } finally {
-      await session.close();
+      await crawlSession.close();
     }
 
     const seenIds = new Set<string>();
     const allTweets: Tweet[] = [];
+    for (const t of ssrTweets) {
+      if (!seenIds.has(t.tweet_id)) {
+        seenIds.add(t.tweet_id);
+        if (matchesContentTypes(t, contentTypes)) {
+          allTweets.push(t);
+        }
+      }
+    }
     for (const instList of capturedInstructions) {
       const batch = parseTimelineInstructions(instList);
       for (const t of batch) {
@@ -831,43 +993,85 @@ export class XClient {
     const capturedInstructions: any[][] = [];
     let listNotFound = false;
     let notFoundReason = '';
-    const browser = await this.launchBrowser(true);
+    const crawlSession = await this.openCrawlSession(timeoutMs);
 
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      const handleListPayload = (data: any, allowNotFoundFlag: boolean) => {
+        const l = data?.data?.list || data?.data?.list_by_rest_id_v2;
+        const inst = extractTimelineInstructions(data);
+        if (inst.length > 0) {
+          capturedInstructions.push(inst);
+          listNotFound = false;
+        }
+        if (l) {
+          if (l.name) {
+            listNotFound = false;
+            Config.saveUserList({
+              id: listId,
+              name: l.name,
+              member_count: l.member_count,
+              description: l.description,
+            });
+          } else if (
+            allowNotFoundFlag &&
+            capturedInstructions.length === 0 &&
+            !l.description &&
+            (!l.tweets_timeline || Object.keys(l.tweets_timeline).length === 0)
+          ) {
+            listNotFound = true;
+            notFoundReason = '该 X 列表在服务器上不存在或已失效';
+          }
+        }
+      };
+
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
+        const contentType = res.headers()['content-type'] || '';
+
+        // A. X 新版 x-web SSR HTML 内联列表首屏数据（list_by_rest_id_v2 常拆成多个分片下发，需全部扫描后再判定）
+        if (res.status() === 200 && contentType.includes('text/html') && url.includes(`/lists/${listId}`)) {
+          try {
+            const html = await res.text();
+            const listPayloads = extractSsrPayloadsFromHtml(html).filter(
+              (p) => p?.data?.list_by_rest_id_v2 !== undefined || p?.data?.list !== undefined
+            );
+            for (const payload of listPayloads) {
+              handleListPayload(payload, false);
+            }
+            if (listPayloads.length > 0 && capturedInstructions.length === 0) {
+              const hasAnyMeta = listPayloads.some((p) => {
+                const l = p?.data?.list_by_rest_id_v2 || p?.data?.list;
+                return Boolean(l?.name || l?.description || (l?.tweets_timeline && Object.keys(l.tweets_timeline).length > 0));
+              });
+              if (!hasAnyMeta) {
+                listNotFound = true;
+                notFoundReason = '该 X 列表在服务器上不存在或已失效';
+              }
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
+
+        // B. GraphQL 列表响应（首屏或滚动翻页）
         if (url.includes('/graphql/') && res.status() === 200) {
           if (url.includes('ListByRestId')) {
             try {
               const data = await res.json();
-              const l = data.data?.list;
-              if (l) {
-                // If it returns only id_str and empty timeline without name or description, list is deleted/nonexistent
-                if (!l.name && !l.description && (!l.tweets_timeline || Object.keys(l.tweets_timeline).length === 0)) {
-                  listNotFound = true;
-                  notFoundReason = '该 X 列表在服务器上不存在或已失效';
-                } else if (l.name) {
-                  // Auto-save discovered list metadata
-                  Config.saveUserList({
-                    id: listId,
-                    name: l.name,
-                    member_count: l.member_count,
-                    description: l.description,
-                  });
-                }
-              } else {
+              const l = data.data?.list || data.data?.list_by_rest_id_v2;
+              if (!l && capturedInstructions.length === 0) {
                 listNotFound = true;
                 notFoundReason = '该 X 列表不存在';
+              } else if (l) {
+                handleListPayload(data, true);
               }
             } catch {
               // ignore
             }
-          }
-
-          if (
+          } else if (
             url.includes('ListLatestTweetsTimeline') ||
             url.includes('ListTweetsTimeline') ||
             url.includes('List')
@@ -877,6 +1081,7 @@ export class XClient {
               const inst = extractTimelineInstructions(data);
               if (inst.length > 0) {
                 capturedInstructions.push(inst);
+                listNotFound = false;
               }
             } catch {
               // ignore
@@ -954,7 +1159,7 @@ export class XClient {
 
       await new Promise((r) => setTimeout(r, 1500));
     } finally {
-      await browser.close();
+      await crawlSession.close();
     }
 
     const contentTypes = resolveContentTypes(options);
@@ -998,13 +1203,26 @@ export class XClient {
     const timeoutMs = timeout * 1000;
 
     const capturedInstructions: any[][] = [];
-    const session = await this.createSession(true, timeoutMs);
+    const crawlSession = await this.openCrawlSession(timeoutMs);
 
     try {
-      const page = session.page;
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
+        const contentType = res.headers()['content-type'] || '';
+        if (res.status() === 200 && contentType.includes('text/html') && url.includes('/search')) {
+          try {
+            const html = await res.text();
+            for (const payload of extractSsrPayloadsFromHtml(html)) {
+              const inst = extractTimelineInstructions(payload);
+              if (inst.length > 0) capturedInstructions.push(inst);
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (
           url.includes('/graphql/') &&
           (url.includes('SearchTimeline') || url.includes('Search')) &&
@@ -1024,7 +1242,7 @@ export class XClient {
 
       const typeLabel = searchType === 'top' ? '热门' : '实时最新';
       process.stderr.write(`🌐 正在打开 X 搜索 (${typeLabel}: '${cleanQ}') 并监听推文流...\n`);
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await this.safeNavigate(page, targetUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
       for (let i = 0; i < Math.max(30, timeout); i++) {
         await new Promise((r) => setTimeout(r, 1000));
@@ -1043,7 +1261,7 @@ export class XClient {
 
       await new Promise((r) => setTimeout(r, 1500));
     } finally {
-      await session.close();
+      await crawlSession.close();
     }
 
     const contentTypes = resolveContentTypes(options);
@@ -1090,6 +1308,21 @@ export class XClient {
     const timeoutMs = timeout * 1000;
     const shouldFetchReplies = options?.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
 
+    // 快车道：不需要追评时，优先通过纯 HTTP 直取 X 新版 SSR HTML（零弹窗、零浏览器、~1 秒完成）
+    if (!shouldFetchReplies) {
+      try {
+        process.stderr.write(`⚡ 正在通过高速 SSR 通道同步推文 ${targetUrl}...\n`);
+        const ssrResult = await fetchTweetThreadViaHttpSsr(targetUrl, cleanId, {
+          timeoutMs: Math.min(timeoutMs, 20000),
+        });
+        if (ssrResult.length > 0 && ssrResult[0].tweet_id === cleanId) {
+          return ssrResult;
+        }
+      } catch (err: any) {
+        process.stderr.write(`ℹ️ 高速 SSR 通道未命中（${err?.message || err}），自动切换至后台隐藏会话...\n`);
+      }
+    }
+
     const collectExpectedArticleTweetIds = (rawResult: any, expectedSet: Set<string>) => {
       const inner =
         rawResult?.__typename === 'TweetWithVisibilityResults' ? rawResult.tweet : rawResult;
@@ -1110,184 +1343,134 @@ export class XClient {
       }
     };
 
-    const runAttempt = async (headless: boolean): Promise<{
-      capturedTweets: Tweet[];
-      rawMainTweetResult: any;
-      embeddedTweetsMap: Map<string, Tweet>;
-      hitHttp403: boolean;
-    }> => {
-      const capturedTweets: Tweet[] = [];
-      let rawMainTweetResult: any = null;
-      const embeddedTweetsMap = new Map<string, Tweet>();
-      const expectedArticleTweetIds = new Set<string>();
-      let hitHttp403 = false;
-      const browser = await this.launchBrowser(headless);
+    const capturedTweets: Tweet[] = [];
+    let rawMainTweetResult: any = null;
+    const embeddedTweetsMap = new Map<string, Tweet>();
+    const expectedArticleTweetIds = new Set<string>();
+    const crawlSession = await this.openCrawlSession(timeoutMs);
 
-      try {
-        const context = await this.setupContext(browser, timeoutMs);
-        const page = await context.newPage();
+    try {
+      const page = crawlSession.page;
 
-        page.on('response', async (res: Response) => {
-          const url = res.url();
-          const status = res.status();
-          const contentType = res.headers()['content-type'] || '';
+      page.on('response', async (res: InterceptedResponse) => {
+        const url = res.url();
+        const status = res.status();
+        const contentType = res.headers()['content-type'] || '';
 
-          if (status === 403 && url.includes(`/status/${cleanId}`)) {
-            hitHttp403 = true;
-            return;
+        // A. X 新版前端 x-web (TanStack Router SSR) 首屏 HTML 内联载荷
+        if (status === 200 && contentType.includes('text/html') && url.includes(`/status/${cleanId}`)) {
+          try {
+            const html = await res.text();
+            const ssrPayloads = extractSsrTweetPayloadsFromHtml(html);
+            for (const [restId, rawMerged] of ssrPayloads.entries()) {
+              if (restId === cleanId) {
+                rawMainTweetResult = rawMainTweetResult
+                  ? mergeRawTweetPayload(rawMainTweetResult, rawMerged, cleanId)
+                  : rawMerged;
+                collectExpectedArticleTweetIds(rawMainTweetResult, expectedArticleTweetIds);
+                const parsedMain = parseTweetResult(rawMainTweetResult, embeddedTweetsMap);
+                if (parsedMain && parsedMain.tweet_id) {
+                  capturedTweets.push(parsedMain);
+                }
+              } else {
+                const parsedEmbedded = parseTweetResult(rawMerged);
+                if (parsedEmbedded && parsedEmbedded.tweet_id) {
+                  embeddedTweetsMap.set(parsedEmbedded.tweet_id, parsedEmbedded);
+                  capturedTweets.push(parsedEmbedded);
+                }
+              }
+            }
+          } catch {
+            // ignore SSR parse errors
           }
+          return;
+        }
 
-          // A. X 新版前端 x-web (TanStack Router SSR) 首屏 HTML 内联载荷
-          if (status === 200 && contentType.includes('text/html') && url.includes(`/status/${cleanId}`)) {
-            try {
-              const html = await res.text();
-              const ssrPayloads = extractSsrTweetPayloadsFromHtml(html);
-              for (const [restId, rawMerged] of ssrPayloads.entries()) {
-                if (restId === cleanId) {
+        // B. 经典 /graphql/ 网络流拦截
+        if (
+          url.includes('/graphql/') &&
+          (url.includes('TweetDetail') || url.includes('TweetResult') || url.includes('TweetResultsByRestIds')) &&
+          status === 200
+        ) {
+          try {
+            const data = await res.json();
+
+            // 1. TweetResultsByRestIds (数组形态：Article 内嵌推文卡片批量查询)
+            if (url.includes('TweetResultsByRestIds') || Array.isArray(data?.data?.tweetResult)) {
+              const batchTweets = parseTweetResultsByRestIds(data);
+              for (const bt of batchTweets) {
+                if (bt && bt.tweet_id) {
+                  embeddedTweetsMap.set(bt.tweet_id, bt);
+                  capturedTweets.push(bt);
+                }
+              }
+            }
+
+            // 2. 单篇主推文或结果（兼容 tweetResult 与 tweet_result_by_rest_id）
+            const singleWrapper = data?.data?.tweetResult || data?.data?.tweet_result_by_rest_id;
+            if (singleWrapper?.result) {
+              const rawResult = singleWrapper.result;
+              const fallbackId = singleWrapper.rest_id ? String(singleWrapper.rest_id) : undefined;
+              const normalizedRaw = mergeRawTweetPayload(null, rawResult, fallbackId);
+              const t = parseTweetResult(normalizedRaw);
+              if (t && t.tweet_id) {
+                if (t.tweet_id === cleanId) {
                   rawMainTweetResult = rawMainTweetResult
-                    ? mergeRawTweetPayload(rawMainTweetResult, rawMerged, cleanId)
-                    : rawMerged;
+                    ? mergeRawTweetPayload(rawMainTweetResult, normalizedRaw, cleanId)
+                    : normalizedRaw;
                   collectExpectedArticleTweetIds(rawMainTweetResult, expectedArticleTweetIds);
-                  const parsedMain = parseTweetResult(rawMainTweetResult, embeddedTweetsMap);
-                  if (parsedMain && parsedMain.tweet_id) {
-                    capturedTweets.push(parsedMain);
-                  }
-                } else {
-                  const parsedEmbedded = parseTweetResult(rawMerged);
-                  if (parsedEmbedded && parsedEmbedded.tweet_id) {
-                    embeddedTweetsMap.set(parsedEmbedded.tweet_id, parsedEmbedded);
-                    capturedTweets.push(parsedEmbedded);
-                  }
                 }
+                capturedTweets.push(t);
               }
-            } catch {
-              // ignore SSR parse errors
             }
-            return;
-          }
 
-          // B. 经典 /graphql/ 网络流拦截
-          if (
-            url.includes('/graphql/') &&
-            (url.includes('TweetDetail') || url.includes('TweetResult') || url.includes('TweetResultsByRestIds')) &&
-            status === 200
-          ) {
-            try {
-              const data = await res.json();
-
-              // 1. TweetResultsByRestIds (数组形态：Article 内嵌推文卡片批量查询)
-              if (url.includes('TweetResultsByRestIds') || Array.isArray(data?.data?.tweetResult)) {
-                const batchTweets = parseTweetResultsByRestIds(data);
-                for (const bt of batchTweets) {
-                  if (bt && bt.tweet_id) {
-                    embeddedTweetsMap.set(bt.tweet_id, bt);
-                    capturedTweets.push(bt);
-                  }
-                }
-              }
-
-              // 2. 单篇主推文或结果（兼容 tweetResult 与 tweet_result_by_rest_id）
-              const singleWrapper = data?.data?.tweetResult || data?.data?.tweet_result_by_rest_id;
-              if (singleWrapper?.result) {
-                const rawResult = singleWrapper.result;
-                const fallbackId = singleWrapper.rest_id ? String(singleWrapper.rest_id) : undefined;
-                const normalizedRaw = mergeRawTweetPayload(null, rawResult, fallbackId);
-                const t = parseTweetResult(normalizedRaw);
-                if (t && t.tweet_id) {
-                  if (t.tweet_id === cleanId) {
-                    rawMainTweetResult = rawMainTweetResult
-                      ? mergeRawTweetPayload(rawMainTweetResult, normalizedRaw, cleanId)
-                      : normalizedRaw;
-                    collectExpectedArticleTweetIds(rawMainTweetResult, expectedArticleTweetIds);
-                  }
-                  capturedTweets.push(t);
-                }
-              }
-
-              // 3. 时间线指令 (包含追评及对话流)
-              const inst = extractTimelineInstructions(data);
-              if (inst.length > 0) {
-                const instTweets = parseTimelineInstructions(inst);
-                capturedTweets.push(...instTweets);
-              }
-            } catch {
-              // ignore
+            // 3. 时间线指令 (包含追评及对话流)
+            const inst = extractTimelineInstructions(data);
+            if (inst.length > 0) {
+              const instTweets = parseTimelineInstructions(inst);
+              capturedTweets.push(...instTweets);
             }
+          } catch {
+            // ignore
           }
-        });
+        }
+      });
 
-        process.stderr.write(
-          headless
-            ? `🌐 正在打开推文页面 ${targetUrl} 并获取内容...\n`
-            : `🌐 正在通过可见浏览器窗口打开 ${targetUrl} 获取内容...\n`
-        );
-        await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
+      process.stderr.write(`🌐 正在后台加载推文页面 ${targetUrl} 并获取内容...\n`);
+      await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: timeoutMs, retries: 2 });
 
-        let mainCapturedAt = -1;
-        for (let i = 0; i < Math.max(30, timeout); i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          if (capturedTweets.length > 0) {
-            const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
-            if (hasMain) {
-              if (mainCapturedAt < 0) mainCapturedAt = i;
-              const waitElapsed = i - mainCapturedAt;
-              // 若主推文为包含内嵌推文的 Article，最多留 6 秒等待所有 TweetResultsByRestIds 补齐
-              if (
-                expectedArticleTweetIds.size > 0 &&
-                embeddedTweetsMap.size < expectedArticleTweetIds.size &&
-                waitElapsed < 6
-              ) {
-                if (waitElapsed === 2 || waitElapsed === 4) {
-                  await page.evaluate(() => window.scrollBy(0, 1200)).catch(() => {});
-                }
-                continue;
+      let mainCapturedAt = -1;
+      for (let i = 0; i < Math.max(30, timeout); i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (capturedTweets.length > 0) {
+          const hasMain = capturedTweets.some((t) => t.tweet_id === cleanId);
+          if (hasMain) {
+            if (mainCapturedAt < 0) mainCapturedAt = i;
+            const waitElapsed = i - mainCapturedAt;
+            // 若主推文为包含内嵌推文的 Article，最多留 6 秒等待所有 TweetResultsByRestIds 补齐
+            if (
+              expectedArticleTweetIds.size > 0 &&
+              embeddedTweetsMap.size < expectedArticleTweetIds.size &&
+              waitElapsed < 6
+            ) {
+              if (waitElapsed === 2 || waitElapsed === 4) {
+                await page.evaluate(() => window.scrollBy(0, 1200)).catch(() => {});
               }
-              if (!shouldFetchReplies) {
-                await new Promise((r) => setTimeout(r, 1000));
-                break;
-              } else if (shouldFetchReplies) {
-                await new Promise((r) => setTimeout(r, 2000));
-                break;
-              }
+              continue;
+            }
+            if (!shouldFetchReplies) {
+              await new Promise((r) => setTimeout(r, 1000));
+              break;
+            } else if (shouldFetchReplies) {
+              await new Promise((r) => setTimeout(r, 2000));
+              break;
             }
           }
         }
-      } finally {
-        await browser.close();
       }
-
-      return { capturedTweets, rawMainTweetResult, embeddedTweetsMap, hitHttp403 };
-    };
-
-    let attemptResult: {
-      capturedTweets: Tweet[];
-      rawMainTweetResult: any;
-      embeddedTweetsMap: Map<string, Tweet>;
-      hitHttp403: boolean;
-    };
-
-    try {
-      attemptResult = await runAttempt(true);
-    } catch (err: any) {
-      const msg = String(err?.message || err);
-      if (msg.includes('ERR_HTTP_RESPONSE_CODE_FAILURE')) {
-        process.stderr.write(
-          `⚠️ X 新版前端拒绝了无头模式访问 (HTTP 403)，正在自动切换为可见浏览器窗口重试...\n`
-        );
-        attemptResult = await runAttempt(false);
-      } else {
-        throw err;
-      }
+    } finally {
+      await crawlSession.close();
     }
-
-    if (attemptResult.hitHttp403 && !attemptResult.capturedTweets.some((t) => t.tweet_id === cleanId)) {
-      process.stderr.write(
-        `⚠️ X 新版前端拒绝了无头模式访问 (HTTP 403)，正在自动切换为可见浏览器窗口重试...\n`
-      );
-      attemptResult = await runAttempt(false);
-    }
-
-    const { capturedTweets, rawMainTweetResult, embeddedTweetsMap } = attemptResult;
 
     // 若存在合并后的原始主推文（尤其是含内嵌推文或 SSR 分片合并的 Article），用最终合并体重新解析
     if (rawMainTweetResult) {
@@ -1366,14 +1549,27 @@ export class XClient {
 
     const interceptedPayloads: any[] = [];
     const domExtractedTrends: TrendTopic[] = [];
-    const browser = await this.launchBrowser(true);
+    const crawlSession = await this.openCrawlSession(timeoutMs);
 
     try {
-      const context = await this.setupContext(browser, timeoutMs);
-      const page = await context.newPage();
+      const page = crawlSession.page;
 
-      page.on('response', async (res: Response) => {
+      page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
+        const contentType = res.headers()['content-type'] || '';
+        if (res.status() === 200 && contentType.includes('text/html') && url.includes('/explore')) {
+          try {
+            const html = await res.text();
+            for (const payload of extractSsrPayloadsFromHtml(html)) {
+              if (payload?.data?.explore_page || payload?.data?.timeline) {
+                interceptedPayloads.push(payload);
+              }
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (
           url.includes('/graphql/') &&
           (url.includes('ExplorePage') ||
@@ -1393,7 +1589,7 @@ export class XClient {
 
       process.stderr.write(`🌐 正在打开 X 趋势中心 (${targetUrl}) 并拦截热点流...\n`);
       // Use 'commit' navigation to avoid timeouts caused by heavy background media / tracking requests
-      await page.goto(targetUrl, { waitUntil: 'commit', timeout: Math.min(timeoutMs, 25000) });
+      await this.safeNavigate(page, targetUrl, { waitUntil: 'commit', timeout: Math.min(timeoutMs, 25000) });
 
       // Intelligent polling: proceed as soon as GraphQL payloads are received or DOM trends are rendered
       for (let i = 0; i < Math.max(15, timeout); i++) {
@@ -1476,7 +1672,7 @@ export class XClient {
         // ignore DOM extraction errors
       }
     } finally {
-      await browser.close();
+      await crawlSession.close();
     }
 
     const allTrends: TrendTopic[] = [];
