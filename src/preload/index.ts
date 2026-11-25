@@ -107,6 +107,7 @@ export interface XtractAPI {
 
   // Tweets & Timeline
   fetchFollowing: (options?: { pages?: number; limit?: number }) => Promise<{ fetched: number; inserted: number; skipped: number }>;
+  fetchRecommended: (options?: { pages?: number; limit?: number }) => Promise<{ fetched: number; inserted: number; skipped: number }>;
   fetchUser: (
     username: string,
     options?: { limit?: number }
@@ -181,6 +182,8 @@ export const xtractApiImplementation: XtractAPI = {
 
   fetchFollowing: (options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_FETCH_FOLLOWING, options),
+  fetchRecommended: (options) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TWEETS_FETCH_RECOMMENDED, options),
   fetchUser: (username, options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_FETCH_USER, { username, ...options }),
   fetchList: (listId, options) =>

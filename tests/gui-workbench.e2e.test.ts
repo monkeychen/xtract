@@ -42,6 +42,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         viewCalls: [] as any[],
         listCalls: [] as any[],
         fetchFollowingCalls: [] as any[],
+        fetchRecommendedCalls: [] as any[],
         fetchUserCalls: [] as any[],
         fetchListCalls: [] as any[],
         searchTweetsCalls: [] as any[],
@@ -277,10 +278,14 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           return { count: 1, tweets: [mockDbTweets[1]] };
         },
         fetchListTimeline: async () => ({ count: 2, tweets: mockDbTweets }),
-        // --- 真实抓取 API（handleCrawl 直接调用的三个入口）---
+        // --- 真实抓取 API（handleCrawl 直接调用的四个入口）---
         fetchFollowing: async (opts: any) => {
           (window as any).__recordedCalls.fetchFollowingCalls.push(opts);
           return { fetched: opts?.limit ?? 20, inserted: 5, skipped: 1 };
+        },
+        fetchRecommended: async (opts: any) => {
+          (window as any).__recordedCalls.fetchRecommendedCalls.push(opts);
+          return { fetched: opts?.limit ?? 20, inserted: 6, skipped: 2 };
         },
         fetchUser: async (username: string, opts: any) => {
           (window as any).__recordedCalls.fetchUserCalls.push({ username, opts });
@@ -1214,6 +1219,40 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
 
     // Restore default created_at
     await sortSelect.selectOption('created_at');
+    await page.waitForTimeout(200);
+  });
+
+  it('Flow 23: Recommended Stream (For You) tab isolation and crawl trigger', async () => {
+    const recChip = page.locator('#chip-source-recommended');
+    await expect(recChip.isVisible()).resolves.toBe(true);
+    await recChip.click();
+    await page.waitForTimeout(300);
+
+    // Source badge switches to ✨ 推荐流 and IPC queries sourceType: 'recommended'
+    const badgeText = await page.locator('#feed-source-badge').textContent();
+    expect(badgeText).toContain('推荐流');
+
+    const listCalls = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
+    expect(listCalls[listCalls.length - 1]?.sourceType).toBe('recommended');
+
+    // Select 20 via recommended split-button dropdown and trigger fetchRecommended IPC
+    await page.locator('#zone-recommended .split-btn-arrow').click();
+    await page.waitForTimeout(150);
+    await page.locator('#menu-recommended .split-btn-item', { hasText: '20 条' }).click();
+    await page.waitForTimeout(150);
+
+    const crawlBtn = page.locator('#zone-recommended .split-btn-main');
+    await expect(crawlBtn.isVisible()).resolves.toBe(true);
+    await crawlBtn.click();
+    await page.waitForTimeout(400);
+
+    const recCalls = await page.evaluate(() => (window as any).__recordedCalls.fetchRecommendedCalls);
+    expect(recCalls.length).toBeGreaterThanOrEqual(1);
+    expect(recCalls[recCalls.length - 1]?.limit).toBe(20);
+    expect(recCalls[recCalls.length - 1]?.pages).toBe(1);
+
+    // Switch back to following tab for clean state
+    await page.locator('#chip-source-following').click();
     await page.waitForTimeout(200);
   });
 });

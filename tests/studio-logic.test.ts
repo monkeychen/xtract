@@ -389,6 +389,22 @@ describe('buildQueryOptions (数据源→查询参数映射 §2.4)', () => {
     const r = buildQueryOptions('following', { ...params, streamFilter: 'state', queryParam: '' });
     expect(r.query).toBeUndefined();
   });
+
+  it('should map recommended source to sourceType "recommended" with streamFilter query', () => {
+    const r = buildQueryOptions('recommended', { ...params, streamFilter: ' AI ' });
+    expect(r).toEqual({
+      sourceType: 'recommended',
+      query: 'AI',
+      user: undefined,
+      listId: undefined,
+    });
+  });
+
+  it('should clear query for recommended source when queryParam is explicitly empty', () => {
+    const r = buildQueryOptions('recommended', { ...params, streamFilter: 'AI', queryParam: '' });
+    expect(r.sourceType).toBe('recommended');
+    expect(r.query).toBeUndefined();
+  });
 });
 
 // ============================================================================

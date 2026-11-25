@@ -8,7 +8,11 @@ import {
   parseTimelineInstructions,
   parseTweetResult,
 } from '../src/main/client/parser.js';
-import { fetchTweetThreadViaHttpSsr } from '../src/main/client/index.js';
+import {
+  fetchTweetThreadViaHttpSsr,
+  isFollowingTimelineUrl,
+  isRecommendedTimelineUrl,
+} from '../src/main/client/index.js';
 
 describe('x-web SSR & Timeline Schema Compatibility (v0.1.4)', () => {
   it('1. parseTimelineInstructions parses x-web __typename, entry_id, content.content and module item.content', () => {
@@ -302,5 +306,35 @@ describe('x-web SSR & Timeline Schema Compatibility (v0.1.4)', () => {
         is_article: true,
       })
     ).toBe(false);
+  });
+
+  it('5. isFollowingTimelineUrl & isRecommendedTimelineUrl strictly isolate Following vs For You GraphQL operations', () => {
+    const followingUrls = [
+      'https://x.com/i/api/graphql/abc123/HomeLatestTimeline?variables=%7B%7D',
+      'https://x.com/i/api/graphql/xyz789/HomeLatestTimelineQuery?variables=%7B%7D',
+    ];
+    const recommendedUrls = [
+      'https://x.com/i/api/graphql/def456/HomeTimeline?variables=%7B%7D',
+      'https://x.com/i/api/graphql/ghi789/HomeTimelineV2?variables=%7B%7D',
+      'https://x.com/i/api/graphql/jkl012/HomeTimelineQuery?variables=%7B%7D',
+    ];
+    const unrelatedUrls = [
+      'https://x.com/i/api/graphql/mno345/TimelineResponse?variables=%7B%7D',
+      'https://x.com/i/api/graphql/pqr678/SearchTimeline?variables=%7B%7D',
+      'https://x.com/home',
+    ];
+
+    for (const url of followingUrls) {
+      expect(isFollowingTimelineUrl(url)).toBe(true);
+      expect(isRecommendedTimelineUrl(url)).toBe(false);
+    }
+    for (const url of recommendedUrls) {
+      expect(isFollowingTimelineUrl(url)).toBe(false);
+      expect(isRecommendedTimelineUrl(url)).toBe(true);
+    }
+    for (const url of unrelatedUrls) {
+      expect(isFollowingTimelineUrl(url)).toBe(false);
+      expect(isRecommendedTimelineUrl(url)).toBe(false);
+    }
   });
 });

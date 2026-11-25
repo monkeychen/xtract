@@ -139,6 +139,55 @@ export class Pipeline {
     }
   }
 
+  async fetchRecommendedAndStore(
+    optionsOrPages?: { maxPages?: number; limit?: number; timeout?: number } | number,
+    timeout?: number
+  ): Promise<[number, number, number]> {
+    let pages: number | undefined;
+    let limit: number | undefined;
+    let actualTimeout: number | undefined = timeout;
+
+    if (typeof optionsOrPages === 'number') {
+      pages = optionsOrPages;
+    } else if (optionsOrPages && typeof optionsOrPages === 'object') {
+      pages = optionsOrPages.maxPages;
+      limit = optionsOrPages.limit;
+      if (optionsOrPages.timeout !== undefined) {
+        actualTimeout = optionsOrPages.timeout;
+      }
+    }
+
+    const effectivePages = pages || (limit ? Math.max(1, Math.ceil(limit / 20)) : Config.FETCH_MAX_PAGES);
+    const targetDesc = limit ? `目标 ${limit} 条 (至多 ${effectivePages} 页)` : `计划拉取 ${effectivePages} 页`;
+    process.stderr.write(`⏳ 开始从 X (For You 推荐流) 抓取推文，${targetDesc}...\n`);
+
+    const contentTypes = Config.FETCH_CONTENT_TYPES;
+    const tweets = await this.client.fetchRecommendedTimeline({
+      maxPages: effectivePages,
+      limit,
+      timeout: actualTimeout,
+      contentTypes,
+    });
+    const fetchedCount = tweets.length;
+    process.stderr.write(`✓ 成功拉取到 ${fetchedCount} 条推荐流推文\n`);
+
+    if (fetchedCount > 0) {
+      const nowStr = new Date().toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
+      const rawPath = path.join(Config.RAW_DIR, `raw_recommended_${nowStr}.json`);
+      fs.writeFileSync(rawPath, JSON.stringify(tweets, null, 2), 'utf-8');
+
+      const targetTweets = tweets.filter((t) => matchesContentTypes(t, contentTypes));
+      const { inserted, skipped } = this.storage.saveTweets(targetTweets, 'recommended');
+      process.stderr.write(
+        `✓ 本地库更新完毕：新增入库 ${inserted} 条，跳过重复 ${skipped} 条 (库内总计 ${this.storage.getTotalCount()} 条)\n`
+      );
+      return [fetchedCount, inserted, skipped];
+    } else {
+      process.stderr.write('⚠️ 未拉取到推荐流推文，请检查网络或账号状态\n');
+      return [0, 0, 0];
+    }
+  }
+
   async fetchUserAndStore(
     username: string,
     limit = 20,

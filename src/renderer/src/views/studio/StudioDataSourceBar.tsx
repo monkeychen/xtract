@@ -59,7 +59,7 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
         minHeight: '54px',
       }}
     >
-      {/* 左侧：数据源分段切换（顺序：关注流 → 博主追踪 → X 列表 → 全网搜索） */}
+      {/* 左侧：数据源分段切换（顺序：关注流 → 推荐流 → 博主追踪 → X 列表 → 全网搜索） */}
       <div id="studio-source-chips" style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
         <div
           id="chip-source-following"
@@ -67,6 +67,13 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
           onClick={() => onSwitchSource('following')}
         >
           关注流
+        </div>
+        <div
+          id="chip-source-recommended"
+          className={`fmt-chip ${dataSource === 'recommended' ? 'active' : ''}`}
+          onClick={() => onSwitchSource('recommended')}
+        >
+          推荐流
         </div>
         <div
           id="chip-source-user"
@@ -127,6 +134,75 @@ export const StudioDataSourceBar: React.FC<StudioDataSourceBarProps> = ({
                 <span>▾</span>
               </button>
               <div id="menu-following" className={`split-btn-menu ${openMenu === 'following' ? 'open' : ''}`}>
+                <div
+                  className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
+                  onClick={() => {
+                    onCrawlLimitChange(20);
+                    onOpenMenuChange(null);
+                  }}
+                >
+                  <span>20 条 · 日常极速 (~2秒)</span>
+                  <span className="limit-check">{crawlLimit === 20 ? '✓' : ''}</span>
+                </div>
+                <div
+                  className={`split-btn-item ${crawlLimit === 50 ? 'active' : ''}`}
+                  onClick={() => {
+                    onCrawlLimitChange(50);
+                    onOpenMenuChange(null);
+                  }}
+                >
+                  <span>50 条 · 近期汇总 (~6秒)</span>
+                  <span className="limit-check">{crawlLimit === 50 ? '✓' : ''}</span>
+                </div>
+                <div
+                  className={`split-btn-item ${crawlLimit === 100 ? 'active' : ''}`}
+                  onClick={() => {
+                    onCrawlLimitChange(100);
+                    onOpenMenuChange(null);
+                  }}
+                >
+                  <span>100 条 · 深度调研 (~15秒)</span>
+                  <span className="limit-check">{crawlLimit === 100 ? '✓' : ''}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 容器 1.5: 推荐流 (For You) 操作区 */}
+        {dataSource === 'recommended' && (
+          <div id="zone-recommended" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <input
+              id="stream-filter-input"
+              className="text-input"
+              style={{ flex: 1, minWidth: '160px', fontSize: '13px' }}
+              type="text"
+              placeholder="🔍 输入【关键词】即触发本地搜索推荐流推文"
+              value={streamFilter}
+              onChange={(e) => onStreamFilterChange(e.target.value)}
+            />
+            <div className="split-btn-group">
+              <button
+                className="cta-button split-btn-main"
+                onClick={() => onCrawl('recommended')}
+                disabled={isLoading}
+              >
+                <span id="label-crawl-recommended">
+                  {isLoading && crawlProgress?.source === 'recommended'
+                    ? '⏳ 正在抓取...'
+                    : `🔄 抓取最新 ${crawlLimit} 条`}
+                </span>
+              </button>
+              <button
+                className="cta-button split-btn-arrow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenMenuChange(openMenu === 'recommended' ? null : 'recommended');
+                }}
+              >
+                <span>▾</span>
+              </button>
+              <div id="menu-recommended" className={`split-btn-menu ${openMenu === 'recommended' ? 'open' : ''}`}>
                 <div
                   className={`split-btn-item ${crawlLimit === 20 ? 'active' : ''}`}
                   onClick={() => {

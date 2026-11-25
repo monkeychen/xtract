@@ -94,6 +94,7 @@ describe('Preload & IPC Communication Bridge', () => {
 
     // Tweets & Search
     expect(typeof api.fetchFollowing).toBe('function');
+    expect(typeof api.fetchRecommended).toBe('function');
     expect(typeof api.fetchUser).toBe('function');
     expect(typeof api.fetchList).toBe('function');
     expect(typeof api.searchTweets).toBe('function');
@@ -124,6 +125,8 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(mockHandlers.has(IPC_CHANNELS.TRENDS_FETCH)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.TRENDS_DIGEST)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.DIGEST_DAILY)).toBe(true);
+    expect(mockHandlers.has(IPC_CHANNELS.TWEETS_FETCH_FOLLOWING)).toBe(true);
+    expect(mockHandlers.has(IPC_CHANNELS.TWEETS_FETCH_RECOMMENDED)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.TWEETS_LIST)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.TWEETS_DELETE)).toBe(true);
     expect(mockHandlers.has(IPC_CHANNELS.WINDOW_MINIMIZE)).toBe(true);

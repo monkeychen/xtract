@@ -263,6 +263,8 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
       loadLocalTweets(50, 'search', false, searchQuery);
     } else if (newSource === 'following') {
       loadLocalTweets(50, 'following', false);
+    } else if (newSource === 'recommended') {
+      loadLocalTweets(50, 'recommended', false);
     } else {
       const currentListId = selectedList === 'custom' ? customListId : selectedList;
       loadLocalTweets(50, 'lists', false, undefined, undefined, currentListId);
@@ -290,13 +292,14 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     }, 250);
   };
 
-  // 关注流实时过滤输入框联动后端 SQLite 全量查询
+  // 关注流 / 推荐流实时过滤输入框联动后端 SQLite 全量查询
   const streamFilterDebounceRef = useRef<any>(null);
   const handleStreamFilterChange = (val: string) => {
     setStreamFilter(val);
+    const activeStreamSource: DataSource = dataSource === 'recommended' ? 'recommended' : 'following';
     if (streamFilterDebounceRef.current) clearTimeout(streamFilterDebounceRef.current);
     streamFilterDebounceRef.current = setTimeout(() => {
-      loadLocalTweets(50, 'following', false, val);
+      loadLocalTweets(50, activeStreamSource, false, val);
     }, 250);
   };
 
@@ -373,6 +376,8 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
         return;
       }
       title = `正在抓取博主 @${effectiveUser.replace(/^@/, '')} 的推文包`;
+    } else if (source === 'recommended') {
+      title = '正在从 X 官方流实时抓取推荐流';
     } else if (source === 'lists') {
       title = '正在从 X 列表实时抓取推文';
     }
@@ -407,6 +412,12 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
       if (source === 'following') {
         const pages = computePages(crawlLimit);
         const res = await api.fetchFollowing({ pages, limit: crawlLimit });
+        fetchedCount = res.fetched;
+        insertedCount = res.inserted;
+        skippedCount = res.skipped;
+      } else if (source === 'recommended') {
+        const pages = computePages(crawlLimit);
+        const res = await api.fetchRecommended({ pages, limit: crawlLimit });
         fetchedCount = res.fetched;
         insertedCount = res.inserted;
         skippedCount = res.skipped;
@@ -489,6 +500,8 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
         refreshedTweets = await loadLocalTweets(50, 'user', false, undefined, h);
       } else if (source === 'search') {
         refreshedTweets = await loadLocalTweets(50, 'search', false, effectiveQuery);
+      } else if (source === 'recommended') {
+        refreshedTweets = await loadLocalTweets(50, 'recommended', false);
       } else {
         refreshedTweets = await loadLocalTweets(50, 'following', false);
       }

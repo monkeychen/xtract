@@ -50,7 +50,7 @@ export interface Tweet {
   video_poster?: string;
   is_note_tweet?: boolean;
   is_article?: boolean;
-  source_type?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
+  source_type?: 'following' | 'recommended' | 'search' | 'trends' | 'user' | 'list' | 'legacy';
   list_id?: string;
   fetched_at?: string;
 }
@@ -93,7 +93,7 @@ export interface TweetQueryOptions {
   offset?: number;
   minLikes?: number;
   minRetweets?: number;
-  sourceType?: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' | 'all';
+  sourceType?: 'following' | 'recommended' | 'search' | 'trends' | 'user' | 'list' | 'legacy' | 'all';
   user?: string;
   query?: string;
   listId?: string;

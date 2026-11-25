@@ -365,7 +365,7 @@ export class Storage {
 
   public saveTweets(
     tweets: Partial<Tweet>[],
-    defaultSourceType: 'following' | 'search' | 'trends' | 'user' | 'list' | 'legacy' = 'following',
+    defaultSourceType: 'following' | 'recommended' | 'search' | 'trends' | 'user' | 'list' | 'legacy' = 'following',
     listId?: string
   ): { inserted: number; skipped: number } {
     let inserted = 0;

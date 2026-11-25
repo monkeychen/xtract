@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
 
   // Tweets & Timeline
   TWEETS_FETCH_FOLLOWING: 'tweets:fetch-following',
+  TWEETS_FETCH_RECOMMENDED: 'tweets:fetch-recommended',
   TWEETS_FETCH_USER: 'tweets:fetch-user',
   TWEETS_FETCH_LIST: 'tweets:fetch-list',
   TWEETS_SEARCH: 'tweets:search',

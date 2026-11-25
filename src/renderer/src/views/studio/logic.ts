@@ -9,7 +9,7 @@ import type { StreamEvent } from '../../../../preload/index.js';
  * 本文件不得引入任何 React 依赖或浏览器 API。
  */
 
-export type DataSource = 'following' | 'search' | 'user' | 'lists';
+export type DataSource = 'following' | 'recommended' | 'search' | 'user' | 'lists';
 
 export interface BuildQueryParams {
   streamFilter: string;
@@ -53,6 +53,9 @@ export function buildQueryOptions(
         ? params.customListId
         : params.selectedList
     ).trim() || undefined;
+  } else if (source === 'recommended') {
+    sourceType = 'recommended';
+    q = (params.queryParam !== undefined ? params.queryParam : params.streamFilter).trim() || undefined;
   } else {
     sourceType = 'following';
     q = (params.queryParam !== undefined ? params.queryParam : params.streamFilter).trim() || undefined;

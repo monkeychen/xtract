@@ -860,6 +860,42 @@ describe('Storage Module', () => {
       storage.queryTweets({ sortBy: 'created_at; DROP TABLE tweets;--' as any }).map((t) => t.tweet_id)
     ).toEqual(['s_new_quiet', 's_mid_views', 's_old_viral']);
   });
+
+  it('test_recommended_source_type_is_strictly_isolated_from_following', () => {
+    storage.saveTweets(
+      [
+        {
+          tweet_id: 'rec_1',
+          author_username: 'unfollowed_author',
+          text: 'For You recommended tweet',
+          created_at: '2026-10-02T10:00:00.000Z',
+          like_count: 300,
+        },
+      ],
+      'recommended'
+    );
+    storage.saveTweets(
+      [
+        {
+          tweet_id: 'fol_1',
+          author_username: 'followed_author',
+          text: 'Strictly followed tweet',
+          created_at: '2026-10-02T09:00:00.000Z',
+          like_count: 100,
+        },
+      ],
+      'following'
+    );
+
+    const recList = storage.queryTweets({ sourceType: 'recommended' });
+    expect(recList.map((t) => t.tweet_id)).toEqual(['rec_1']);
+    expect(recList[0].source_type).toBe('recommended');
+    expect(storage.countTweets({ sourceType: 'recommended' })).toBe(1);
+
+    const folList = storage.queryTweets({ sourceType: 'following' });
+    expect(folList.map((t) => t.tweet_id)).toEqual(['fol_1']);
+    expect(storage.countTweets({ sourceType: 'following' })).toBe(1);
+  });
 });
 
 

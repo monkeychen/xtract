@@ -402,7 +402,7 @@ export function registerIpcHandlers(
         } catch {}
       };
 
-      sendEv('fetch', '🌐 正在启动真实 Chrome 浏览器并建立安全会话...', 20);
+      sendEv('fetch', '🌐 正在建立后台静默会话并监听关注流...', 20);
       try {
         sendEv('fetch', '⏳ 正在从 X (关注流) 拦截推文数据包...', 45);
         const [fetched, inserted, skipped] = await pipeline.fetchAndStore({
@@ -410,6 +410,39 @@ export function registerIpcHandlers(
           limit: options?.limit,
         });
         sendEv('done', `✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条`, 100);
+        return { fetched, inserted, skipped };
+      } catch (err: any) {
+        sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);
+        throw err;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.TWEETS_FETCH_RECOMMENDED,
+    async (event, options?: { pages?: number; limit?: number }) => {
+      const taskId = `recommended_${Date.now()}`;
+      const sendEv = (stage: string, text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: stage as any,
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      sendEv('fetch', '🌐 正在建立后台静默会话并监听推荐流...', 20);
+      try {
+        sendEv('fetch', '⏳ 正在从 X (推荐流) 拦截推文数据包...', 45);
+        const [fetched, inserted, skipped] = await pipeline.fetchRecommendedAndStore({
+          maxPages: options?.pages,
+          limit: options?.limit,
+        });
+        sendEv('done', `✓ 抓取完成：获取 ${fetched} 条推荐流推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条`, 100);
         return { fetched, inserted, skipped };
       } catch (err: any) {
         sendEv('error', `❌ 抓取失败: ${err?.message || String(err)}`, 100);

@@ -74,6 +74,7 @@ if (isCLI) {
     .option('--trends', '查看全网热门趋势榜单看板')
     .option('--trends-digest', '全自动趋势研报（抓取热榜、主动挖掘代表性讨论并生成研报）')
     .option('--fetch-only', '仅抓取 Following 推文并存入本地 SQLite，不生成总结')
+    .option('--recommended', '抓取 X 推荐流 (For You) 推文并存入本地 SQLite')
     .option('--report-only', '仅根据本地已有推文生成今日早报，不发起网络请求')
     .option('--search <query>', '按关键词或高级语法搜索推文')
     .option('--search-type <type>', '搜索结果类型：live (实时最新) 或 top (热门)', 'live')
@@ -556,7 +557,7 @@ if (isCLI) {
         return;
       }
 
-      // 11. Fetch only
+      // 11. Fetch only (Following)
       if (options.fetchOnly) {
         const [fetched, inserted, skipped] = await pipeline.fetchAndStore({
           maxPages: pages,
@@ -567,6 +568,22 @@ if (isCLI) {
           process.stdout.write(JSON.stringify({ fetched, inserted, skipped }) + '\n');
         } else {
           process.stdout.write(`✓ 抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条\n`);
+        }
+        finish(0);
+        return;
+      }
+
+      // 11.5 Recommended timeline (For You)
+      if (options.recommended) {
+        const [fetched, inserted, skipped] = await pipeline.fetchRecommendedAndStore({
+          maxPages: pages,
+          limit: options.limit ? limit : undefined,
+          timeout,
+        });
+        if (isJson) {
+          process.stdout.write(JSON.stringify({ fetched, inserted, skipped }) + '\n');
+        } else {
+          process.stdout.write(`✓ 推荐流抓取完成：获取 ${fetched} 条推文，新增入库 ${inserted} 条，跳过去重 ${skipped} 条\n`);
         }
         finish(0);
         return;

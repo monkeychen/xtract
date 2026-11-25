@@ -88,6 +88,7 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
             </select>
             <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {dataSource === 'following' && '📡 关注流'}
+              {dataSource === 'recommended' && '✨ 推荐流'}
               {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
               {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
               {dataSource === 'lists' && '📋 X 列表'}
@@ -240,15 +241,17 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
                 {dataSource === 'user' && (userHandle.trim() ? `本地数据库暂无 @${userHandle.trim().replace(/^@/, '')} 的推文` : '请输入博主用户名查看其推文')}
                 {dataSource === 'search' && (searchQuery.trim() ? `本地数据库暂无与「${searchQuery.trim()}」相关的推文` : '本地数据库暂无推文')}
                 {dataSource === 'following' && '本地暂无关注流推文'}
+                {dataSource === 'recommended' && '本地暂无推荐流推文'}
                 {dataSource === 'lists' && '本地暂无该列表推文'}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
                 {dataSource === 'user' && (userHandle.trim() ? '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库' : '在上方输入框中输入博主用户名（如 @username），可检索本地或抓取线上最新推文')}
                 {dataSource === 'search' && (searchQuery.trim() ? '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库' : '在上方输入关键词检索本地推文，或输入后点击「搜索抓取」从 X 官方全网获取')}
                 {dataSource === 'following' && '点击右上角「抓取最新」，一键拉取关注流最新推文'}
+                {dataSource === 'recommended' && '点击右上角「抓取最新」，一键拉取推荐流 (For You) 最新推文'}
                 {dataSource === 'lists' && '点击右上角「抓取最新」，从指定列表拉取最新推文'}
               </div>
-              {(dataSource === 'following' || dataSource === 'lists' || (dataSource === 'search' && searchQuery.trim()) || (dataSource === 'user' && userHandle.trim())) && (
+              {(dataSource === 'following' || dataSource === 'recommended' || dataSource === 'lists' || (dataSource === 'search' && searchQuery.trim()) || (dataSource === 'user' && userHandle.trim())) && (
                 <button
                   className="cta-button"
                   style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}

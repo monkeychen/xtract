@@ -52,6 +52,26 @@ export {
   isTweetContentIncomplete,
 };
 
+/**
+ * 协议级严格判定：仅放行「正在关注 (Following)」的 GraphQL 操作（HomeLatestTimeline / HomeLatestTimelineQuery）。
+ * 严禁放行 HomeTimeline / HomeTimelineV2（「为你推荐」），彻底杜绝未关注推荐账号混入关注流。
+ */
+export function isFollowingTimelineUrl(url: string): boolean {
+  return url.includes('/graphql/') && url.includes('HomeLatestTimeline');
+}
+
+/**
+ * 协议级严格判定：仅放行「为你推荐 (For You)」的 GraphQL 操作（HomeTimeline / HomeTimelineV2 / HomeTimelineQuery）。
+ * 严格排除 HomeLatestTimeline（「正在关注」），确保推荐流与关注流互不串台。
+ */
+export function isRecommendedTimelineUrl(url: string): boolean {
+  return (
+    url.includes('/graphql/') &&
+    url.includes('HomeTimeline') &&
+    !url.includes('HomeLatestTimeline')
+  );
+}
+
 export function resolveContentTypes(options?: {
   contentTypes?: readonly TweetContentType[];
   onlyLongTweets?: boolean;
@@ -688,12 +708,27 @@ export class XClient {
   }
 
   async fetchFollowingTimeline(options?: FetchTimelineOptions): Promise<Tweet[]> {
+    return this.fetchHomeTimelineTab('following', options);
+  }
+
+  async fetchRecommendedTimeline(options?: FetchTimelineOptions): Promise<Tweet[]> {
+    return this.fetchHomeTimelineTab('recommended', options);
+  }
+
+  private async fetchHomeTimelineTab(
+    mode: 'following' | 'recommended',
+    options?: FetchTimelineOptions
+  ): Promise<Tweet[]> {
     if (!Config.hasXCredentials()) {
       throw new Error(
         '未配置认证信息：请在桌面端设置中点击「从 Chrome 读取登录态」，'
         + '或在 .env 中填写 X_AUTH_TOKEN。'
       );
     }
+
+    const isFollowing = mode === 'following';
+    const matchTimelineUrl = isFollowing ? isFollowingTimelineUrl : isRecommendedTimelineUrl;
+    const modeLabel = isFollowing ? '正在关注 (Following)' : '为你推荐 (For You)';
 
     const limit = options?.limit;
     const maxPages = options?.maxPages || (limit ? Math.max(1, Math.ceil(limit / 20)) : Config.FETCH_MAX_PAGES);
@@ -709,14 +744,7 @@ export class XClient {
 
       page.on('response', async (res: InterceptedResponse) => {
         const url = res.url();
-        if (
-          url.includes('/graphql/') &&
-          (url.includes('HomeLatestTimeline') ||
-            url.includes('HomeTimeline') ||
-            url.includes('HomeTimelineV2') ||
-            url.includes('TimelineResponse')) &&
-          res.status() === 200
-        ) {
+        if (matchTimelineUrl(url) && res.status() === 200) {
           try {
             const data = await res.json();
             const inst = extractTimelineInstructions(data);
@@ -729,7 +757,7 @@ export class XClient {
         }
       });
 
-      process.stderr.write(`🌐 正在打开 x.com/home 并挂载网络监听器...\n`);
+      process.stderr.write(`🌐 正在打开 x.com/home 并挂载「${modeLabel}」专属网络监听器...\n`);
       await this.safeNavigate(page, 'https://x.com/home', { waitUntil: 'commit', timeout: timeoutMs });
 
       // Wait for navigation tabs or hydration
@@ -745,31 +773,58 @@ export class XClient {
         throw new Error('X 认证失败：页面被重定向至登录页。请检查 auth_token 是否过期。');
       }
 
-      // 切换至「正在关注 (Following)」标签页（兼容 Electron 隐藏窗口与 Playwright）
-      try {
-        const clickedLabel = await page.evaluate(`(() => {
-          const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
-          for (const t of tabs) {
-            const txt = (t.textContent || '').trim();
-            if (/Following|正在关注|关注/i.test(txt)) {
-              t.click();
-              return txt;
+      // 确保切换并锁定至目标标签页（通过 aria-selected="true" 二次确认，防止 React 尚未绑定时点击无效）
+      const tabSwitchScript = isFollowing
+        ? `(() => {
+            const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+            let target = tabs.find((t) => /Following|正在关注|关注/i.test((t.textContent || '').trim()));
+            if (!target && tabs.length > 1) target = tabs[1];
+            if (!target) return { found: false, selected: false, label: '' };
+            const already = target.getAttribute('aria-selected') === 'true';
+            if (!already) target.click();
+            return {
+              found: true,
+              selected: target.getAttribute('aria-selected') === 'true',
+              clicked: !already,
+              label: (target.textContent || '').trim(),
+            };
+          })()`
+        : `(() => {
+            const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+            let target = tabs.find((t) => /For you|为你推荐|推荐/i.test((t.textContent || '').trim()));
+            if (!target && tabs.length > 0) target = tabs[0];
+            if (!target) return { found: false, selected: false, label: '' };
+            const already = target.getAttribute('aria-selected') === 'true';
+            if (!already) target.click();
+            return {
+              found: true,
+              selected: target.getAttribute('aria-selected') === 'true',
+              clicked: !already,
+              label: (target.textContent || '').trim(),
+            };
+          })()`;
+
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (capturedInstructions.length > 0) break;
+        try {
+          const res = (await page.evaluate(tabSwitchScript)) as {
+            found?: boolean;
+            selected?: boolean;
+            clicked?: boolean;
+            label?: string;
+          };
+          if (res?.found) {
+            if (res.clicked) {
+              process.stderr.write(`📌 切换至「${modeLabel}」时间线 (${res.label || mode})...\n`);
+            }
+            if (res.selected) {
+              break;
             }
           }
-          if (tabs.length > 1) {
-            tabs[1].click();
-            return (tabs[1].textContent || '').trim() || 'tab[1]';
-          }
-          return '';
-        })()`);
-        if (clickedLabel) {
-          process.stderr.write(`📌 切换至「正在关注 (Following)」时间线 (${clickedLabel})...\n`);
-          // 清空点击前捕获的「为你推荐」批次，确保后续仅保留「正在关注」时间线
-          capturedInstructions.length = 0;
-          await new Promise((r) => setTimeout(r, 2500));
+        } catch {
+          // ignore transient DOM error while hydrating
         }
-      } catch {
-        // ignore tab click error
+        await new Promise((r) => setTimeout(r, 1000));
       }
 
       // Initial batch wait with gentle scroll assist

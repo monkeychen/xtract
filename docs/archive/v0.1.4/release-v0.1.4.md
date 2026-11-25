@@ -16,6 +16,7 @@ date: 2026-11-25
 ## 2. 变更记录
 
 ### Added
+- **新增「推荐流 (For You)」独立数据源**：顶栏新增「推荐流」标签页（与关注流彻底隔离，独立存储 `source_type = 'recommended'`），CLI 同步新增 `--recommended` 命令选项，支持零弹窗后台抓取 X「为你推荐」时间线。
 - **左侧文章列表支持多维度切换排序**：新增排序选择器（`最新发布` / `最近抓取` / `点赞最多` / `浏览最多`），直接触发 SQLite 全库重排并自动记忆偏好，选择「浏览最多」时同步在条目右侧展示浏览量。
 
 ### Changed
@@ -27,6 +28,7 @@ date: 2026-11-25
 - 修复 `parseTimelineInstructions` 与 `extractTimelineInstructions` 在 X 新版 `x-web` 时间线载荷下的 0 命中问题，全面兼容 `__typename` / `entry_id` / `content.content` / `module_items` / `TimelinePinEntry` 与 `list_by_rest_id_v2` / `user_result_by_screen_name` / `search_by_raw_query` 首屏 SSR HTML。
 - 修复 `fetchListTimeline` 误将 `list_by_rest_id_v2` 首段元信息分片判定为「列表不存在」的缺陷。
 - 修复纯转发帖（`RT @xxx: ...`）因携带他人 `/i/article/` 链接而被误判为 X Article 的问题，前后端统一排除纯转发壳。
+- 修复关注流抓取混入未关注「为你推荐 (For You)」账号的问题：在协议层严格隔离 `HomeLatestTimeline*`（关注流）与 `HomeTimeline*`（推荐流），并对「正在关注」标签点击做 `aria-selected="true"` 二次确认。
 
 ### Removed
 - 移除单推同步中遇 403 自动弹出可见 Chrome 窗口的临时回退逻辑。
@@ -44,14 +46,15 @@ date: 2026-11-25
 
 ### 4.1 真实 Electron 环境全链路零弹窗冒烟实测
 - **单篇 X Article 同步**（`xaiwind/2124724609358631007`）：✅ 纯 HTTP SSR 零弹窗，8,102 字 / 15 图
-- **关注流抓取**（`--fetch-only --limit 20`）：✅ Electron 隐藏窗口零弹窗，拉取 20 条
+- **关注流抓取**（`--fetch-only`，仅拦截 `HomeLatestTimeline*`）：✅ Electron 隐藏窗口零弹窗，纯关注账号无推荐混入
+- **推荐流抓取**（`--recommended`，仅拦截 `HomeTimeline*`）：✅ Electron 隐藏窗口零弹窗，独立入库 `source_type = 'recommended'`
 - **X 列表抓取**（`2100985900734062922`，`--limit 20`）：✅ Electron 隐藏窗口 + SSR 零弹窗，拉取 20 条
 - **全网搜索**（`--search "AI" --limit 10`）：✅ Electron 隐藏窗口 + SSR 零弹窗，拉取 10 条
 - **博主追踪**（`--user xaiwind --limit 5`）：✅ Electron 隐藏窗口零弹窗，拉取 5 条
 
 ### 4.2 五道自动化质量门禁（`pnpm verify` @ `0.1.4`）
 - `pnpm lint`：✅ 0 Error
-- `pnpm test`：✅ **29/29 测试文件、364/364 测试用例通过**（含 22/22 GUI E2E Flow）
+- `pnpm test`：✅ **29/29 测试文件、369/369 测试用例通过**（含 23/23 GUI E2E Flow）
 - `tsc --noEmit` & `pnpm build`：✅ 0 Error
 - `pnpm pack:dir && pnpm smoke`：✅ **4/4 通过**（`Xtract --version` 输出 `0.1.4`）
 
