@@ -48,6 +48,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
         searchTweetsCalls: [] as any[],
         savedUserLists: [] as any[],
         shortcutCalls: [] as any[],
+        batchExportCalls: [] as any[],
       };
 
       const mockDbTweets = [
@@ -332,8 +333,22 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           };
         },
         deleteTweets: async () => ({ deletedCount: 1 }),
+        batchExportTweets: async (req: any) => {
+          (window as any).__recordedCalls.batchExportCalls.push(req);
+          return {
+            mode: req.mode,
+            outputPath:
+              req.mode === 'merged'
+                ? `${req.targetDir}/xtract_export_2026-11-25`
+                : req.targetDir,
+            exportedCount: req.tweetIds.length,
+            failed: [],
+            downloadedImagesCount: 3,
+            downloadedVideosCount: 0,
+          };
+        },
         getConfig: async () => ({
-          appVersion: '0.1.4',
+          appVersion: '0.1.5',
           httpProxy: 'http://127.0.0.1:8118',
           llmProvider: 'qwen-token-plan',
           llmAuthMode: 'account',
@@ -368,7 +383,7 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           return {
             success: true,
             config: {
-              appVersion: '0.1.4',
+              appVersion: '0.1.5',
               httpProxy: updates?.HTTP_PROXY || 'http://127.0.0.1:8118',
               llmProvider: 'qwen-token-plan',
               llmAuthMode: 'account',
@@ -736,8 +751,8 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(300);
 
     expect(await page.locator('h2.serif-title', { hasText: '设置' }).isVisible()).toBe(true);
-    expect(await page.locator('#settings-app-version', { hasText: 'v0.1.4' }).isVisible()).toBe(true);
-    expect(await page.locator('#settings-footer-version', { hasText: 'Xtract v0.1.4' }).isVisible()).toBe(true);
+    expect(await page.locator('#settings-app-version', { hasText: 'v0.1.5' }).isVisible()).toBe(true);
+    expect(await page.locator('#settings-footer-version', { hasText: 'Xtract v0.1.5' }).isVisible()).toBe(true);
 
     const reasoningLabel = page.locator('div', { hasText: '深度思考' }).first();
     expect(await reasoningLabel.isVisible()).toBe(true);
@@ -1306,5 +1321,44 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await typeSelect.selectOption('all');
     await page.waitForTimeout(200);
     expect(await page.evaluate(() => window.localStorage.getItem('xtract:studio:contentType'))).toBe('all');
+  });
+
+  it('Flow 25: Batch Export dialog supports custom directory and merged/separate modes (v0.1.5)', async () => {
+    // Select first two tweets
+    const checkboxes = page.locator('#feed-list-container .tweet-check');
+    expect(await checkboxes.count()).toBeGreaterThanOrEqual(2);
+    await checkboxes.nth(0).click();
+    await checkboxes.nth(1).click();
+    await page.waitForTimeout(150);
+
+    // Open Batch Export dialog from floating bar
+    await page.locator('#btn-batch-export').click();
+    const dialog = page.locator('#batch-export-dialog');
+    await expect(dialog.isVisible()).resolves.toBe(true);
+    expect(await page.locator('#export-video-policy-status').isVisible()).toBe(true);
+
+    // Pick custom directory
+    await page.locator('#btn-select-export-dir').click();
+    await page.waitForTimeout(150);
+    expect(await page.locator('#export-target-dir-input').inputValue()).toBe('/tmp/custom_xtract');
+
+    // Toggle to separate then back to merged and confirm export
+    await page.locator('#export-mode-separate').click();
+    await page.locator('#export-mode-merged').click();
+    await page.locator('#btn-confirm-batch-export').click();
+    await page.waitForTimeout(400);
+
+    // Verify IPC call & Finder reveal & dialog closed & selection cleared
+    const exportCalls = await page.evaluate(() => (window as any).__recordedCalls.batchExportCalls);
+    expect(exportCalls.length).toBeGreaterThanOrEqual(1);
+    const lastCall = exportCalls[exportCalls.length - 1];
+    expect(lastCall.mode).toBe('merged');
+    expect(lastCall.targetDir).toBe('/tmp/custom_xtract');
+    expect(lastCall.tweetIds.length).toBe(2);
+
+    const revealed = await page.evaluate(() => (window as any).__recordedCalls.revealedPaths);
+    expect(revealed[revealed.length - 1]).toBe('/tmp/custom_xtract/xtract_export_2026-11-25');
+    await expect(dialog.isVisible()).resolves.toBe(false);
+    await expect(page.locator('#selbar').isVisible()).resolves.toBe(false);
   });
 });

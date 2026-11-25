@@ -339,4 +339,97 @@ describe('Pipeline and Summarizer Modules', () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('exportSelectedTweets silently refreshes incomplete articles and supports merged & separate export modes', async () => {
+    const origAutoVideo = process.env.AUTO_DOWNLOAD_VIDEOS;
+    const origRoot = process.env.XTRACT_STORAGE_ROOT;
+    process.env.AUTO_DOWNLOAD_VIDEOS = 'false';
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract_batch_exp_'));
+    const exportDir = path.join(tmpRoot, 'exported');
+    fs.mkdirSync(exportDir, { recursive: true });
+    process.env.XTRACT_STORAGE_ROOT = tmpRoot;
+    const tmpDb = path.join(tmpRoot, 'data', 'tweets.db');
+    const storage = new Storage(tmpDb, path.join(tmpRoot, 'articles'));
+
+    // Incomplete article preview (<400 chars) + already-complete tweet
+    storage.saveTweets(
+      [
+        {
+          tweet_id: '88001',
+          author_name: 'Alice',
+          author_username: 'alice',
+          text: '# Incomplete Preview Title',
+          created_at: '2026-11-25T10:00:00.000Z',
+          is_article: true,
+          like_count: 100,
+        },
+        {
+          tweet_id: '88002',
+          author_name: 'Bob',
+          author_username: 'bob',
+          text: 'Complete short tweet body.',
+          created_at: '2026-11-25T11:00:00.000Z',
+          like_count: 50,
+        },
+      ],
+      'following'
+    );
+
+    const fullArticleBody = '# Incomplete Preview Title\n\n' + '完整深度长文正文内容。'.repeat(60);
+    const mockClient: any = {
+      fetchTweetThread: vi.fn().mockResolvedValue([
+        {
+          tweet_id: '88001',
+          author_name: 'Alice',
+          author_username: 'alice',
+          text: fullArticleBody,
+          created_at: '2026-11-25T10:00:00.000Z',
+          is_article: true,
+          like_count: 100,
+          retweet_count: 10,
+        },
+      ]),
+    };
+
+    try {
+      const pipeline = new Pipeline(storage, mockClient);
+
+      // 1. Merged mode: silently fetches full text for 88001, skips refetch for 88002
+      const mergedRes = await pipeline.exportSelectedTweets({
+        tweetIds: ['88001', '88002'],
+        targetDir: exportDir,
+        mode: 'merged',
+      });
+      expect(mockClient.fetchTweetThread).toHaveBeenCalledTimes(1);
+      expect(mergedRes.mode).toBe('merged');
+      expect(mergedRes.exportedCount).toBe(2);
+      expect(mergedRes.failed).toEqual([]);
+      expect(fs.existsSync(path.join(mergedRes.outputPath, 'index.md'))).toBe(true);
+      const mergedMd = fs.readFileSync(path.join(mergedRes.outputPath, 'index.md'), 'utf-8');
+      expect(mergedMd).toContain('完整深度长文正文内容。');
+      expect(mergedMd).toContain('Complete short tweet body.');
+
+      // 2. Separate mode: creates flat {author}_{id}/index.md inside targetDir without re-fetching now-complete 88001
+      const sepDir = path.join(tmpRoot, 'exported_sep');
+      fs.mkdirSync(sepDir, { recursive: true });
+      const sepRes = await pipeline.exportSelectedTweets({
+        tweetIds: ['88001', '88002'],
+        targetDir: sepDir,
+        mode: 'separate',
+      });
+      expect(mockClient.fetchTweetThread).toHaveBeenCalledTimes(1); // still 1, already enriched!
+      expect(sepRes.mode).toBe('separate');
+      expect(sepRes.exportedCount).toBe(2);
+      expect(fs.existsSync(path.join(sepDir, 'alice_88001', 'index.md'))).toBe(true);
+      expect(fs.existsSync(path.join(sepDir, 'bob_88002', 'index.md'))).toBe(true);
+    } finally {
+      if (origAutoVideo === undefined) delete process.env.AUTO_DOWNLOAD_VIDEOS;
+      else process.env.AUTO_DOWNLOAD_VIDEOS = origAutoVideo;
+      if (origRoot === undefined) delete process.env.XTRACT_STORAGE_ROOT;
+      else process.env.XTRACT_STORAGE_ROOT = origRoot;
+      storage.close();
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

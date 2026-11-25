@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Tweet, TweetContentTypeFilter, TweetSortBy, XListInfo, StudioJumpAction } from '../../types.js';
+import type { BatchExportMode, Tweet, TweetContentTypeFilter, TweetSortBy, XListInfo, StudioJumpAction } from '../../types.js';
 import { api } from '../../services/api.js';
 import {
   buildQueryOptions,
@@ -86,6 +86,24 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+  const [batchExportDialogOpen, setBatchExportDialogOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<BatchExportMode>(() => {
+    try {
+      const saved = window.localStorage.getItem('xtract:studio:exportMode');
+      if (saved === 'merged' || saved === 'separate') return saved;
+    } catch {}
+    return 'merged';
+  });
+  const [exportTargetDir, setExportTargetDir] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem('xtract:studio:lastExportDir') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [autoDownloadVideos, setAutoDownloadVideos] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ text: string; percent: number } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -145,6 +163,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
         setPreviewImage(null);
         setDeleteConfirmOpen(false);
         setBatchDeleteConfirmOpen(false);
+        setBatchExportDialogOpen(false);
       }
     };
     document.addEventListener('click', handleDocClick);
@@ -159,6 +178,13 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
   useEffect(() => {
     const unsubscribe = api.onStreamEvent((event) => {
       if (!event) return;
+      if (event.stage === 'batch_export') {
+        setExportProgress({
+          text: event.text || '正在导出...',
+          percent: event.progress ?? 50,
+        });
+        return;
+      }
       setCrawlProgress((prev) => reduceStreamEvent(prev, event, dataSource));
       if (event.stage === 'error' || event.stage === 'done') {
         setIsLoading(false);
@@ -271,6 +297,7 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     // 否则删除确认弹窗仍开着，它确认时作用于的已是新数据源的推文。
     setDeleteConfirmOpen(false);
     setBatchDeleteConfirmOpen(false);
+    setBatchExportDialogOpen(false);
     setPreviewImage(null);
     if (newSource === 'user') {
       loadLocalTweets(50, 'user', false, undefined, userHandle);
@@ -656,44 +683,86 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     }
   };
 
-  // 逐篇触发真实的 Page Bundle 落盘导出（viewTweet 内部会生成
-  // output/{author}/{tweet_id}/index.md 并下载配图），而不是仅弹个 toast。
-  const handleBatchExport = async () => {
+  const handleExportModeChange = (nextMode: BatchExportMode) => {
+    setExportMode(nextMode);
+    try {
+      window.localStorage.setItem('xtract:studio:exportMode', nextMode);
+    } catch {}
+  };
+
+  const handleOpenBatchExportDialog = async () => {
+    if (checkedIds.size === 0) return;
+    setExportProgress(null);
+    setBatchExportDialogOpen(true);
+    try {
+      const cfg = await api.getConfig();
+      setAutoDownloadVideos(Boolean(cfg?.autoDownloadVideos));
+    } catch {
+      // keep previous state
+    }
+  };
+
+  const handleSelectExportDir = async (): Promise<string | null> => {
+    const picked = await api.selectDirectory(exportTargetDir || undefined);
+    if (picked) {
+      setExportTargetDir(picked);
+      try {
+        window.localStorage.setItem('xtract:studio:lastExportDir', picked);
+      } catch {}
+    }
+    return picked;
+  };
+
+  // 批量导出至指定位置（v0.1.5）：支持合并为单一目录或按篇独立目录，缺全文自动静默补齐，视频开关随设置
+  const handleConfirmBatchExport = async () => {
     const ids = Array.from(checkedIds);
     if (ids.length === 0) return;
-    setIsLoading(true);
+
+    let targetDir = exportTargetDir.trim();
+    if (!targetDir) {
+      const picked = await handleSelectExportDir();
+      if (!picked) return;
+      targetDir = picked;
+    }
+
+    setIsExporting(true);
+    setExportProgress({ text: `正在准备导出 ${ids.length} 篇文章...`, percent: 10 });
     try {
-      const paths: string[] = [];
-      const failed: string[] = [];
-      for (const id of ids) {
+      const res = await api.batchExportTweets({
+        tweetIds: ids,
+        targetDir,
+        mode: exportMode,
+      });
+
+      if (res.outputPath) {
         try {
-          const res = await api.viewTweet(id, { exportMd: true });
-          if (res?.exportPath) paths.push(res.exportPath);
-        } catch {
-          failed.push(id);
-        }
-      }
-      if (paths.length > 0) {
-        // 定位到首个导出包所在的作者目录，方便用户一次看到全部产物
-        const firstDir = paths[0].replace(/[\\/][^/\\]+$/, '');
-        try {
-          await api.showItemInFolder(firstDir);
+          await api.showItemInFolder(res.outputPath);
         } catch {
           // 定位失败不影响导出结果本身
         }
       }
+
+      const mediaParts: string[] = [];
+      if (res.downloadedImagesCount > 0) mediaParts.push(`${res.downloadedImagesCount} 张图`);
+      if (res.downloadedVideosCount > 0) mediaParts.push(`${res.downloadedVideosCount} 个视频`);
+      const mediaSuffix = mediaParts.length > 0 ? `（含 ${mediaParts.join('、')}）` : '';
+
       showToast(
-        failed.length === 0
-          ? `已导出 ${paths.length} 篇推文为 Markdown 归档`
-          : `已导出 ${paths.length} 篇，${failed.length} 篇失败`
+        res.failed.length === 0
+          ? `已导出 ${res.exportedCount} 篇${exportMode === 'merged' ? '至合并目录' : '至指定目录'}${mediaSuffix}`
+          : `已导出 ${res.exportedCount} 篇，${res.failed.length} 篇失败${mediaSuffix}`
       );
-      if (failed.length === 0) {
+      setBatchExportDialogOpen(false);
+      if (res.failed.length === 0) {
         setCheckedIds(new Set());
       }
+      // 刷新当前列表以同步刚刚静默补齐全文的文章状态
+      await loadLocalTweets(50, dataSource, false);
     } catch (err: any) {
       showToast(`批量导出失败: ${err?.message || String(err)}`);
     } finally {
-      setIsLoading(false);
+      setIsExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -774,14 +843,16 @@ export function useStudioData({ initialSearchQuery = '', jumpAction }: UseStudio
     dataSource, crawlLimit, openMenu, searchQuery, userHandle, userLists, selectedList,
     customListId, isSyncingLists, streamFilter, minLikes, sortBy, contentTypeFilter, totalDbCount, tweets, selectedTweet,
     exportPath, isDetailLoading, checkedIds, isLoading, deleteConfirmOpen, batchDeleteConfirmOpen,
+    batchExportDialogOpen, exportMode, exportTargetDir, autoDownloadVideos, isExporting, exportProgress,
     previewImage, setPreviewImage, toastMessage, crawlProgress,
     setCrawlLimit, setMinLikes, handleSortByChange, handleContentTypeFilterChange, setOpenMenu, setSelectedList, setCustomListId,
-    setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setCheckedIds,
+    setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setBatchExportDialogOpen, setCheckedIds,
     filteredTweets, allChecked,
     showToast, loadUserLists, handleSyncOnlineLists, loadLocalTweets, handleSwitchDataSource,
     handleSearchChange, handleUserChange, handleStreamFilterChange, handleSelectTweet,
     handleCrawl, handleLoadMore, toggleCheck, handleToggleSelectAll, handleDeleteSingle,
-    handleBatchDelete, handleBatchExport, handleRevealInFinder, handleOpenInX,
+    handleBatchDelete, handleOpenBatchExportDialog, handleExportModeChange, handleSelectExportDir,
+    handleConfirmBatchExport, handleRevealInFinder, handleOpenInX,
     handleForceRefreshTweet,
   };
 }

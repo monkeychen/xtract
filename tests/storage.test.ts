@@ -950,6 +950,82 @@ describe('Storage Module', () => {
 
     expect(storage.countTweets({ contentType: 'all' })).toBe(4);
   });
+
+  it('test_export_merged_tweets_markdown_creates_single_bundle_dir_with_media_subfolders', async () => {
+    const tmpExportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xtract_merged_export_'));
+    try {
+      // Seed 2 tweets (one with local cached image & video in baseOutputDir, one plain article)
+      const t1Id = 'merge_101';
+      const t2Id = 'merge_102';
+      const imgUrl = 'https://pbs.twimg.com/media/MergeTestImg.jpg';
+      const vidUrl = 'https://video.twimg.com/amplify_video/555001/vid/avc1/720x720/demo.mp4';
+
+      // Pre-populate canonical Page Bundle cache for t1 so export reuses it without hitting network
+      const cachedBundleDir = path.join(storage.baseOutputDir, 'alice', t1Id);
+      fs.mkdirSync(path.join(cachedBundleDir, 'images'), { recursive: true });
+      fs.mkdirSync(path.join(cachedBundleDir, 'videos'), { recursive: true });
+      fs.writeFileSync(path.join(cachedBundleDir, 'images', '1_MergeTestImg.jpg'), Buffer.from('fake-jpg'));
+      fs.writeFileSync(path.join(cachedBundleDir, 'videos', '555001_demo.mp4'), Buffer.from('fake-mp4'));
+
+      storage.saveTweets(
+        [
+          {
+            tweet_id: t1Id,
+            author_name: 'Alice',
+            author_username: 'alice',
+            text: `# First Article\n\n![](${imgUrl})\n\n🎬 [视频](${vidUrl})`,
+            created_at: '2026-11-25T10:00:00.000Z',
+            is_article: true,
+            media_urls: [imgUrl, vidUrl],
+            video_url: vidUrl,
+            like_count: 320,
+          },
+          {
+            tweet_id: t2Id,
+            author_name: 'Bob',
+            author_username: 'bob',
+            text: '# Second Article\n\nSecond body content.',
+            created_at: '2026-11-25T11:00:00.000Z',
+            is_article: true,
+            like_count: 150,
+          },
+        ],
+        'following'
+      );
+
+      const res = await storage.exportMergedTweetsMarkdown([t1Id, t2Id], tmpExportRoot, {
+        downloadImages: true,
+        downloadVideos: false,
+      });
+
+      expect(res.exportedCount).toBe(2);
+      expect(fs.existsSync(res.bundleDir)).toBe(true);
+      expect(fs.existsSync(res.filePath)).toBe(true);
+      expect(path.dirname(res.filePath)).toBe(res.bundleDir);
+      expect(path.dirname(res.bundleDir)).toBe(tmpExportRoot);
+
+      const md = fs.readFileSync(res.filePath, 'utf-8');
+      expect(md).toContain('First Article');
+      expect(md).toContain('Second Article');
+      expect(md).toContain(`images/${t1Id}_1_MergeTestImg.jpg`);
+      expect(fs.existsSync(path.join(res.bundleDir, 'images', `${t1Id}_1_MergeTestImg.jpg`))).toBe(true);
+      // downloadVideos=false -> should NOT copy/download video into merged videos/
+      expect(fs.existsSync(path.join(res.bundleDir, 'videos'))).toBe(false);
+
+      // With downloadVideos=true -> cached video is copied into merged videos/ and linked relatively
+      const resWithVid = await storage.exportMergedTweetsMarkdown([t1Id], tmpExportRoot, {
+        downloadImages: true,
+        downloadVideos: true,
+        bundleName: 'merged_with_video',
+      });
+      expect(resWithVid.downloadedVideosCount).toBe(1);
+      const mdVid = fs.readFileSync(resWithVid.filePath, 'utf-8');
+      expect(mdVid).toContain('videos/555001_demo.mp4');
+      expect(fs.existsSync(path.join(resWithVid.bundleDir, 'videos', '555001_demo.mp4'))).toBe(true);
+    } finally {
+      fs.rmSync(tmpExportRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 

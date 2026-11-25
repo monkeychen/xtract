@@ -1,4 +1,7 @@
 import type {
+  BatchExportMode,
+  BatchExportRequest,
+  BatchExportSummary,
   Tweet,
   TweetContentType,
   TweetContentTypeFilter,
@@ -15,6 +18,9 @@ import type {
 import type { StreamEvent, AppConfigView, XtractAPI } from '../../preload/index';
 
 export type {
+  BatchExportMode,
+  BatchExportRequest,
+  BatchExportSummary,
   Tweet,
   TweetContentType,
   TweetContentTypeFilter,

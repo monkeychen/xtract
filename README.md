@@ -1,6 +1,6 @@
 # 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
 
-[![Version](https://img.shields.io/badge/version-0.1.4-informational.svg)](docs/prd/README.md)
+[![Version](https://img.shields.io/badge/version-0.1.5-informational.svg)](docs/prd/README.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
@@ -204,7 +204,7 @@ pnpm build           # 生产构建门禁（vite + Electron 主进程/预加载�
 pnpm pack:dir && pnpm smoke  # 打包门禁：对真实 Xtract.app 产物验证 GUI/CLI 三种启动形态
 ```
 
-全部门禁全绿方可交付。当前覆盖 **373 项自动化用例**，含 **24 个真实浏览器 Playwright E2E 流程**（启动真实 Vite + Chrome，注入契约 IPC 桥，断言真实 DOM 与状态契约）。
+全部门禁全绿方可交付。当前覆盖 **376 项自动化用例**，含 **25 个真实浏览器 Playwright E2E 流程**（启动真实 Vite + Chrome，注入契约 IPC 桥，断言真实 DOM 与状态契约）。
 
 ---
 

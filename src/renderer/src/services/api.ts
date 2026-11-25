@@ -1,4 +1,12 @@
-import type { StreamEvent, AppConfigView, XListInfo, LocalVideoStatus, VideoDownloadResult } from '../types';
+import type {
+  BatchExportRequest,
+  BatchExportSummary,
+  StreamEvent,
+  AppConfigView,
+  XListInfo,
+  LocalVideoStatus,
+  VideoDownloadResult,
+} from '../types';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
 import { classifyTweet } from '../views/studio/logic';
@@ -59,7 +67,7 @@ class ApiService {
       return window.xtractAPI.getConfig();
     }
     return {
-      appVersion: '0.1.4',
+      appVersion: '0.1.5',
       httpProxy: 'http://127.0.0.1:8118',
       llmProvider: 'gemini',
       llmAuthMode: 'api_key',
@@ -408,6 +416,24 @@ class ApiService {
       deletedDirs: ['articles/karpathy/18888001'],
       deletedFiles: ['articles/karpathy/18888001/index.md'],
       dryRun: Boolean(filter.dryRun),
+    };
+  }
+
+  async batchExportTweets(request: BatchExportRequest): Promise<BatchExportSummary> {
+    if (this.hasNativeApi() && window.xtractAPI.batchExportTweets) {
+      return window.xtractAPI.batchExportTweets(request);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return {
+      mode: request.mode,
+      outputPath:
+        request.mode === 'merged'
+          ? `${request.targetDir}/xtract_export_demo`
+          : request.targetDir,
+      exportedCount: request.tweetIds.length,
+      failed: [],
+      downloadedImagesCount: request.tweetIds.length,
+      downloadedVideosCount: 0,
     };
   }
 

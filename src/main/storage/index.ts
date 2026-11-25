@@ -891,11 +891,19 @@ export class Storage {
         addVideoUrl(inlineMatch[1]);
       }
 
-      // 按需流式下载视频至 Page Bundle videos/
+      // 按需流式下载视频至 Page Bundle videos/（若目标目录非默认归档目录，优先复用默认归档目录中的已缓存视频）
+      const canonicalBundleDir = path.join(this.baseOutputDir, authorUser, primaryId);
       if (shouldDownloadVideos && tweetVideoUrls.length > 0) {
         for (let vIdx = 0; vIdx < tweetVideoUrls.length; vIdx++) {
           const vUrl = tweetVideoUrls[vIdx];
           const destPath = resolveVideoDestPath(bundleDir, vUrl);
+          if (bundleDir !== canonicalBundleDir && !fs.existsSync(destPath)) {
+            const cachedVid = getLocalVideoIfExists(canonicalBundleDir, vUrl);
+            if (cachedVid && fs.existsSync(cachedVid.localPath)) {
+              fs.mkdirSync(path.dirname(destPath), { recursive: true });
+              fs.copyFileSync(cachedVid.localPath, destPath);
+            }
+          }
           const dlRes = await downloadVideoStream({
             url: vUrl,
             destPath,
@@ -963,10 +971,18 @@ export class Storage {
           return { mediaUrl, mIdx, localDest, localRel };
         });
 
-        // Concurrently download non-video images
+        // Concurrently copy cached images or download non-video images
         const downloadResults = await Promise.all(
           mediaEntries.map(async (entry) => {
             if (isVideoUrl(entry.mediaUrl) || !shouldDownload) return false;
+            if (bundleDir !== canonicalBundleDir && !fs.existsSync(entry.localDest)) {
+              const cachedImg = path.join(canonicalBundleDir, 'images', path.basename(entry.localDest));
+              if (fs.existsSync(cachedImg) && fs.statSync(cachedImg).size > 0) {
+                fs.mkdirSync(path.dirname(entry.localDest), { recursive: true });
+                fs.copyFileSync(cachedImg, entry.localDest);
+                return true;
+              }
+            }
             return await downloadImage(entry.mediaUrl, entry.localDest);
           })
         );
@@ -1022,6 +1038,276 @@ export class Storage {
     return {
       filePath: mdFile,
       downloadedImagesCount: dlCount,
+      downloadedVideosCount: downloadedVideos.length,
+      downloadedVideos,
+    };
+  }
+
+  /**
+   * 将多篇已选推文合并导出到一个单一自包含目录：
+   * `{targetDir}/{bundleName}/index.md` + `images/` +（按开关/缓存）`videos/`。
+   * 优先复用默认归档目录中的本地缓存图片/视频，避免重复下载；文件名带 tweet_id 前缀防止跨篇冲突。
+   */
+  public async exportMergedTweetsMarkdown(
+    tweetIds: string[],
+    targetDir: string,
+    options: {
+      bundleName?: string;
+      downloadImages?: boolean;
+      downloadVideos?: boolean;
+      fetchAuthorReplies?: boolean;
+      onVideoProgress?: (info: { videoUrl: string; index: number; total: number } & VideoDownloadProgress) => void;
+    } = {}
+  ): Promise<{
+    bundleDir: string;
+    filePath: string;
+    exportedCount: number;
+    downloadedImagesCount: number;
+    downloadedVideosCount: number;
+    downloadedVideos: string[];
+  }> {
+    const resolvedTarget = path.resolve(targetDir);
+    if (!fs.existsSync(resolvedTarget)) {
+      fs.mkdirSync(resolvedTarget, { recursive: true });
+    }
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const bundleName = options.bundleName?.trim() || `xtract_export_${stamp}`;
+    const bundleDir = path.join(resolvedTarget, bundleName);
+    if (!fs.existsSync(bundleDir)) {
+      fs.mkdirSync(bundleDir, { recursive: true });
+    }
+
+    const mdFile = path.join(bundleDir, 'index.md');
+    const imagesDir = path.join(bundleDir, 'images');
+    const shouldDownloadImages = options.downloadImages ?? true;
+    const shouldDownloadVideos = options.downloadVideos ?? Config.AUTO_DOWNLOAD_VIDEOS;
+    const shouldIncludeReplies = options.fetchAuthorReplies ?? Config.FETCH_AUTHOR_REPLIES;
+
+    let dlImagesCount = 0;
+    const downloadedVideos: string[] = [];
+    const inlineVideoRegex = /🎬\s*\[视频\]\((https?:\/\/[^\s)"]+)(?:\s+"poster=[^\s"]+")?\)/g;
+
+    const validPrimaryTweets: Tweet[] = [];
+    for (const id of tweetIds) {
+      const t = this.getTweetById(id);
+      if (t) validPrimaryTweets.push(t);
+    }
+
+    const tocLines: string[] = [];
+    const sectionBlocks: string[] = [];
+
+    for (let artIdx = 0; artIdx < validPrimaryTweets.length; artIdx++) {
+      const primaryTweet = validPrimaryTweets[artIdx];
+      const authorUser = primaryTweet.author_username || 'unknown';
+      const primaryId = String(primaryTweet.tweet_id);
+      const canonicalBundleDir = path.join(this.baseOutputDir, authorUser, primaryId);
+      const thread = shouldIncludeReplies ? this.getThreadTweets(primaryId) : [];
+      const allTweets = thread.length ? thread : [primaryTweet];
+
+      const rawFirstLine = (primaryTweet.text || '')
+        .split('\n')
+        .map((l) => l.replace(/^#+\s*/, '').trim())
+        .find((l) => l.length > 0 && !l.startsWith('![')) || `推文 ${primaryId}`;
+      const displayTitle = rawFirstLine.slice(0, 80);
+
+      tocLines.push(`${artIdx + 1}. **@${authorUser}** — ${displayTitle}（[原文](https://x.com/${authorUser}/status/${primaryId})）`);
+
+      const lines: string[] = [
+        `## ${artIdx + 1}. ${displayTitle}`,
+        `\n> 作者: **${primaryTweet.author_name}** (@${authorUser}) | 发布时间: \`${primaryTweet.created_at}\` | 互动: ❤️ \`${primaryTweet.like_count}\` 🔁 \`${primaryTweet.retweet_count}\` 👁️ \`${primaryTweet.view_count || 0}\` | [原文链接](https://x.com/${authorUser}/status/${primaryId})\n`,
+      ];
+
+      const isMultiChapter = allTweets.length > 1;
+      for (let idx = 0; idx < allTweets.length; idx++) {
+        const t = allTweets[idx];
+        if (isMultiChapter) {
+          lines.push(`### 篇章 ${idx + 1} (ID: \`${t.tweet_id}\`)`);
+        }
+
+        let tweetBody = (t.text || '').replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+        if (t.media_urls && t.media_urls.length > 0) {
+          tweetBody = tweetBody.replace(/\s*https:\/\/t\.co\/[a-zA-Z0-9]+$/g, (match) => {
+            const raw = match.trim();
+            if (t.urls && t.urls.includes(raw)) return match;
+            return '';
+          });
+        }
+        if (t.urls && t.urls.length > 0 && tweetBody.includes('https://t.co/')) {
+          const validUrls = t.urls.filter((u) => !u.includes('https://t.co/'));
+          for (const u of validUrls) {
+            try {
+              const uObj = new URL(u);
+              const label = uObj.hostname.replace(/^www\./, '');
+              tweetBody = tweetBody.replace(/https:\/\/t\.co\/[a-zA-Z0-9]+/g, `[${label}](${u})`);
+            } catch {}
+          }
+        }
+
+        if (t.is_retweet) {
+          lines.push(`> 🔁 **转推自 @${t.retweeted_author}**:\n> ${t.retweeted_text}\n`);
+        } else if (t.is_quote) {
+          lines.push(`> 💬 **引用推文 @${t.quoted_author}**:\n> ${t.quoted_text}\n`);
+        }
+
+        const extraMediaLines: string[] = [];
+        const tweetVideoUrls: string[] = [];
+        const addVideoUrl = (u?: string) => {
+          if (u && isVideoUrl(u) && !tweetVideoUrls.includes(u)) {
+            tweetVideoUrls.push(u);
+          }
+        };
+        addVideoUrl(t.video_url);
+        for (const m of t.media_urls || []) addVideoUrl(m);
+        let inlineMatch: RegExpExecArray | null;
+        inlineVideoRegex.lastIndex = 0;
+        while ((inlineMatch = inlineVideoRegex.exec(tweetBody)) !== null) {
+          addVideoUrl(inlineMatch[1]);
+        }
+
+        const localVideoRelMap = new Map<string, string>();
+        if (shouldDownloadVideos && tweetVideoUrls.length > 0) {
+          for (let vIdx = 0; vIdx < tweetVideoUrls.length; vIdx++) {
+            const vUrl = tweetVideoUrls[vIdx];
+            const destPath = resolveVideoDestPath(bundleDir, vUrl);
+            if (!fs.existsSync(destPath)) {
+              const cachedVid = getLocalVideoIfExists(canonicalBundleDir, vUrl);
+              if (cachedVid && fs.existsSync(cachedVid.localPath)) {
+                fs.mkdirSync(path.dirname(destPath), { recursive: true });
+                fs.copyFileSync(cachedVid.localPath, destPath);
+              }
+            }
+            const dlRes = await downloadVideoStream({
+              url: vUrl,
+              destPath,
+              onProgress: (p) =>
+                options.onVideoProgress?.({
+                  videoUrl: vUrl,
+                  index: vIdx,
+                  total: tweetVideoUrls.length,
+                  ...p,
+                }),
+            });
+            if (dlRes.success && dlRes.localPath) {
+              if (!downloadedVideos.includes(dlRes.localPath)) {
+                downloadedVideos.push(dlRes.localPath);
+              }
+              localVideoRelMap.set(vUrl, `videos/${path.basename(dlRes.localPath)}`);
+            }
+          }
+        }
+
+        if (localVideoRelMap.size > 0) {
+          inlineVideoRegex.lastIndex = 0;
+          tweetBody = tweetBody.replace(inlineVideoRegex, (fullMatch, matchedUrl: string) => {
+            const rel = localVideoRelMap.get(matchedUrl);
+            if (!rel) return fullMatch;
+            return `🎬 [本地视频](${rel})（[原视频链接](${matchedUrl})）`;
+          });
+        }
+
+        if (t.media_urls && t.media_urls.length > 0) {
+          const mediaEntries = t.media_urls.map((mediaUrl, mIdx) => {
+            let ext = '.jpg';
+            let rawStem = `img_${mIdx + 1}`;
+            try {
+              const urlObj = new URL(mediaUrl);
+              const origName = path.basename(urlObj.pathname);
+              const detectedExt = path.extname(origName).toLowerCase();
+              if (detectedExt && ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(detectedExt)) {
+                ext = detectedExt;
+              } else {
+                const format = urlObj.searchParams.get('format');
+                ext = format ? `.${format.toLowerCase()}` : '.jpg';
+              }
+              const stem = path.basename(origName, path.extname(origName));
+              if (stem) rawStem = stem;
+            } catch {}
+            const cleanStem = rawStem.replace(/[^\w\-_.]/g, '_').slice(0, 30) || `img_${mIdx + 1}`;
+            const canonicalFilename =
+              idx === 0 ? `${mIdx + 1}_${cleanStem}${ext}` : `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
+            const mergedFilename = `${t.tweet_id}_${mIdx + 1}_${cleanStem}${ext}`;
+            const localDest = path.join(imagesDir, mergedFilename);
+            const localRel = `images/${mergedFilename}`;
+            return { mediaUrl, mIdx, canonicalFilename, localDest, localRel };
+          });
+
+          const downloadResults = await Promise.all(
+            mediaEntries.map(async (entry) => {
+              if (isVideoUrl(entry.mediaUrl) || !shouldDownloadImages) return false;
+              const cachedImg = path.join(canonicalBundleDir, 'images', entry.canonicalFilename);
+              if (fs.existsSync(cachedImg) && fs.statSync(cachedImg).size > 0) {
+                fs.mkdirSync(imagesDir, { recursive: true });
+                fs.copyFileSync(cachedImg, entry.localDest);
+                return true;
+              }
+              return await downloadImage(entry.mediaUrl, entry.localDest);
+            })
+          );
+
+          for (let mIdx = 0; mIdx < mediaEntries.length; mIdx++) {
+            const entry = mediaEntries[mIdx];
+            const ok = downloadResults[mIdx];
+            if (isVideoUrl(entry.mediaUrl)) {
+              const localRel = localVideoRelMap.get(entry.mediaUrl);
+              if (!tweetBody.includes(entry.mediaUrl)) {
+                if (localRel) {
+                  extraMediaLines.push(`- 🎥 [本地视频](${localRel})（[原视频链接](${entry.mediaUrl})）`);
+                } else {
+                  extraMediaLines.push(`- 🎥 [视频/音频流](${entry.mediaUrl})`);
+                }
+              }
+            } else if (shouldDownloadImages && ok) {
+              dlImagesCount++;
+              if (tweetBody.includes(entry.mediaUrl)) {
+                tweetBody = tweetBody.replaceAll(entry.mediaUrl, entry.localRel);
+              } else {
+                extraMediaLines.push(`![图片 ${mIdx + 1}](${entry.localRel})`);
+              }
+            } else if (!tweetBody.includes(entry.mediaUrl)) {
+              extraMediaLines.push(`![图片 ${mIdx + 1}](${entry.mediaUrl})`);
+            }
+          }
+        }
+
+        if (t.video_url && isVideoUrl(t.video_url) && !(t.media_urls || []).includes(t.video_url)) {
+          if (!tweetBody.includes(t.video_url)) {
+            const localRel = localVideoRelMap.get(t.video_url);
+            if (localRel) {
+              extraMediaLines.push(`- 🎥 [本地视频](${localRel})（[原视频链接](${t.video_url})）`);
+            } else {
+              extraMediaLines.push(`- 🎥 [视频/音频流](${t.video_url})`);
+            }
+          }
+        }
+
+        lines.push(`\n${tweetBody}\n`);
+        if (extraMediaLines.length > 0) {
+          lines.push(`\n#### 媒体附件:`);
+          lines.push(...extraMediaLines);
+        }
+      }
+
+      lines.push('\n---\n');
+      sectionBlocks.push(lines.join('\n'));
+    }
+
+    const header = [
+      `# 📦 Xtract 批量精选归档（共 ${validPrimaryTweets.length} 篇）`,
+      `\n> 导出时间: ${now.toLocaleString('zh-CN', { hour12: false })} | 包含图片: ${dlImagesCount} 张 | 本地视频: ${downloadedVideos.length} 个\n`,
+      '## 目录\n',
+      ...tocLines,
+      '\n---\n',
+    ].join('\n');
+
+    fs.writeFileSync(mdFile, `${header}\n${sectionBlocks.join('\n')}`, 'utf-8');
+    return {
+      bundleDir,
+      filePath: mdFile,
+      exportedCount: validPrimaryTweets.length,
+      downloadedImagesCount: dlImagesCount,
       downloadedVideosCount: downloadedVideos.length,
       downloadedVideos,
     };

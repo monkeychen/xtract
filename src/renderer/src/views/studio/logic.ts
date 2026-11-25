@@ -244,7 +244,7 @@ export function reduceStreamEvent(
   event: StreamEvent,
   fallbackSource: DataSource
 ): CrawlProgress | null {
-  if (!event || event.stage === 'video_download') return prev;
+  if (!event || event.stage === 'video_download' || event.stage === 'batch_export') return prev;
   if (event.stage === 'error') {
     return prev
       ? {

@@ -19,6 +19,8 @@ import type { BrowserImportResult } from '../../preload/index.js';
 import { Pipeline } from '../pipeline/index.js';
 import { extractTweetId, isTweetContentIncomplete, parseContentTypes } from '../client/parser.js';
 import type {
+  BatchExportRequest,
+  BatchExportSummary,
   Tweet,
   LocalVideoStatus,
   VideoDownloadResult,
@@ -661,6 +663,29 @@ export function registerIpcHandlers(
         minRetweets: args?.minRetweets || 0,
       });
       return { outputPath: filePath, count: args?.limit || 200 };
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.TWEETS_BATCH_EXPORT,
+    async (event, request: BatchExportRequest): Promise<BatchExportSummary> => {
+      const taskId = `batch_export_${Date.now()}`;
+      const sendEv = (text: string, progress: number) => {
+        const streamEv: StreamEvent = {
+          taskId,
+          stage: 'batch_export',
+          type: 'status',
+          text,
+          progress,
+        };
+        try {
+          event.sender.send(IPC_CHANNELS.STREAM_EVENT, streamEv);
+        } catch {}
+      };
+
+      return await pipeline.exportSelectedTweets(request, {
+        onProgress: (p) => sendEv(p.message, p.percent),
+      });
     }
   );
 

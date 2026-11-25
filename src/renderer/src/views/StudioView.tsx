@@ -3,7 +3,7 @@ import { useStudioData } from './studio/useStudioData.js';
 import { StudioDataSourceBar } from './studio/StudioDataSourceBar.js';
 import { TweetListPane } from './studio/TweetListPane.js';
 import { TweetDetailPane } from './studio/TweetDetailPane.js';
-import { BatchActionBar, BatchDeleteDialog, DeleteDialog } from './studio/BatchActions.js';
+import { BatchActionBar, BatchDeleteDialog, BatchExportDialog, DeleteDialog } from './studio/BatchActions.js';
 import { ImageLightbox } from './studio/ImageLightbox.js';
 
 interface StudioViewProps {
@@ -22,13 +22,15 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery, jump
     dataSource, crawlLimit, crawlProgress, customListId, isLoading, isSyncingLists,
     minLikes, sortBy, contentTypeFilter, openMenu, searchQuery, selectedList, streamFilter, totalDbCount, userHandle, userLists,
     tweets, filteredTweets, selectedTweet, exportPath, isDetailLoading, checkedIds, allChecked,
-    deleteConfirmOpen, batchDeleteConfirmOpen, previewImage, setPreviewImage, toastMessage,
+    deleteConfirmOpen, batchDeleteConfirmOpen, batchExportDialogOpen, exportMode, exportTargetDir,
+    autoDownloadVideos, isExporting, exportProgress, previewImage, setPreviewImage, toastMessage,
     showToast, handleSyncOnlineLists, loadLocalTweets, handleSwitchDataSource, handleCrawl,
     handleSearchChange, handleUserChange, handleStreamFilterChange, handleSelectTweet,
     handleLoadMore, toggleCheck, handleToggleSelectAll, handleDeleteSingle, handleBatchDelete,
-    handleBatchExport, handleRevealInFinder, handleOpenInX, handleForceRefreshTweet,
+    handleOpenBatchExportDialog, handleExportModeChange, handleSelectExportDir, handleConfirmBatchExport,
+    handleRevealInFinder, handleOpenInX, handleForceRefreshTweet,
     setCrawlLimit, setMinLikes, handleSortByChange, handleContentTypeFilterChange, setOpenMenu, setSelectedList, setCustomListId,
-    setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setCheckedIds,
+    setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setBatchExportDialogOpen, setCheckedIds,
   } = useStudioData({ initialSearchQuery, jumpAction });
 
   return (
@@ -131,9 +133,25 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery, jump
       {checkedIds.size > 0 && (
         <BatchActionBar
           selectedCount={checkedIds.size}
-          onExport={handleBatchExport}
+          onExport={handleOpenBatchExportDialog}
           onRequestDelete={() => setBatchDeleteConfirmOpen(true)}
           onClearSelection={() => setCheckedIds(new Set())}
+        />
+      )}
+
+      {/* 批量导出 Markdown 配置弹窗 (v0.1.5) */}
+      {batchExportDialogOpen && (
+        <BatchExportDialog
+          selectedCount={checkedIds.size}
+          mode={exportMode}
+          targetDir={exportTargetDir}
+          autoDownloadVideos={autoDownloadVideos}
+          isExporting={isExporting}
+          progress={exportProgress}
+          onModeChange={handleExportModeChange}
+          onSelectDir={handleSelectExportDir}
+          onCancel={() => setBatchExportDialogOpen(false)}
+          onConfirm={handleConfirmBatchExport}
         />
       )}
 

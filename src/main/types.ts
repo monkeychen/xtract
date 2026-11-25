@@ -88,6 +88,22 @@ export interface DeleteFilter {
 
 export type TweetSortBy = 'created_at' | 'fetched_at' | 'likes' | 'views';
 export type TweetContentTypeFilter = 'all' | TweetContentType;
+export type BatchExportMode = 'merged' | 'separate';
+
+export interface BatchExportRequest {
+  tweetIds: string[];
+  targetDir: string;
+  mode: BatchExportMode;
+}
+
+export interface BatchExportSummary {
+  mode: BatchExportMode;
+  outputPath: string;
+  exportedCount: number;
+  failed: Array<{ tweetId: string; error: string }>;
+  downloadedImagesCount: number;
+  downloadedVideosCount: number;
+}
 
 export interface TweetQueryOptions {
   limit?: number;

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './channels.js';
 import type {
+  BatchExportRequest,
+  BatchExportSummary,
   Tweet,
   TweetContentType,
   LocalVideoStatus,
@@ -14,7 +16,7 @@ import type {
 
 export interface StreamEvent {
   taskId: string;
-  stage: 'init' | 'refine_query' | 'fetch' | 'reasoning' | 'synthesis' | 'video_download' | 'done' | 'error';
+  stage: 'init' | 'refine_query' | 'fetch' | 'reasoning' | 'synthesis' | 'video_download' | 'batch_export' | 'done' | 'error';
   type?: 'reasoning' | 'content' | 'status';
   text?: string;
   progress?: number;
@@ -131,6 +133,7 @@ export interface XtractAPI {
     limit?: number,
     options?: { outputPath?: string; minLikes?: number; minRetweets?: number }
   ) => Promise<{ outputPath: string; count: number }>;
+  batchExportTweets: (request: BatchExportRequest) => Promise<BatchExportSummary>;
 
   // Lists Management
   getUserLists: () => Promise<XListInfo[]>;
@@ -197,6 +200,8 @@ export const xtractApiImplementation: XtractAPI = {
   deleteTweets: (filter) => ipcRenderer.invoke(IPC_CHANNELS.TWEETS_DELETE, filter),
   exportTweets: (limit, options) =>
     ipcRenderer.invoke(IPC_CHANNELS.TWEETS_EXPORT, { limit, ...options }),
+  batchExportTweets: (request) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TWEETS_BATCH_EXPORT, request),
 
   getUserLists: () => ipcRenderer.invoke(IPC_CHANNELS.LISTS_GET_USER_LISTS),
   saveUserList: (list) => ipcRenderer.invoke(IPC_CHANNELS.LISTS_SAVE_USER_LIST, list),

@@ -15,7 +15,7 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 export class Config {
   static readonly PROJECT_ROOT = projectRoot;
 
-  /** 当前应用版本号，优先读 package.json，兜底 0.1.4 */
+  /** 当前应用版本号，优先读 package.json，兜底 0.1.5 */
   static get APP_VERSION(): string {
     try {
       const candidates = [
@@ -35,7 +35,7 @@ export class Config {
     } catch {
       // ignore
     }
-    return '0.1.4';
+    return '0.1.5';
   }
 
   /**

@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   TWEETS_VIEW: 'tweets:view',
   TWEETS_DELETE: 'tweets:delete',
   TWEETS_EXPORT: 'tweets:export',
+  TWEETS_BATCH_EXPORT: 'tweets:batch-export',
 
   AUTH_IMPORT_FROM_BROWSER: 'auth:import-from-browser',
 

@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Config } from '../config.js';
 import { Storage } from '../storage/index.js';
-import { XClient, matchesContentTypes } from '../client/index.js';
+import { XClient, matchesContentTypes, isTweetContentIncomplete } from '../client/index.js';
 import { Summarizer } from './summarizer.js';
 import {
   ALL_TWEET_CONTENT_TYPES,
+  type BatchExportRequest,
+  type BatchExportSummary,
   type Tweet,
   type TweetContentType,
   type TrendTopic,
@@ -320,6 +322,151 @@ export class Pipeline {
       }
     }
     return { exported, failed };
+  }
+
+  /**
+   * 桌面工作台批量导出已选文章至用户指定目录（v0.1.5）：
+   * 1. 对本地缺失或未展开全文（截断长推 / 仅标题预览的 X Article）的文章静默补齐全文；
+   * 2. 视频是否下载严格遵循设置中的 `Config.AUTO_DOWNLOAD_VIDEOS` 开关；
+   * 3. 支持两种目录形态：
+   *    - `merged`：合并为单一自包含目录（1 份 `index.md` + 统一 `images/` 与按开关 `videos/`）；
+   *    - `separate`：按篇扁平导出至 `{targetDir}/{author}_{tweetId}/index.md`。
+   */
+  async exportSelectedTweets(
+    request: BatchExportRequest,
+    callbacks?: {
+      onProgress?: (info: { current: number; total: number; message: string; percent: number }) => void;
+    }
+  ): Promise<BatchExportSummary> {
+    const uniqueIds = Array.from(new Set((request.tweetIds || []).map((id) => String(id).trim()).filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      throw new Error('请至少选择一篇推文再导出。');
+    }
+    const targetDir = path.resolve(request.targetDir);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const downloadVideos = Config.AUTO_DOWNLOAD_VIDEOS;
+    const failed: Array<{ tweetId: string; error: string }> = [];
+    const readyIds: string[] = [];
+
+    // 阶段 1：静默补齐缺失或未展开全文的文章
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const tweetId = uniqueIds[i];
+      let tweet = this.storage.getTweetById(tweetId);
+      const needsSync = !tweet || isTweetContentIncomplete(tweet);
+      callbacks?.onProgress?.({
+        current: i + 1,
+        total: uniqueIds.length,
+        message: needsSync
+          ? `正在静默补齐全文 (${i + 1}/${uniqueIds.length}) · ${tweet?.author_username ? '@' + tweet.author_username : tweetId}`
+          : `正在校验文章 (${i + 1}/${uniqueIds.length}) · @${tweet?.author_username || tweetId}`,
+        percent: Math.round(((i + 0.5) / uniqueIds.length) * 50),
+      });
+
+      if (needsSync) {
+        try {
+          const fetchTarget = tweet?.author_username
+            ? `https://x.com/${tweet.author_username}/status/${tweetId}`
+            : tweetId;
+          await this.fetchTweetAndStore(fetchTarget, {
+            fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+          });
+          tweet = this.storage.getTweetById(tweetId);
+        } catch (err: any) {
+          if (!tweet) {
+            failed.push({ tweetId, error: err?.message || String(err) });
+            continue;
+          }
+          // 本地已有旧版摘要时降级保留，避免整批导出中断
+        }
+      }
+
+      if (tweet) {
+        readyIds.push(tweetId);
+      } else {
+        failed.push({ tweetId, error: '未找到推文记录' });
+      }
+    }
+
+    if (readyIds.length === 0) {
+      return {
+        mode: request.mode,
+        outputPath: targetDir,
+        exportedCount: 0,
+        failed,
+        downloadedImagesCount: 0,
+        downloadedVideosCount: 0,
+      };
+    }
+
+    // 阶段 2：按模式落盘至目标目录
+    if (request.mode === 'merged') {
+      callbacks?.onProgress?.({
+        current: readyIds.length,
+        total: readyIds.length,
+        message: `正在合并生成单一归档目录（${readyIds.length} 篇）...`,
+        percent: 75,
+      });
+      const res = await this.storage.exportMergedTweetsMarkdown(readyIds, targetDir, {
+        downloadImages: true,
+        downloadVideos,
+        fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+      });
+      callbacks?.onProgress?.({
+        current: readyIds.length,
+        total: readyIds.length,
+        message: `导出完成（${res.exportedCount} 篇）`,
+        percent: 100,
+      });
+      return {
+        mode: 'merged',
+        outputPath: res.bundleDir,
+        exportedCount: res.exportedCount,
+        failed,
+        downloadedImagesCount: res.downloadedImagesCount,
+        downloadedVideosCount: res.downloadedVideosCount,
+      };
+    }
+
+    let exportedCount = 0;
+    let totalImages = 0;
+    let totalVideos = 0;
+    for (let i = 0; i < readyIds.length; i++) {
+      const tweetId = readyIds[i];
+      const tweet = this.storage.getTweetById(tweetId);
+      const author = (tweet?.author_username || 'tweet').replace(/[^\w-]/g, '_');
+      callbacks?.onProgress?.({
+        current: i + 1,
+        total: readyIds.length,
+        message: `正在导出独立目录 (${i + 1}/${readyIds.length}) · @${author}`,
+        percent: 50 + Math.round(((i + 1) / readyIds.length) * 50),
+      });
+      try {
+        const destMd = path.join(targetDir, `${author}_${tweetId}`, 'index.md');
+        const res = await this.storage.exportSingleTweetMarkdown(tweetId, {
+          outputPath: destMd,
+          downloadImages: true,
+          downloadVideos,
+          fetchAuthorReplies: Config.FETCH_AUTHOR_REPLIES,
+        });
+        exportedCount++;
+        totalImages += res.downloadedImagesCount;
+        totalVideos += res.downloadedVideosCount;
+      } catch (err: any) {
+        failed.push({ tweetId, error: err?.message || String(err) });
+      }
+    }
+
+    return {
+      mode: 'separate',
+      outputPath: targetDir,
+      exportedCount,
+      failed,
+      downloadedImagesCount: totalImages,
+      downloadedVideosCount: totalVideos,
+    };
   }
 
   async fetchSearchAndStore(
