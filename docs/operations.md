@@ -76,24 +76,29 @@ xtract/
 │   ├── main/               # Electron 主进程 & CLI 核心引擎
 │   │   ├── index.ts        # 双模入口分发器 (无参启动 GUI / 有参进入 CLI)
 │   │   ├── config.ts       # 配置加载与持久化
-│   │   ├── client/         # Playwright 拦截与推特官方流嗅探
-│   │   ├── storage/        # better-sqlite3 存储与 Markdown 导出
+│   │   ├── media-protocol.ts # xtract-media:// 本地视频 Range 流式协议
+│   │   ├── auth/           # Chrome Cookie 解密与登录态导入
+│   │   ├── client/         # 纯 HTTP SSR + Electron 隐藏窗口网络流嗅探与解析
+│   │   ├── storage/        # better-sqlite3 存储、视频流式下载与 Page Bundle 导出
 │   │   ├── llm/            # 7 大主流大模型统一驱动与 SSE 流式长推理
-│   │   └── pipeline/       # 全生命周期流水线 (Trends/Search/Digest 编排)
+│   │   └── pipeline/       # 全生命周期流水线 (Following/Recommended/Trends/Search/Digest)
 │   ├── preload/            # 安全隔离桥梁 (ContextBridge)
 │   │   └── index.ts        # 强类型 IPC 通信接口
-│   └── renderer/           # GUI 渲染进程前端 (SPA)
+│   └── renderer/           # GUI 渲染进程前端 (React 19 SPA)
 │       ├── index.html      # 主视窗入口
-│       └── src/            # 界面视图组件 (趋势雷达/监控信箱/搜索/阅读器/设置)
-├── data/                   # 本地数据持久化（Git 忽略）
-│   ├── tweets.db           # SQLite 数据库
-│   └── auth_state.json     # X 登录持久化凭据
-└── output/                 # 输出结果
-    ├── reports/            # 导出的 Markdown 研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
-    └── {author}/           # 按博主与文章 ID 组织的自包含单篇推文包 (Page Bundle)
-        └── {tweet_id}/     # 单篇推文独立归档目录
-            ├── index.md    # 推文全文 Markdown 文档（图片直接相对引用 images/...）
-            └── images/     # 该推文专属的本地配图文件夹
+│       └── src/            # 界面视图组件 (XTRACT 情报工作台与设置中心)
+└── ~/Documents/Xtract/     # 用户统一数据根目录（可在设置中自定义，开发/生产共用）
+    ├── config.env          # 持久化设置（模型 Key、代理、拉取内容类型、自动下载视频等）
+    ├── data/               # 本地数据持久化
+    │   ├── tweets.db       # SQLite 数据库
+    │   ├── auth_state.json # X 登录持久化凭据
+    │   └── raw/            # 原始抓取快照备份
+    ├── articles/           # 自包含单篇推文包 (Page Bundle)
+    │   └── {author}/{tweet_id}/
+    │       ├── index.md    # 推文全文 Markdown 文档（相对引用 images/ 与 videos/）
+    │       ├── images/     # 本地配图
+    │       └── videos/     # 按需下载的本地 MP4 视频
+    └── reports/            # 导出的 Markdown 研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
 ```
 
 ### SQLite 数据表结构 (`tweets`)
@@ -102,13 +107,17 @@ xtract/
 | `tweet_id` | `TEXT PRIMARY KEY` | 推文唯一 ID（去重核心键） |
 | `author_name` | `TEXT` | 博主昵称 |
 | `author_username` | `TEXT` | 博主 Handle（`@screen_name`） |
-| `text` | `TEXT` | 完整正文（自动展开 Note Tweet 长文） |
-| `created_at` | `TEXT` | 发布时间戳 |
+| `text` | `TEXT` | 完整正文（自动展开 Note Tweet 长文与 X Article 专栏） |
+| `created_at` | `TEXT` | 规范化的 ISO-8601 发布时间戳 |
 | `is_retweet` / `is_quote` | `INTEGER` | 是否为转推 / 引用推文 |
 | `retweeted_text` / `quoted_text` | `TEXT` | 转推或引用的原文内容 |
 | `like_count` / `retweet_count` | `INTEGER` | 点赞与转发互动数据 |
-| `view_count` | `INTEGER` | 浏览曝光量 |
+| `reply_count` / `view_count` | `INTEGER` | 回复数与浏览曝光量 |
 | `urls` / `media_urls` | `TEXT (JSON)` | 提取的外部链接与媒体附件数组 |
+| `video_url` / `video_poster` | `TEXT` | 视频直链与封面图 URL |
+| `is_note_tweet` / `is_article` | `INTEGER` | 是否为长推文 / X Article 专栏 |
+| `source_type` | `TEXT` | 来源隔离标记（`following` / `recommended` / `user` / `list` / `search` / `trends` / `legacy`） |
+| `list_id` | `TEXT` | 当 `source_type = 'list'` 时关联的 X 列表 ID |
 | `fetched_at` | `TEXT` | 采集入库的 ISO 时间戳 |
 
 ---
@@ -151,12 +160,14 @@ v0.1.0 起为双平台发布（macOS arm64 DMG + Windows x64 NSIS），由 GitHu
 
 | 命令 | 产物 |
 | :--- | :--- |
+| `pnpm pack:clean` | 清理历史打包目录 `release/` 并汇报释放体积（跨平台） |
 | `pnpm pack:mac` | 仅 macOS：`release/Xtract-<版本>-arm64.dmg` |
 | `pnpm pack:win` | 仅 Windows：`release/Xtract-Setup-<版本>.exe` |
 | `pnpm pack:all` | 双平台一次出齐（产物同上两个） |
 | `pnpm pack:dir` | macOS 目录包（免安装器，`pnpm verify` 门禁内部使用） |
 
-- 所有命令都会先执行 `pnpm build`（vite 产物 + Electron 主进程/预加载编译）再调用 electron-builder；
+- 所有打包命令均会自动前置执行 `pnpm pack:clean`（[scripts/clean-release.ts](../scripts/clean-release.ts)）清空旧的 `release/` 产物，防止历史版本 DMG/EXE 堆积占用磁盘空间；
+- `pack:mac` / `pack:win` / `pack:all` 会自动先执行 `pnpm build`（vite 产物 + Electron 主进程/预加载编译）再调用 electron-builder；
 - 平台与架构以 `electron-builder.yml` 的 target 配置为准（mac=arm64 DMG、win=x64 NSIS），**组合命令不要再传 `--x64/--arm64`**——CLI 的 arch 参数与 yml 配置是「并集」而非覆盖，同传会打出多余的 x64 DMG 与无 SQLite prebuild 的 win32-arm64 目标；
 - 本地打出的 Windows exe 与 CI 产物同规格，但**无法在 macOS 上运行验证**——运行时验证以 CI 的打包 smoke 与真机人工验收为准；
 - 产物仅供自用/测试；对外分发一律走 tag 触发的 CI Release（保证与 smoke 门禁绑定）。

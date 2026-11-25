@@ -1,8 +1,8 @@
 # Xtract 系统详细设计与核心机制文档 (Detailed Design Document)
 
-> **文档修订**：r2（本文档自身修订号，与产品版本相互独立）  
-> **对齐产品版本**：v0.1.0  
-> **更新时间**：2026-10-01  
+> **文档修订**：r3（本文档自身修订号，与产品版本相互独立）  
+> **对齐产品版本**：v0.1.4  
+> **更新时间**：2026-11-25  
 > **面向对象**：核心开发人员、系统维护者与扩展接入者。
 
 ---
@@ -14,29 +14,26 @@
 ```mermaid
 classDiagram
     class XClient {
-        -AppConfig config
-        -Browser browser
-        -BrowserContext context
-        +initialize(headless: boolean) Promise~void~
-        +fetchFollowingTimeline(limit: number) Promise~Tweet[]~
-        +searchTweets(query: string, searchType: string, limit: number) Promise~Tweet[]~
-        +fetchExploreTrends(category: string, topN: number) Promise~TrendTopic[]~
-        +fetchTweetDetail(tweetIdOrUrl: string) Promise~Tweet~
-        +fetchUserTimeline(username: string, limit: number) Promise~Tweet[]~
-        +fetchListTimeline(listId: string, limit: number) Promise~Tweet[]~
-        +close() Promise~void~
+        -number timeoutSeconds
+        +fetchFollowingTimeline(options) Promise~Tweet[]~
+        +fetchRecommendedTimeline(options) Promise~Tweet[]~
+        +fetchSearchTimeline(query, options) Promise~Tweet[]~
+        +fetchExploreTrends(options) Promise~TrendTopic[]~
+        +fetchTweetThread(tweetIdOrUrl, options) Promise~Tweet[]~
+        +fetchUserTimeline(username, options) Promise~Tweet[]~
+        +fetchListTimeline(listIdOrUrl, options) Promise~Tweet[]~
     }
 
     class Storage {
         -string dbPath
         -Database db
-        +saveTweets(tweets: Tweet[]) number
-        +getTweets(sinceHours: number, minLikes: number, minRts: number) Tweet[]
-        +searchTweets(keyword: string, limit: number) Tweet[]
+        +saveTweets(tweets, sourceType, listId) SaveResult
+        +queryTweets(options: TweetQueryOptions) Tweet[]
+        +countTweets(options: TweetQueryOptions) number
         +getTweetById(tweetId: string) Tweet
-        +deleteTweets(options: DeleteOptions) DeleteResult
-        +exportSingleTweet(tweet: Tweet, options: ExportOptions) Promise~string~
-        +exportTweetsToMarkdown(tweets: Tweet[], outputPath: string) string
+        +deleteTweets(options: DeleteFilter) Promise~DeleteResult~
+        +exportSingleTweetMarkdown(tweetId, options) Promise~ExportResult~
+        +exportMarkdown(options) string
     }
 
     class AuthManager {
@@ -99,23 +96,30 @@ classDiagram
 
 ## 2. 关键底层机制与控制流设计
 
-### 2.1 机制 1：Playwright 异步透明网络流拦截与动态防抖
+### 2.1 机制 1：纯 HTTP SSR + Electron 隐藏窗口双通道网络流拦截
 
-#### 2.1.1 拦截原理与路由分发
-推特为单页面 React 应用（SPA），所有数据通过 GraphQL 端点异步拉取。系统启动 Chromium 后，在 `Page.route` 或 `Page.on("response")` 上注册全局监听器：
+#### 2.1.1 拦截原理与协议级路由隔离
+X 新版前端 `x-web` 采用 TanStack Router (`$_TSR`) 流式 SSR + GraphQL 混合架构。系统采用双轨零弹窗策略：
+- **单推 / X Article 快车道（`fetchTweetThreadViaHttpSsr`）**：优先用纯 Node.js `undici.fetch` 携带 Cookie 与代理直取 HTML，通过 `extractSsrTweetPayloadsFromHtml` + `mergeRawTweetPayload` 合并多段 `Result.Ok` 分片，1 秒内同步全文与内嵌推文卡片（零浏览器、零弹窗）。
+- **时间线与热搜通道（`hidden-browser.ts`）**：在 Electron 运行时直接创建隐藏窗口 `BrowserWindow({ show: false })` 并挂载 CDP `webContents.debugger` 监听 `Network.responseReceived` / `Network.loadingFinished`（零外部 Chrome 进程、零弹窗）；纯 Node 开发态回退 Playwright。
+- **关注流 vs 推荐流协议级隔离**：`isFollowingTimelineUrl` 严格只放行 `HomeLatestTimeline*`，`isRecommendedTimelineUrl` 严格只放行 `HomeTimeline*` 且排除 `HomeLatestTimeline*`；标签页切换二次校验 `aria-selected="true"`。
+- **推文 ID 安全提取与纯转发壳隔离**：统一由 `extractTweetId` 优先匹配 `/status(?:es)?\/(\d{5,})/i`（避免 `@bobolv235824` 类含数字用户名误判）；纯转发壳 `RT @handle: ...` 统一排除出 X Article 分类。
 
 ```mermaid
 flowchart TD
-    Req[客户端触发页面导航/滚动] --> Listen["Page.on('response', handle_response)"]
-    Listen --> CheckURL{"URL 是否包含\n/i/api/graphql/？"}
-    CheckURL -- "否" --> Pass[忽略通行]
-    CheckURL -- "是" --> RouteType{"判断具体 GraphQL 操作名"}
-    RouteType -- "HomeLatestTimeline" --> ParseFollowing["解析关注流推文列表"]
+    Req[客户端触发页面导航/滚动] --> Listen["CDP / Page.on('response') 监听"]
+    Listen --> CheckType{"响应形态？"}
+    CheckType -- "x-web SSR HTML" --> ParseSSR["解码 $_TSR Result.Ok 分片并合并"]
+    CheckType -- "/graphql/ JSON" --> RouteType{"判断具体 GraphQL 操作名"}
+    RouteType -- "HomeLatestTimeline*" --> ParseFollowing["解析关注流推文列表"]
+    RouteType -- "HomeTimeline* (排除 Latest)" --> ParseRec["解析推荐流 (For You) 列表"]
     RouteType -- "SearchTimeline" --> ParseSearch["解析搜索结果推文列表"]
     RouteType -- "ExplorePage" --> ParseTrends["解析全网趋势模块"]
-    RouteType -- "TweetDetail" --> ParseDetail["解析主推文及回复线程"]
+    RouteType -- "TweetDetail / TweetResultsByRestIds" --> ParseDetail["解析主推文、追评及专栏内嵌推文"]
     
-    ParseFollowing --> DePromote["广告剥离过滤器 (entryId != promoted-*)"]
+    ParseSSR --> DePromote["广告剥离过滤器 (entry_id != promoted-*)"]
+    ParseFollowing --> DePromote
+    ParseRec --> DePromote
     ParseSearch --> DePromote
     DePromote --> Deduplicate["按 rest_id 主键去重缓存"]
 ```

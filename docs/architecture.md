@@ -1,9 +1,9 @@
 # Xtract 系统总体架构设计文档 (System Architecture Document)
 
-> **文档修订**：r2（本文档自身修订号，与产品版本相互独立）  
-> **对齐产品版本**：v0.1.0  
-> **更新时间**：2026-10-01  
-> **项目定位**：Xtract - 基于真实浏览器透明网络流拦截的高保真 X（Twitter）全景情报自动化挖掘与多大模型结构化研报系统。
+> **文档修订**：r3（本文档自身修订号，与产品版本相互独立）  
+> **对齐产品版本**：v0.1.4  
+> **更新时间**：2026-11-25  
+> **项目定位**：Xtract - 基于纯 HTTP SSR 秒级直取与 Electron 内置隐藏窗口协议层拦截的高保真 X（Twitter）全景情报自动化挖掘与多大模型结构化研报系统。
 
 ---
 
@@ -34,24 +34,24 @@
 ```mermaid
 flowchart TD
     subgraph UI ["1. 交互与展示层 (Presentation Layer)"]
-        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n四维源切换 / 信噪比过滤 / 零静默流量视频播放器 / 原生 TweetMarkdown 专栏排版 / 设置中心\n(views/studio/ 下按职责拆分为纯函数层 + 编排 hook + 6 个展示组件)"]
+        STUDIO_UI["XTRACT 情报工作台 (StudioView)\n五维源切换 / 单行类型筛选与四维排序 / 离线与在线视频播放 / 原生 TweetMarkdown 专栏排版 / 设置中心\n(views/studio/ 下按职责拆分为纯函数层 + 编排 hook + 6 个展示组件)"]
         CLI["src/main/index.ts (Commander CLI & GUI 分发器)"]
-        AUTH_UI["原生登录视窗 (Electron Session / 凭据自动捕获)"]
+        AUTH_UI["浏览器登录态导入 (macOS Chrome Cookie 解密 / 手动凭据)"]
         MD_VIEW["Markdown 研报 / Page Bundle 离线推文文档"]
     end
 
     subgraph ORCH ["2. 业务编排层 (Pipeline Orchestration Layer)"]
-        CORE_PIPE["src/main/pipeline/index.ts\n(Fetch / Digest / Trends / Export 调度控制器)"]
+        CORE_PIPE["src/main/pipeline/index.ts\n(Following / Recommended / Digest / Trends / Export 调度控制器)"]
         FRESH_LOCK["时效性时间锁控制器 (since: 注入 & UTC 校验)"]
         LIMIT_CTRL["严格条数约束与提前退出控制器 (Limit & Early Stop)"]
         SERIAL_CTRL["安全串行节流控制器 (Safe Sequential Pacing)"]
     end
 
     subgraph CRAWL ["3. 数据拦截与采集层 (Data Interception Layer)"]
-        PLAYWRIGHT["src/main/client/index.ts (Playwright 异步网络流嗅探引擎)"]
+        HTTP_SSR["src/main/client/index.ts (单推/专栏纯 HTTP SSR 秒级直取)"]
+        HIDDEN_WIN["src/main/client/hidden-browser.ts (Electron 隐藏窗口 + CDP 网络拦截)"]
         AUTH_MGR["src/main/config.ts (Cookie 会话持久化与状态探测)"]
-        ROUTE_FILTER["GraphQL 网络流嗅探器 (Network Route Interceptor)"]
-        HTML_PARSER["src/main/client/parser.ts (离线富文本 / X Article 提取器)"]
+        HTML_PARSER["src/main/client/parser.ts (x-web SSR 分片合并 / 专栏与时间线解析)"]
     end
 
     subgraph LLM ["4. 统一多模型调度层 (Unified LLM Layer)"]
@@ -64,10 +64,10 @@ flowchart TD
     end
 
     subgraph STORAGE ["5. 本地持久化与资产层 (Persistence Layer)"]
-        SQLITE[("data/tweets.db (better-sqlite3 增量去重存储)")]
-        AUTH_FILES[("data/*.json (会话状态凭据)")]
-        RAW_BACKUP[("data/raw/ (原始 GraphQL 快照备份)")]
-        OUTPUT_ASSETS[("output/ (Page Bundle 独立推文包与图片隔离存储)")]
+        SQLITE[("data/tweets.db (better-sqlite3 增量去重与多维筛选排序)")]
+        MEDIA_PROTO["src/main/media-protocol.ts (xtract-media:// Range 206 离线视频流)"]
+        RAW_BACKUP[("data/raw/ (原始抓取快照备份)")]
+        OUTPUT_ASSETS[("articles/ & reports/ (Page Bundle 独立推文包、图文视频与研报)")]
     end
 
     UI --> ORCH
@@ -83,11 +83,11 @@ flowchart TD
 
 | 架构层级 | 核心模块 | 职责与边界 |
 | :--- | :--- | :--- |
-| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`（纯布局容器，158 行）<br>`src/renderer/src/views/studio/`（9 个职责单一模块）<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、博主追踪、X 列表、全网搜索四维情报。<br>**模块划分**：`logic.ts`（纯函数层，禁止 React 依赖）、`formatters.tsx`（展示格式化）、`useStudioData.ts`（状态与业务编排）、`StudioDataSourceBar` / `TweetListPane` / `TweetDetailPane` / `TweetVideoPlayer` / `BatchActions` / `ImageLightbox`（展示组件）。<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
-| **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行时效性计算（`--hours`）、严格数量约束（`--limit` 截断与提前退出）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
-| **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/parser.ts` | 驱动真实 Chromium 会话，自动注入反检测脚本，监听 `/i/api/graphql/*` 请求，解包原始响应、视频 MP4 高清直链、X 专栏长文并抽离广告。 |
+| **1. 交互与展示层** | `src/renderer/src/views/StudioView.tsx`（纯布局容器）<br>`src/renderer/src/views/studio/`（9 个职责单一模块）<br>`src/main/index.ts` | **GUI 核心**：情报工作台（StudioView）收敛关注流、推荐流、博主追踪、X 列表、全网搜索五维情报，侧栏集成单行 38px 内容类型筛选与四维排序下拉工具条。<br>**模块划分**：`logic.ts`（纯函数层，禁止 React 依赖）、`formatters.tsx`（展示格式化）、`useStudioData.ts`（状态与业务编排）、`StudioDataSourceBar` / `TweetListPane` / `TweetDetailPane` / `TweetVideoPlayer` / `BatchActions` / `ImageLightbox`（展示组件）。<br>**CLI 双模**：解析命令行指令参数，面向终端与 Agent 提供纯 JSON 管道。 |
+| **2. 业务编排层** | `src/main/pipeline/index.ts` | 串联全生命周期流水线，执行内容类型过滤（`FETCH_CONTENT_TYPES`）、时效性计算（`--hours`）、严格数量约束（`--limit` 截断与提前退出）、AI 关键词提炼、安全串行抓取步长控制与产物导出。 |
+| **3. 数据拦截层** | `src/main/client/index.ts`<br>`src/main/client/hidden-browser.ts`<br>`src/main/client/parser.ts` | **双轨零弹窗采集**：单推 / X Article 通过 `undici.fetch` 纯 HTTP SSR 直取（~1s）；全量时间线与热搜在 Electron 运行时复用内置隐藏窗口 `BrowserWindow({ show: false })` + CDP Network（零弹窗、零外部 Chrome 进程，纯 Node 开发态回退 Playwright）。协议层严格隔离 `HomeLatestTimeline*`（关注流）与 `HomeTimeline*`（推荐流），全面兼容 `x-web` 新版载荷。 |
 | **4. 模型调度层** | `src/main/llm/index.ts`<br>`src/main/pipeline/summarizer.ts` | 屏蔽国内外 7 大厂商协议差异，提供长思维链（`reasoning_effort: "high"`）的原生流式支持，负责 Prompt 组装与研报渲染。 |
-| **5. 本地持久化层** | `src/main/storage/index.ts` | 基于 better-sqlite3 管理推文唯一索引去重与视频信息自动回填迁移，维护 Page Bundle 本地媒体资产持久化与级联删除清理。 |
+| **5. 本地持久化层** | `src/main/storage/index.ts`<br>`src/main/storage/video-downloader.ts`<br>`src/main/media-protocol.ts` | 基于 better-sqlite3 管理推文唯一索引去重、多维筛选（来源/类型/点赞）与排序（发布/抓取/点赞/浏览）；维护 `~/Documents/Xtract/` Page Bundle 资产（Markdown + 图片 + 按需流式下载 MP4）与 `xtract-media://` Range 206 离线视频流及级联删除。 |
 
 ---
 

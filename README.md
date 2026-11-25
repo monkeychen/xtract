@@ -3,21 +3,21 @@
 [![Version](https://img.shields.io/badge/version-0.1.4-informational.svg)](docs/prd/README.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Electron](https://img.shields.io/badge/Electron-34-47848F47848F.svg)](https://www.electronjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-42-47848F.svg)](https://www.electronjs.org/)
 [![Vitest](https://img.shields.io/badge/Tested%20with-Vitest-yellow.svg)](https://vitest.dev/)
 
-> **基于 Playwright 官方流无损拦截 + SQLite 本地增量去重 + 全网实时热搜雷达 + 国内外多大模型统一调度（双轨认证：API-Key / 账号订阅免 Key）的个人情报与深度研报系统。**
+> **基于纯 HTTP SSR 秒级直取 + Electron 内置隐藏窗口无损网络流拦截 + SQLite 本地增量去重 + 全网实时热搜雷达 + 国内外多大模型统一调度（双轨认证：API-Key / 账号订阅免 Key）的个人情报与深度研报系统。**
 
 ---
 
 ## 这是什么
 
-传统的 Twitter 爬虫依赖逆向库（`twikit` 之类），而 X 官方每次重构前端打包命名就会让它们暴毙。Xtract 反过来做：**驱动真实浏览器，在协议层监听 X 官方前端自己发出的 GraphQL 响应**。只要你能用浏览器刷推，抓取就一定能用。
+传统的 Twitter 爬虫依赖逆向库（`twikit` 之类），而 X 官方每次重构前端打包命名就会让它们暴毙。Xtract 反过来做：**单推 / X Article 直接通过纯 HTTP SSR 秒级直取（零弹窗、零浏览器），时间线与热搜则通过 Electron 内置隐藏窗口在协议层监听 X 官方前端的 SSR 与 GraphQL 响应**。只要你能用浏览器刷推，抓取就一定能用。
 
 同一套代码提供两种运行形态：
 
-- **桌面工作台**（Electron）：无参启动即唤出「XTRACT 情报工作台」——四维情报源切换、信噪比过滤、长文沉浸阅读、免落盘视频流式播放；
+- **桌面工作台**（Electron）：无参启动即唤出「XTRACT 情报工作台」——五维情报源切换（关注流 / 推荐流 / 博主追踪 / X 列表 / 全网搜索）、单行类型筛选与四维排序、长文沉浸阅读、视频流式在线播放与本地离线下载；
 - **Headless CLI**：带参启动，stdout 输出标准 JSON，可直接接入终端管道与下游 Agent。
 
 | 情报工作台 | 设置中心 |
@@ -26,11 +26,11 @@
 
 | 能力 | 说明 |
 | :--- | :--- |
-| **抗脆弱抓取** | 零逆向成本，完全免疫 X 前端改版 |
-| **四维情报源** | 关注流 / 博主追踪 / X 列表 / 全网搜索，列表间物理隔离互不串扰 |
-| **高信噪比过滤** | 点赞门槛 + 拉取内容类型多选（短推 / 长推 / X Article，默认仅抓 X Article） |
+| **零弹窗抗脆弱抓取** | 单推纯 HTTP SSR ~1s 同步；时间线复用 Electron 内置隐藏窗口（零外部弹窗），全面兼容 X `x-web` 新版载荷 |
+| **五维情报源** | 关注流 / 推荐流 (For You) / 博主追踪 / X 列表 / 全网搜索，协议级与存储级严格隔离互不串台 |
+| **高信噪比筛选与排序** | 点赞门槛 + 拉取内容类型多选（默认仅抓 X Article）+ 侧栏单行类型筛选（专栏/长推/短推）与四维排序（发布/抓取/点赞/浏览） |
 | **抓取与总结解耦** | 推文先落库去重，LLM 按需处理；改 Prompt 重出早报是本地秒级操作，不重爬、不烧 Token |
-| **自包含归档与本地视频** | 导出为 `articles/{作者}/{推文ID}/index.md` + `images/` + `videos/`，支持按需流式下载 MP4 与离线秒播 |
+| **自包含归档与本地视频** | 导出为 `articles/{作者}/{推文ID}/index.md` + `images/` + `videos/`，支持按需流式下载 MP4 与 `xtract-media://` 离线秒播 |
 | **7 大模型统一调度** | Gemini / OpenAI / DeepSeek / 千问 / 智谱 / MiniMax / Kimi，支持 API-Key 与账号订阅免 Key 双轨认证 |
 
 ---
@@ -78,7 +78,7 @@ LLM_PROVIDER=gemini
 LLM_API_KEY=your_api_key
 ```
 
-也可以不碰 `.env`，直接 `pnpm dev` 后在设置抽屉里填；X 会话用设置中心的「一键登录」弹出原生窗口完成，**无需用开发者工具手动查 Token**。
+也可以不碰 `.env`，直接 `pnpm dev` 后在设置抽屉里配置；macOS 用户可在设置中心点击「从 Chrome 读取登录态」一键导入日常浏览器中的既有会话，**无需用开发者工具手动查 Token**（Windows 用户可在设置中手动填入 `auth_token` / `ct0`）。
 
 完整的凭据说明、各模型厂商端点解析规则（`XXXX_BASE_URL`）与免 Key 账号通道用法，见 [docs/configuration.md](docs/configuration.md)。
 
@@ -130,7 +130,9 @@ pnpm dev:cli -- --help
 
 | 目的 | 命令 |
 | :--- | :--- |
-| 拉取关注流 + 生成早报 | `XT --fetch-only --report-only` |
+| 拉取关注流（仅入库） | `XT --fetch-only --limit 20` |
+| 拉取推荐流 (For You) | `XT --recommended --limit 20` |
+| 离线生成今日早报 | `XT --report-only --hours 24` |
 | 关键词全网实时搜索（含短/长推） | `XT --search "AI Agent" --content-types article,note,short --min-likes 50` |
 | 抓取某博主全部推文 | `XT --user karpathy --all-tweets` |
 | 抓取指定 X 列表 | `XT --x-list 2100985900734062922` |
@@ -151,15 +153,18 @@ CLI 输出的提示里会直接打印当前可用的完整命令，复制即可�
 
 ## 数据落在哪
 
+默认统一存储在 `~/Documents/Xtract/`（可在设置中自定义存储根目录，开发态与安装版共享同一数据目录）：
+
 ```
-data/
-├── tweets.db          # SQLite 主库，tweet_id 主键增量去重
-├── auth_user.json     # X 会话状态（已 gitignore）
-├── raw/               # 原始 GraphQL 快照备份，便于事后回溯
-└── browser_profile/   # Playwright 持久化浏览器配置（体积较大）
-output/
-├── reports/           # AI 早报与趋势研报（Markdown）
-└── {作者}/{推文ID}/   # 自包含 Page Bundle：index.md + images/
+~/Documents/Xtract/
+├── config.env           # 持久化设置（模型 Key、代理、内容类型与自动下载偏好）
+├── data/
+│   ├── tweets.db        # SQLite 主库，tweet_id 主键增量去重
+│   ├── auth_state.json  # X 会话状态（可选）
+│   └── raw/             # 原始 GraphQL 快照备份，便于事后回溯
+├── articles/
+│   └── {作者}/{推文ID}/ # 自包含 Page Bundle：index.md + images/ + videos/
+└── reports/             # AI 早报与趋势研报（YYYY-MM-DD.md / trends_YYYY-MM-DD.md）
 ```
 
 目录规范、表结构与级联删除语义见 [docs/operations.md](docs/operations.md)。
@@ -199,7 +204,7 @@ pnpm build           # 生产构建门禁（vite + Electron 主进程/预加载�
 pnpm pack:dir && pnpm smoke  # 打包门禁：对真实 Xtract.app 产物验证 GUI/CLI 三种启动形态
 ```
 
-全部门禁全绿方可交付。当前覆盖 280+ 用例，含 18 个真实浏览器 Playwright 流程（启动真实 Vite + Chrome，注入 mock IPC 桥，断言真实 DOM 契约）。
+全部门禁全绿方可交付。当前覆盖 **373 项自动化用例**，含 **24 个真实浏览器 Playwright E2E 流程**（启动真实 Vite + Chrome，注入契约 IPC 桥，断言真实 DOM 与状态契约）。
 
 ---
 

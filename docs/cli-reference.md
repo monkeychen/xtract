@@ -47,11 +47,12 @@ Usage: xtract [options]
 Production-grade X (Twitter) intelligence radar & AI digest.
 
 Options:
-  -V, --version                         output the version number
+  -v, --version                         output the version number
   --check-auth                          验证 X Cookie 凭证或本地会话是否有效
   --trends                              查看全网热门趋势榜单看板
   --trends-digest                       全自动趋势研报（抓取热榜、主动挖掘代表性讨论并生成研报）
   --fetch-only                          仅抓取 Following 推文并存入本地 SQLite，不生成总结
+  --recommended                         抓取 X 推荐流 (For You) 推文并存入本地 SQLite
   --report-only                         仅根据本地已有推文生成今日早报，不发起网络请求
   --search <query>                      按关键词或高级语法搜索推文
   --search-type <type>                  搜索结果类型：live (实时最新) 或 top (热门) (default: "live")
@@ -64,10 +65,13 @@ Options:
   --no-download-videos                  强制跳过视频下载（覆盖 AUTO_DOWNLOAD_VIDEOS=true 配置）
   --content-types <types>               指定批量抓取的内容类型（逗号分隔：article,note,short；默认读取 FETCH_CONTENT_TYPES，缺省仅抓 article）
   --all-tweets                          快捷别名，等价于 --content-types article,note,short
+  --author-replies                      抓取/同步单篇推文时，一并拉取作者本人的追加评论/推文串
+  --no-author-replies                   抓取/同步单篇推文时，不抓取作者追评（默认）
   --delete [tweetIds...]                级联删除推文及本地文件：可传多个 ID/URL 批量删除，也可仅搭配 --user/--since 等筛选条件
   --since <date>                        起始日期过滤 (YYYY-MM-DD)
   --until <date>                        截止日期过滤 (YYYY-MM-DD)
   --older-than <duration>               早于指定时长的推文 (例如 30d, 48h, 7d)
+  --only-short                          仅筛选/删除普通短推文（保留长推文 Note Tweet 与专栏文章 X Article）
   --dry-run                             演练预览模式，仅展示待删除列表，不执行真实删除
   -y, --yes                             跳过删除确认提示直接执行
   --export [limit]                      将已抓取的推文导出为结构化 Markdown 文档
@@ -105,12 +109,19 @@ Options:
 
 ---
 
-### 4.2 仅抓取推文入库 (`--fetch-only`)
+### 4.2 仅抓取推文入库 (`--fetch-only` / `--recommended`)
 只进行网络拦截与本地落库，**不触发 LLM 总结**。适合用于高频定时采集、数据积累，或在不消耗 Token 的情况下备份推文。
+
+- `--fetch-only`：严格仅拦截 `HomeLatestTimeline*`（「正在关注 / Following」），不会混入未关注的推荐账号，落库标记 `source_type = 'following'`；
+- `--recommended`：严格仅拦截 `HomeTimeline*`（「为你推荐 / For You」），独立落库标记 `source_type = 'recommended'`，与关注流完全隔离。
 
 * **基本语法**：
   ```bash
-  pnpm dev:cli -- --fetch-only
+  # 拉取关注流（默认按 FETCH_CONTENT_TYPES 过滤，缺省仅抓 X Article）
+  pnpm dev:cli -- --fetch-only --limit 20
+
+  # 拉取推荐流（包含短推/长推/专栏全部内容类型）
+  pnpm dev:cli -- --recommended --limit 20 --all-tweets
   ```
 * **参数选项**：
   * `--pages <N>`：抓取页数（默认读取 `.env` 中的 `FETCH_MAX_PAGES`，通常 1 页约 25~35 条）。

@@ -54,15 +54,18 @@ fi
 | 任务场景 | 推荐命令 | 说明 |
 | :--- | :--- | :--- |
 | **凭证状态自检** | `$XT --check-auth --json` | 检查 X 登录态是否有效，抓取网络数据前先自检 |
-| **单推深度抓取/阅读** | `$XT --view <URL\|ID> --json` | 抓取长文、连帖、媒体，默认导出 Page Bundle Markdown |
+| **拉取关注流 (Following)** | `$XT --fetch-only --limit 20 [--all-tweets] --json` | 严格仅抓已关注账号（`HomeLatestTimeline*`），默认按 `FETCH_CONTENT_TYPES` 过滤 |
+| **拉取推荐流 (For You)** | `$XT --recommended --limit 20 [--all-tweets] --json` | 抓取 X「为你推荐」时间线并独立入库（`source_type = 'recommended'`） |
+| **单推深度抓取/阅读** | `$XT --view <URL\|ID> [--download-videos] --json` | 纯 HTTP SSR 秒级抓取长文/专栏/内嵌推文，默认导出 Page Bundle Markdown，加 `--download-videos` 同步下载 MP4 |
 | **抓取单推含作者追评** | `$XT --view <URL\|ID> --author-replies --json` | 深度展开作者在评论区追加的补充长推串 |
 | **单推不导出 Markdown** | `$XT --view <URL\|ID> --no-export-md --json` | 仅获取推文结构化 JSON，不下载图片与写磁盘 |
-| **定向博主追踪** | `$XT --user <handle> --limit 20 --json` | 抓取指定博主主页最新推文（支持 20/50/100） |
-| **全网实时搜索** | `$XT --search "<query>" --search-type live --min-likes 50 --json` | 搜索最新高信噪比推文，建议搭配 `--min-likes` 过滤 |
+| **定向博主追踪** | `$XT --user <handle> --limit 20 [--all-tweets] --json` | 抓取指定博主主页最新推文（支持 20/50/100） |
+| **定向 X 列表抓取** | `$XT --x-list <listId\|URL> --limit 20 [--all-tweets] --json` | 抓取指定 X List 推文池 |
+| **全网实时搜索** | `$XT --search "<query>" --search-type live --min-likes 50 [--all-tweets] --json` | 搜索最新高信噪比推文，建议搭配 `--min-likes` 过滤 |
 | **全网热门趋势榜** | `$XT --trends --category tech --top 10 --json` | 抓取指定分类（tech/all/business 等）热点话题榜单 |
 | **AI 趋势深度研报** | `$XT --trends-digest --hours 24 --top 10 --json` | 自动挖掘热点代表性讨论并调用大模型生成研报 |
 | **检索本地推文库** | `$XT --list 20 [--min-likes 50] [--user <handle>] --json` | 离线查看本地 SQLite 已抓取的推文列表 |
-| **批量导出推文归档** | `$XT --export-ids <ID1> <ID2>... --json` | 批量将推文导出为独立的 Page Bundle 目录结构 |
+| **批量导出推文归档** | `$XT --export-ids <ID1> <ID2>... [--download-videos] --json` | 批量将推文导出为独立的 Page Bundle 目录结构 |
 | **级联删除演练预览** | `$XT --delete <ID1> <ID2>... --dry-run --json` | 安全预览拟从 SQLite 和磁盘清理的文件与目录 |
 | **级联物理删除** | `$XT --delete <ID1> <ID2>... -y --json` | 永久物理删除数据库记录及对应 Page Bundle 文件 |
 
@@ -82,26 +85,26 @@ $XT --view "https://x.com/username/status/1234567890" --author-replies --json
 ```json
 {
   "tweet": {
-    "id": "1234567890",
-    "text": "推文正文...",
-    "full_text": "完整展开的长文正文或 X Article 万字专栏...",
+    "tweet_id": "1234567890",
+    "text": "完整展开的正文、长推文或 X Article 万字专栏 Markdown...",
     "author_name": "博主昵称",
     "author_username": "username",
-    "created_at": "Wed Oct 14 01:23:45 +0000 2026",
-    "likes_count": 1280,
-    "retweets_count": 340,
-    "replies_count": 56,
-    "views_count": 45000,
+    "created_at": "2026-10-14T01:23:45.000Z",
+    "like_count": 1280,
+    "retweet_count": 340,
+    "reply_count": 56,
+    "view_count": 45000,
+    "is_article": true,
+    "is_note_tweet": false,
     "media_urls": ["https://pbs.twimg.com/media/...jpg"],
-    "video_variants": [{ "bitrate": 2176000, "url": "https://video.twimg.com/..." }],
-    "is_thread": true,
-    "thread_tweets": [ ... ]
+    "video_url": "https://video.twimg.com/..."
   },
-  "exportedMarkdown": "/Users/xxx/Documents/Xtract/articles/username/1234567890/index.md"
+  "exportedMarkdown": "/Users/xxx/Documents/Xtract/articles/username/1234567890/index.md",
+  "downloadedVideos": []
 }
 ```
 
-Agent 可直接读取 `tweet.full_text` 进行提炼总结，若需引用本地图片或文件，`exportedMarkdown` 即为完整落盘路径。
+Agent 可直接读取 `tweet.text` 进行提炼总结，若需引用本地图片或文件，`exportedMarkdown` 即为完整落盘路径。
 
 ### 3.2 调研特定技术或热点主题
 

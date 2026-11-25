@@ -298,6 +298,23 @@ flowchart TD
   3. **解析层全量兼容**：`parseTimelineInstructions` 与 `extractTimelineInstructions` 兼容新旧两套时间线字段及 SSR HTML 首屏多片合并。
 - **教训**：遇到外部平台协议级变更（如全站拒收 `HeadlessChrome`），**必须立刻排查所有共用同一抓取通道的入口并逐条跑真机冒烟**，绝不能只修单点并依赖离线 mock 测试全绿就发版。
 
+### 坑 22：关注流混入未关注的「为你推荐」账号
+- **现象**：用户拉取「关注流」后，列表中出现大量并未关注的账号推文（例如 `@KongYiGC`）。
+- **根因**：
+  1. 打开 `https://x.com/home` 时，X 默认优先发起 `HomeTimeline`（「为你推荐 / For You」）请求；点击「正在关注」标签后才会发起 `HomeLatestTimelineQuery`；
+  2. 旧监听器同时放行了 `HomeLatestTimeline`、`HomeTimeline`、`HomeTimelineV2` 与 `TimelineResponse`。即便点击标签后执行了 `capturedInstructions.length = 0`，由于网络异步竞态，在点击前已发出的 `HomeTimeline` 慢响应在点击后才返回，再次把推荐流推文塞进了关注流。
+- **解法**：
+  1. 在 [`src/main/client/index.ts`](../src/main/client/index.ts) 抽出协议级纯函数 `isFollowingTimelineUrl`（**只放行** `HomeLatestTimeline*`）与 `isRecommendedTimelineUrl`（**只放行** `HomeTimeline*` 且排除 `HomeLatestTimeline*`），从协议根源彻底杜绝串台；
+  2. 切换标签页时对 `aria-selected="true"` 做最多 4 次确认重试，避免 React 水合未完成导致点击落空；
+  3. 顺势新增独立的「推荐流」数据源（`source_type = 'recommended'`）与 `--recommended` CLI 选项，让用户按需分别消费关注流与推荐流。
+- **教训**：异步网络拦截绝不能靠「时间窗口清空数组」来隔离不同业务接口，必须在 URL / Operation 维度做严格白名单过滤。
+
+### 坑 23：用户名含 5 位以上数字导致推文 ID 误提取，单推同步死等超时
+- **现象**：同步 `https://x.com/bobolv235824/status/2125213113838711213` 全文时一直失败，且回退触发后台 Chromium 打印 `Failed to resolve address for stun.l.google.com.` 日志。
+- **根因**：全链路 6 处代码使用裸正则 `tweetIdOrUrl.match(/(\d{5,})/)` 提取推文 ID，直接命中了作者用户名 `bobolv235824` 中的 6 位数字 **`235824`** 而非 `/status/` 后的真实 ID `2125213113838711213`。高速 SSR 通道其实 1 秒就完整拿到了 14,807 字全文，却因 `restId !== '235824'` 丢弃结果并回退隐藏浏览器空等不存在的推文直到超时。
+- **解法**：在 [`src/main/client/parser.ts`](../src/main/client/parser.ts) 统一收口 `extractTweetId`，**优先匹配 `/status(?:es)?\/(\d{5,})/i`**，仅当不含 `/status/` 路径时回退匹配纯数字，并同步替换全仓库 6 处旧正则。
+- **教训**：URL 解析永远按路径语义锚定，切忌对整条 URL 做无锚点的全局数字匹配；任何“只提取数字 ID”的工具函数必须统一收口复用，避免多处复制粘贴埋下同源隐患。
+
 ---
 
 ## 五、交互设计与 Vibe Coding 哲学反思

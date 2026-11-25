@@ -3,7 +3,7 @@
 ## 1. 项目定位与终极目标
 Xtract 是一款面向专业技术人员与创作者的高信噪比 X (Twitter) 实时情报雷达与 AI 结构化研报系统。
 项目采用 **纯 Node.js / Electron（TypeScript）工业级单运行时架构**，实现 **GUI 桌面工作台 + Headless CLI 同一二进制双模运行**：
-- **无参启动**：呼出跨平台原生桌面工作台（聚焦于 XTRACT 情报工作台，四维情报聚合、长文沉浸式阅读、免落盘视频流式播放与设置中心）；
+- **无参启动**：呼出跨平台原生桌面工作台（聚焦于 XTRACT 情报工作台，五维情报聚合、侧栏类型筛选与四维排序、长文沉浸式阅读、离线视频流式播放与设置中心）；
 - **带参启动**：命中命令行白名单时直接进入 Headless CLI，stdout 输出标准 JSON，stderr 输出诊断进度，支持终端与下游 Agent 管道组合。
 
 ---
@@ -84,13 +84,16 @@ xtract/
 - 依赖安装：`pnpm install`
 - 启动 GUI 桌面应用（开发态）：`pnpm dev`
 - 运行 Headless CLI 命令（开发态）：`pnpm dev:cli -- [命令选项]`
+  - 拉取关注流（严格仅 Following）：`pnpm dev:cli -- --fetch-only [--limit 20] [--all-tweets]`
+  - 拉取推荐流（For You）：`pnpm dev:cli -- --recommended [--limit 20] [--all-tweets]`
   - 查看全网趋势榜单：`pnpm dev:cli -- --trends [--category tech|all|business]`
   - 全网趋势深度研报：`pnpm dev:cli -- --trends-digest [--hours 24] [--provider qwen-token-plan]`
   - 关键词实时搜索：`pnpm dev:cli -- --search "<关键词>" [--min-likes 50]`
-  - 查看或导出单推：`pnpm dev:cli -- --view <tweetId|url> [--author-replies | --no-author-replies]`
+  - 查看或导出单推：`pnpm dev:cli -- --view <tweetId|url> [--download-videos] [--author-replies | --no-author-replies]`
   - 级联删除推文及本地文件：`pnpm dev:cli -- --delete <tweetId|url>... [-y]`（可传多个 ID/URL 批量删除）
-  - 按 ID 批量导出独立归档：`pnpm dev:cli -- --export-ids <tweetId|url>...`
+  - 按 ID 批量导出独立归档：`pnpm dev:cli -- --export-ids <tweetId|url>... [--download-videos]`
   - 检索本地推文：`pnpm dev:cli -- --list [数量]`
+- 本地打包（自动前置 `pnpm pack:clean` 清理历史 `release/` 产物）：`pnpm pack:mac` / `pnpm pack:win` / `pnpm pack:all`
 
 ### 五道质量验收门禁 (交付必须 100% 通过)
 每一次迭代交付前，必须主动全量跑通五道门禁。**统一入口是一条命令**：
