@@ -315,6 +315,12 @@ flowchart TD
 - **解法**：在 [`src/main/client/parser.ts`](../src/main/client/parser.ts) 统一收口 `extractTweetId`，**优先匹配 `/status(?:es)?\/(\d{5,})/i`**，仅当不含 `/status/` 路径时回退匹配纯数字，并同步替换全仓库 6 处旧正则。
 - **教训**：URL 解析永远按路径语义锚定，切忌对整条 URL 做无锚点的全局数字匹配；任何“只提取数字 ID”的工具函数必须统一收口复用，避免多处复制粘贴埋下同源隐患。
 
+### 坑 24：跳过流程门禁直接编码，导致版本缺少 PRD / Spec / 高保真原型文档
+- **现象**：在收到 `v0.1.5` 批量导出新需求后，直接跳进 TDD 与编码实现，并在未经人类评审的情况下提前写入了 `docs/archive/v0.1.5/release-v0.1.5.md` 与本地 `v0.1.5` tag，遗漏了 `~/.gemini/dev-workflow.md` 规定的 `PRD-v0.1.5.md`、`spec-v0.1.5-m1.md`、`prototype-v0.1.5-m1.html` 以及评审门禁。
+- **原因**：在连续多轮快节奏修复后产生了“先写代码更快”的惯性，没有在进入新版本号前强制切回「阶段一 PRD → 阶段二 Spec & Prototype → 评审放行 → TDD 开发 → 阶段三 Release & 归档」的标准节拍。
+- **解决**：立即撤销过早创建的 `docs/archive/v0.1.5/` 与本地 `v0.1.5` tag，在活跃目录补齐完整的 `docs/prd/PRD-v0.1.5.md`、`docs/spec/spec-v0.1.5-m1.md`、`docs/prototype/prototype-v0.1.5-m1.html` 与 `docs/release/release-v0.1.5.md`（均标为 `status: reviewing`），等待人类审核放行后再归档与打 tag。
+- **教训**：**无论需求多清晰，只要开启新版本号，第一步永远是文档门禁（PRD → Spec → Prototype）等人类确认，绝不越级直奔写代码与提前归档。**
+
 ---
 
 ## 五、交互设计与 Vibe Coding 哲学反思

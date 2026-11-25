@@ -1,0 +1,365 @@
+<!-- doc: prototype | product: v0.1.5 | milestone: m1 | status: reviewing -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xtract v0.1.5 M1 高保真原型 — 批量导出 Markdown 弹窗</title>
+  <style>
+    :root {
+      --paper: #f7f3eb;
+      --paper-raised: #fdfbf7;
+      --paper-sunken: #efe9dc;
+      --ink: #1f1c18;
+      --ink-soft: #575148;
+      --ink-faint: #8c8478;
+      --line: rgba(31, 28, 24, 0.11);
+      --line-strong: rgba(31, 28, 24, 0.22);
+      --cinnabar: #b53a28;
+      --cinnabar-wash: rgba(181, 58, 40, 0.08);
+      --jade: #1e6f5c;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+      --font-serif: "Songti SC", "Noto Serif SC", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--paper-sunken);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部原型状态切换器（仅用于评审预览，不属于正式界面） */
+    .proto-bar {
+      background: #1f1c18;
+      color: #f7f3eb;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .proto-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .proto-btn {
+      background: rgba(255,255,255,0.1);
+      color: #f7f3eb;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+    .proto-btn.active { background: var(--cinnabar); border-color: var(--cinnabar); font-weight: 600; }
+
+    /* 模拟工作台背景与遮罩 */
+    .stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(181, 58, 40, 0.04), transparent 45%),
+        var(--paper);
+    }
+
+    .mock-selbar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--paper-raised);
+      border: 1px solid var(--line-strong);
+      box-shadow: 0 8px 24px rgba(31, 28, 24, 0.14);
+      border-radius: 999px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12.5px;
+      z-index: 2;
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 42px 0 0 0;
+      background: rgba(31, 28, 24, 0.36);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .dialog {
+      width: 460px;
+      max-width: calc(100vw - 32px);
+      padding: 24px;
+      border-radius: 10px;
+      background: var(--paper-raised);
+      border: 1px solid var(--line-strong);
+      box-shadow: 0 18px 48px rgba(31, 28, 24, 0.18);
+    }
+
+    .serif-title {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 16px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-soft);
+      margin-bottom: 8px;
+    }
+
+    .mode-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .mode-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .mode-card.active {
+      border-color: var(--ink);
+      background: var(--paper);
+    }
+    .mode-card input { margin-top: 2px; accent-color: var(--ink); }
+    .mode-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .mode-desc { font-size: 11.5px; color: var(--ink-faint); margin-top: 2px; line-height: 1.45; }
+
+    .dir-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+    .text-input {
+      flex: 1;
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper);
+      font-size: 12px;
+      color: var(--ink);
+      outline: none;
+    }
+    .text-input::placeholder { color: var(--ink-faint); }
+
+    .status-line {
+      font-size: 11.5px;
+      color: var(--ink-faint);
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    .progress-box { margin-bottom: 16px; }
+    .progress-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-bottom: 6px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: var(--line);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--cinnabar);
+      transition: width 0.3s ease;
+    }
+
+    .footer { display: flex; justify-content: flex-end; gap: 10px; }
+    .btn {
+      font-size: 12.5px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      border: 1px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--cinnabar);
+      border-color: var(--cinnabar);
+      color: #fff;
+    }
+
+    .toast {
+      position: fixed;
+      top: 60px;
+      right: 24px;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+      z-index: 20;
+      display: none;
+    }
+    .toast.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="proto-bar">
+    <span><strong>Xtract v0.1.5 · M1 高保真原型</strong> — 批量导出 Markdown 配置弹窗</span>
+    <div class="proto-tabs">
+      <button class="proto-btn active" onclick="setPreset('default', this)">1. 默认合并态</button>
+      <button class="proto-btn" onclick="setPreset('emptyDir', this)">2. 首次未选目录</button>
+      <button class="proto-btn" onclick="setPreset('separateVideo', this)">3. 独立目录 + 视频下载开</button>
+      <button class="proto-btn" onclick="setPreset('exporting', this)">4. 静默补齐与导出中</button>
+      <button class="proto-btn" onclick="setPreset('done', this)">5. 完成反馈 Toast</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">已导出 3 篇至合并目录（含 18 张图、2 个视频）</div>
+
+  <div class="stage">
+    <div class="mock-selbar">
+      <span style="color: var(--cinnabar); font-weight: 600;">已选 3 篇</span>
+      <button class="btn" style="padding: 4px 12px; font-size: 12px;" onclick="showDialog(true)">导出 Markdown</button>
+      <button class="btn btn-primary" style="padding: 4px 12px; font-size: 12px;">删除所选</button>
+      <button class="btn" style="border: none; background: transparent; padding: 4px 8px; font-size: 12px;">取消</button>
+    </div>
+  </div>
+
+  <div class="backdrop" id="backdrop">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+      <h3 class="serif-title" id="dlg-title">导出 Markdown（已选 3 篇）</h3>
+
+      <div class="field-label">导出结构</div>
+      <div class="mode-list">
+        <label class="mode-card active" id="card-merged" onclick="pickMode('merged')">
+          <input type="radio" name="mode" id="radio-merged" checked />
+          <div>
+            <div class="mode-title">合并为单一目录</div>
+            <div class="mode-desc">生成 1 份合并 index.md 与统一素材子目录（images/、videos/）</div>
+          </div>
+        </label>
+        <label class="mode-card" id="card-separate" onclick="pickMode('separate')">
+          <input type="radio" name="mode" id="radio-separate" />
+          <div>
+            <div class="mode-title">按篇独立目录</div>
+            <div class="mode-desc">每篇生成独立 {作者}_{ID}/ 目录，扁平存放在目标文件夹内</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="field-label">导出位置</div>
+      <div class="dir-row">
+        <input
+          id="dir-input"
+          class="text-input"
+          type="text"
+          readonly
+          value="/Users/chenzhian/Documents/Obsidian/X-Inbox"
+          placeholder="点击右侧选择目录（或点下方导出时自动选择）"
+        />
+        <button class="btn" id="btn-pick" onclick="mockPickDir()">选择目录…</button>
+      </div>
+
+      <div class="status-line" id="status-line">
+        缺全文将自动静默补齐 · 视频策略：仅保留原视频链接（来自设置）
+      </div>
+
+      <div class="progress-box" id="progress-box" style="display: none;">
+        <div class="progress-head">
+          <span id="progress-text">正在静默补齐全文 (2/3) · @bobolv235824</span>
+          <span id="progress-pct">62%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill" style="width: 62%;"></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button class="btn" id="btn-cancel" onclick="showDialog(false)">取消</button>
+        <button class="btn btn-primary" id="btn-confirm" onclick="simulateExport()">开始导出 (3)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentMode = 'merged';
+    function pickMode(mode) {
+      currentMode = mode;
+      document.getElementById('radio-merged').checked = mode === 'merged';
+      document.getElementById('radio-separate').checked = mode === 'separate';
+      document.getElementById('card-merged').classList.toggle('active', mode === 'merged');
+      document.getElementById('card-separate').classList.toggle('active', mode === 'separate');
+    }
+    function showDialog(open) {
+      document.getElementById('backdrop').style.display = open ? 'flex' : 'none';
+    }
+    function mockPickDir() {
+      document.getElementById('dir-input').value = '/Users/chenzhian/Desktop/AI素材合集';
+    }
+    function setExporting(on, text, pct) {
+      document.getElementById('progress-box').style.display = on ? 'block' : 'none';
+      document.getElementById('btn-pick').disabled = on;
+      document.getElementById('btn-cancel').disabled = on;
+      document.getElementById('btn-confirm').disabled = on;
+      document.getElementById('btn-confirm').textContent = on ? '正在导出...' : '开始导出 (3)';
+      if (text) document.getElementById('progress-text').textContent = text;
+      if (pct !== undefined) {
+        document.getElementById('progress-pct').textContent = pct + '%';
+        document.getElementById('progress-fill').style.width = pct + '%';
+      }
+    }
+    function setPreset(name, btn) {
+      document.querySelectorAll('.proto-btn').forEach((b) => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      document.getElementById('toast').classList.remove('show');
+      showDialog(true);
+      setExporting(false);
+      if (name === 'default') {
+        pickMode('merged');
+        document.getElementById('dir-input').value = '/Users/chenzhian/Documents/Obsidian/X-Inbox';
+        document.getElementById('status-line').textContent = '缺全文将自动静默补齐 · 视频策略：仅保留原视频链接（来自设置）';
+      } else if (name === 'emptyDir') {
+        pickMode('merged');
+        document.getElementById('dir-input').value = '';
+        document.getElementById('status-line').textContent = '缺全文将自动静默补齐 · 视频策略：仅保留原视频链接（来自设置）';
+      } else if (name === 'separateVideo') {
+        pickMode('separate');
+        document.getElementById('dir-input').value = '/Users/chenzhian/Desktop/AI素材合集';
+        document.getElementById('status-line').textContent = '缺全文将自动静默补齐 · 视频策略：同步下载至 videos/（来自设置）';
+      } else if (name === 'exporting') {
+        pickMode('merged');
+        document.getElementById('dir-input').value = '/Users/chenzhian/Documents/Obsidian/X-Inbox';
+        setExporting(true, '正在静默补齐全文 (2/3) · @bobolv235824', 62);
+      } else if (name === 'done') {
+        showDialog(false);
+        document.getElementById('toast').classList.add('show');
+      }
+    }
+    function simulateExport() {
+      if (!document.getElementById('dir-input').value) mockPickDir();
+      setExporting(true, '正在静默补齐全文 (1/3) · @xaiwind', 28);
+      setTimeout(() => setExporting(true, '正在合并生成单一归档目录（3 篇）...', 82), 700);
+      setTimeout(() => {
+        setExporting(false);
+        showDialog(false);
+        document.getElementById('toast').classList.add('show');
+      }, 1400);
+    }
+  </script>
+</body>
+</html>
