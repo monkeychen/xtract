@@ -3,15 +3,15 @@ doc: spec
 product: v0.1.5
 milestone: m1
 date: 2026-11-25
-status: reviewing
+status: approved
 ---
 
 # Xtract M1 技术设计规格：批量导出 Markdown 至指定目录与自动清理打包
 
-> **所属版本**：[PRD-v0.1.5.md](../prd/PRD-v0.1.5.md)  
+> **所属版本**：[PRD-v0.1.5.md](prd-v0.1.5.md)  
 > **里程碑**：M1  
-> **状态**：🔍 待评审（Reviewing）  
-> **配套原型**：[prototype-v0.1.5-m1.html](../prototype/prototype-v0.1.5-m1.html)
+> **状态**：✅ 已评审通过（Approved）  
+> **配套原型**：[prototype-v0.1.5-m1.html](prototype-v0.1.5-m1.html)
 
 ---
 
@@ -152,4 +152,4 @@ export interface BatchExportSummary {
   - `tsc --noEmit` & `pnpm build`：✅ **0 Error**
   - `pnpm pack:dir`：✅ 自动先执行 `pnpm pack:clean` 清理旧 `release/`（释放约 1024.3 MB）后构建 `release/mac-arm64/Xtract.app`
   - `pnpm smoke`：✅ **4/4 通过**（`--version` 输出 `0.1.5`、`--help`、`--list 1`、无参 GUI 存活）
-- **遗留问题**：无；待人类审核 PRD / Spec / Prototype / Release 后即可打 `v0.1.5` tag 并整组归档至 `docs/archive/v0.1.5/`。
+- **遗留问题**：无；已完成评审并整组归档至 `docs/archive/v0.1.5/`。

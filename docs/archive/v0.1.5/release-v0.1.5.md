@@ -3,7 +3,7 @@ doc: release
 product: v0.1.5
 milestone: -
 date: 2026-11-25
-status: reviewing
+status: approved
 ---
 
 # Xtract v0.1.5 发版说明
@@ -36,16 +36,16 @@ status: reviewing
 
 ## 4. 验收汇总
 
-详见 [spec-v0.1.5-m1.md §8 验收记录](../spec/spec-v0.1.5-m1.md#8-验收记录)：
+详见 [spec-v0.1.5-m1.md §8 验收记录](spec-v0.1.5-m1.md#8-验收记录)：
 - `pnpm lint` / `tsc --noEmit` / `pnpm build`：✅ 0 Error
 - `pnpm test`：✅ **29/29 测试文件、376/376 用例通过**（含 **25/25 GUI E2E Flow**）
 - `pnpm pack:dir && pnpm smoke`：✅ 前置清理历史 `release/` 后打包，Smoke **4/4 通过**（`--version` 输出 `0.1.5`）
 
 ### 交付检查单
 - [x] 全量自动化测试通过（单元 + 集成 + E2E，含回归）
-- [ ] PRD / Spec / Prototype / Release 经人类评审通过（`status: approved`）
-- [ ] git 打 tag `v0.1.5` 并推送触发双平台发版
-- [ ] 本版全部文档（PRD / spec / prototype / release）整组归档至 `docs/archive/v0.1.5/`
+- [x] PRD / Spec / Prototype / Release 经人类评审通过（`status: approved`）
+- [x] git 打本地 tag `v0.1.5`（待推送触发双平台发版）
+- [x] 本版全部文档（PRD / spec / prototype / release）整组归档至 `docs/archive/v0.1.5/`
 
 ---
 
