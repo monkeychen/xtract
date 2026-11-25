@@ -4,10 +4,10 @@ import { classifyTweet, isTweetVideo, type CrawlProgress, type DataSource } from
 import { formatCount, formatRelativeTime, getTweetListDisplayTitle } from './formatters.js';
 
 const CONTENT_TYPE_OPTIONS: Array<{ value: TweetContentTypeFilter; label: string; fullLabel: string }> = [
-  { value: 'all', label: '全部', fullLabel: '全部类型' },
-  { value: 'article', label: '专栏', fullLabel: '专栏文章' },
-  { value: 'note', label: '长推', fullLabel: '长推文' },
-  { value: 'short', label: '短推', fullLabel: '短推文' },
+  { value: 'all', label: '全部类型', fullLabel: '全部类型' },
+  { value: 'article', label: '专栏文章', fullLabel: '专栏文章' },
+  { value: 'note', label: '长推文', fullLabel: '长推文' },
+  { value: 'short', label: '短推文', fullLabel: '短推文' },
 ];
 
 export interface TweetListPaneProps {
@@ -63,10 +63,9 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
   onCrawl,
 }) => (
   <div className="studio-sidebar">
-        <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--paper-sunken)' }}>
-          {/* 第 1 行：全选计数 + 数据源徽标与条数 */}
-          <div style={{ padding: '8px 14px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0 }}>
+        <div id="feed-sidebar-toolbar" className="sidebar-toolbar">
+          <div className="sidebar-toolbar-left">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0 }}>
               <input
                 type="checkbox"
                 id="check-all"
@@ -74,68 +73,59 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
                 onChange={(e) => onToggleSelectAll(e.target.checked)}
               />
               <span id="selected-count-label">
-                {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
+                {checkedIds.size > 0 ? `已选 ${checkedIds.size}` : '全选'}
               </span>
             </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-              <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {dataSource === 'following' && '📡 关注流'}
-                {dataSource === 'recommended' && '✨ 推荐流'}
-                {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
-                {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
-                {dataSource === 'lists' && '📋 X 列表'}
-              </span>
-              <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)', flexShrink: 0 }}>
-                {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条`}
-              </span>
-            </div>
+            <span className="sidebar-toolbar-divider" aria-hidden="true" />
+            <span
+              id="feed-source-badge"
+              style={{
+                fontSize: '11.5px',
+                color: 'var(--ink-faint)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {dataSource === 'following' && '关注流'}
+              {dataSource === 'recommended' && '推荐流'}
+              {dataSource === 'search' && (searchQuery.trim() ? `搜: ${searchQuery.trim()}` : '全库推文')}
+              {dataSource === 'user' && (userHandle.trim() ? `@${userHandle.trim().replace(/^@/, '')}` : '全部博主')}
+              {dataSource === 'lists' && 'X 列表'}
+            </span>
+            <span
+              id="feed-header-total"
+              style={{
+                fontSize: '11px',
+                color: 'var(--ink-faint)',
+                flexShrink: 0,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {streamFilter ? `${filteredTweets.length}/${tweets.length}` : `${tweets.length}条`}
+            </span>
           </div>
-          {/* 第 2 行：文章类型快捷筛选胶囊 + 排序切换 */}
-          <div style={{ padding: '0 14px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <div id="feed-type-filters" style={{ display: 'flex', alignItems: 'center', gap: '4px' }} role="group" aria-label="文章类型过滤">
-              {CONTENT_TYPE_OPTIONS.map((opt) => {
-                const isActive = contentTypeFilter === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    id={`chip-type-${opt.value}`}
-                    type="button"
-                    aria-pressed={isActive}
-                    style={{
-                      fontSize: '11px',
-                      padding: '2px 8px',
-                      lineHeight: '1.4',
-                      borderRadius: '999px',
-                      border: `1px solid ${isActive ? 'var(--ink)' : 'var(--line)'}`,
-                      background: isActive ? 'var(--ink)' : 'var(--paper)',
-                      color: isActive ? 'var(--paper)' : 'var(--ink-soft)',
-                      fontWeight: isActive ? 600 : 400,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onClick={() => onContentTypeFilterChange(opt.value)}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
+
+          <div className="sidebar-toolbar-controls">
+            <select
+              id="feed-type-select"
+              aria-label="文章类型过滤"
+              className={`sidebar-select ${contentTypeFilter !== 'all' ? 'active' : ''}`}
+              value={contentTypeFilter}
+              onChange={(e) => onContentTypeFilterChange(e.target.value as TweetContentTypeFilter)}
+            >
+              {CONTENT_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
             <select
               id="feed-sort-select"
               aria-label="排序方式"
+              className={`sidebar-select ${sortBy !== 'created_at' ? 'active' : ''}`}
               value={sortBy}
               onChange={(e) => onSortByChange(e.target.value as TweetSortBy)}
-              style={{
-                fontSize: '11.5px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                border: '1px solid var(--line)',
-                background: 'var(--paper)',
-                color: 'var(--ink-soft)',
-                cursor: 'pointer',
-                outline: 'none',
-                flexShrink: 0,
-              }}
             >
               <option value="created_at">最新发布</option>
               <option value="fetched_at">最近抓取</option>

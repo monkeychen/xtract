@@ -1274,12 +1274,17 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     await page.waitForTimeout(200);
   });
 
-  it('Flow 24: Tweet List Content Type Filter pills (all / article / note / short)', async () => {
-    const typeGroup = page.locator('#feed-type-filters');
-    await expect(typeGroup.isVisible()).resolves.toBe(true);
+  it('Flow 24: Single-row sidebar toolbar with unified Content Type Filter & Sort dropdowns', async () => {
+    const toolbarBox = await page.locator('#feed-sidebar-toolbar').boundingBox();
+    expect(toolbarBox).not.toBeNull();
+    expect(toolbarBox!.height).toBeLessThanOrEqual(44);
+
+    const typeSelect = page.locator('#feed-type-select');
+    await expect(typeSelect.isVisible()).resolves.toBe(true);
+    expect(await typeSelect.inputValue()).toBe('all');
 
     // Filter by article -> IPC receives contentType: 'article' and persists in localStorage
-    await page.locator('#chip-type-article').click();
+    await typeSelect.selectOption('article');
     await page.waitForTimeout(300);
     const listCallsArticle = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
     expect(listCallsArticle[listCallsArticle.length - 1]?.contentType).toBe('article');
@@ -1292,13 +1297,13 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     expect(firstArticleText).toContain('专栏文章');
 
     // Filter by short -> IPC receives contentType: 'short'
-    await page.locator('#chip-type-short').click();
+    await typeSelect.selectOption('short');
     await page.waitForTimeout(300);
     const listCallsShort = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
     expect(listCallsShort[listCallsShort.length - 1]?.contentType).toBe('short');
 
     // Restore 'all'
-    await page.locator('#chip-type-all').click();
+    await typeSelect.selectOption('all');
     await page.waitForTimeout(200);
     expect(await page.evaluate(() => window.localStorage.getItem('xtract:studio:contentType'))).toBe('all');
   });
