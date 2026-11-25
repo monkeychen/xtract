@@ -23,6 +23,7 @@ date: 2026-11-25
 - 修复关注流、X 列表、博主追踪、全网搜索与热搜触发 `net::ERR_HTTP_RESPONSE_CODE_FAILURE`（HTTP 403）导致无法拉取的严重故障。
 - 修复 `parseTimelineInstructions` 与 `extractTimelineInstructions` 在 X 新版 `x-web` 时间线载荷下的 0 命中问题，全面兼容 `__typename` / `entry_id` / `content.content` / `module_items` / `TimelinePinEntry` 与 `list_by_rest_id_v2` / `user_result_by_screen_name` / `search_by_raw_query` 首屏 SSR HTML。
 - 修复 `fetchListTimeline` 误将 `list_by_rest_id_v2` 首段元信息分片判定为「列表不存在」的缺陷。
+- 修复纯转发帖（`RT @xxx: ...`）因携带他人 `/i/article/` 链接而被误判为 X Article 的问题，前后端统一排除纯转发壳。
 
 ### Removed
 - 移除单推同步中遇 403 自动弹出可见 Chrome 窗口的临时回退逻辑。
@@ -47,7 +48,7 @@ date: 2026-11-25
 
 ### 4.2 五道自动化质量门禁（`pnpm verify` @ `0.1.4`）
 - `pnpm lint`：✅ 0 Error
-- `pnpm test`：✅ **29/29 测试文件、360/360 测试用例通过**（含 21/21 GUI E2E Flow）
+- `pnpm test`：✅ **29/29 测试文件、362/362 测试用例通过**（含 21/21 GUI E2E Flow）
 - `tsc --noEmit` & `pnpm build`：✅ 0 Error
 - `pnpm pack:dir && pnpm smoke`：✅ **4/4 通过**（`Xtract --version` 输出 `0.1.4`）
 

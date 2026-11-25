@@ -80,6 +80,8 @@ export function isTweetVideo(tweet: Partial<Tweet>): boolean {
 const ARTICLE_URL_PATTERN = /(?:x\.com|twitter\.com)\/i\/article\/\d+/i;
 /** 官方长推截断体特征：正文以省略号 + t.co 结尾 */
 const TRUNCATED_BODY_PATTERN = /…\s*https:\/\/t\.co\/\S+$/i;
+/** 纯转发壳前缀特征 */
+const RETWEET_PREFIX_PATTERN = /^RT @[A-Za-z0-9_]+:\s/;
 
 export interface TweetClassification {
   /** 是否为 X 专栏文章 (Article) */
@@ -93,12 +95,18 @@ export interface TweetClassification {
  * 两个布尔值独立计算，UI 上的互斥优先级由调用方负责。
  */
 export function classifyTweet(tweet: Partial<Tweet>): TweetClassification {
-  const isArticle = Boolean(
-    tweet.is_article ||
-    tweet.urls?.some((u) => ARTICLE_URL_PATTERN.test(u)) ||
-    (tweet.text && ARTICLE_URL_PATTERN.test(tweet.text)) ||
-    tweet.text?.startsWith('# ')
+  const trimmedText = (tweet.text || '').trim();
+  const isRtShell = Boolean(
+    (tweet.is_retweet || RETWEET_PREFIX_PATTERN.test(trimmedText)) && !trimmedText.startsWith('# ')
   );
+  const isArticle = isRtShell
+    ? false
+    : Boolean(
+        tweet.is_article ||
+        tweet.urls?.some((u) => ARTICLE_URL_PATTERN.test(u)) ||
+        (tweet.text && ARTICLE_URL_PATTERN.test(tweet.text)) ||
+        tweet.text?.startsWith('# ')
+      );
   const isLong = Boolean(
     tweet.is_note_tweet ||
     (tweet.text && tweet.text.length > 280) ||

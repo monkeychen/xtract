@@ -419,18 +419,20 @@ export function parseTweetResult(
     ...(Array.isArray(tweetResult.media_entities2) ? tweetResult.media_entities2 : []),
   ];
 
-  // Retweet info (supports legacy.retweeted_status_result and x-web retweeted_status_results)
+  // Retweet info (supports legacy.retweeted_status_result, x-web retweeted_status_results, and RT @handle: prefix)
   const rawRtWrapper =
     legacy.retweeted_status_result ||
     tweetResult.retweeted_status_result ||
     tweetResult.retweeted_status_results;
-  const isRetweet = Boolean(rawRtWrapper);
-  let retweetedAuthor = '';
+  const rawTextForRtCheck = String(legacy.full_text || details.full_text || '').trim();
+  const rtPrefixMatch = rawTextForRtCheck.match(/^RT @([A-Za-z0-9_]+):\s/);
+  const isRetweet = Boolean(rawRtWrapper || rtPrefixMatch);
+  let retweetedAuthor = rtPrefixMatch?.[1] || '';
   let retweetedText = '';
   const rtUrlEntities: UrlEntity[] = [];
   const rtMediaEntities: Array<{ url?: string }> = [];
 
-  if (isRetweet) {
+  if (rawRtWrapper) {
     let rtResult = rawRtWrapper?.result || {};
     if (rtResult.__typename === 'TweetWithVisibilityResults') {
       rtResult = rtResult.tweet || {};
@@ -555,12 +557,17 @@ export function parseTweetResult(
     }
   }
 
-  const isArticle = Boolean(
-    tweetResult.article?.article_results?.result ||
-      primaryUrlEntities.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u.expanded_url || u.url || '')) ||
-      (fullText && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(fullText)) ||
-      fullText.startsWith('# ')
-  );
+  // 纯转发壳（RT @xxx: ...）即使正文带有原文章 /i/article/ 链接，也不是专栏原帖
+  const hasOwnArticlePayload = Boolean(tweetResult.article?.article_results?.result);
+  const isArticle = hasOwnArticlePayload
+    ? true
+    : isRetweet
+      ? false
+      : Boolean(
+          primaryUrlEntities.some((u) => /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(u.expanded_url || u.url || '')) ||
+            (fullText && /(?:x\.com|twitter\.com)\/i\/article\/\d+/i.test(fullText)) ||
+            fullText.startsWith('# ')
+        );
   const isNoteTweet = Boolean(
     tweetResult.note_tweet?.note_tweet_results?.result ||
       fullText.length > 280 ||
@@ -1018,11 +1025,19 @@ export function normalizeTweetDate(rawDate?: string): string {
   return d.toISOString();
 }
 
+const RETWEET_PREFIX_PATTERN = /^RT @[A-Za-z0-9_]+:\s/;
+
 /**
  * Determines whether a tweet contains or represents an X Article (Twitter Article / Long-form).
+ * Pure retweet shells (`RT @handle: ...`) carrying someone else's `/i/article/` link are NOT X Articles.
  */
 export function isArticleTweet(tweet: Partial<Tweet>): boolean {
   if (!tweet) return false;
+  const trimmedText = (tweet.text || '').trim();
+  const isRtShell = Boolean(
+    (tweet.is_retweet || RETWEET_PREFIX_PATTERN.test(trimmedText)) && !trimmedText.startsWith('# ')
+  );
+  if (isRtShell) return false;
   if (tweet.is_article) return true;
   // 1. Check if urls contains an official article link
   const hasArticleUrl = Boolean(

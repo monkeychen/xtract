@@ -52,6 +52,18 @@ describe('classifyTweet (专栏/长推文判定 §2.1)', () => {
     expect(classifyTweet({ ...base, text: '#标题' })).toEqual({ isArticle: false, isLong: false });
   });
 
+  it('should NOT treat a pure Retweet (RT @...) carrying an /i/article/ URL as an article', () => {
+    expect(
+      classifyTweet({
+        ...base,
+        is_article: true,
+        is_retweet: true,
+        urls: ['https://x.com/i/article/2125453411449733120'],
+        text: 'RT @AdrianPunk115: 小豆杀死了比赛 [x.com/i/article/2125…](https://x.com/i/article/2125453411449733120)',
+      })
+    ).toEqual({ isArticle: false, isLong: false });
+  });
+
   it('should detect long-form via is_note_tweet flag', () => {
     expect(classifyTweet({ ...base, is_note_tweet: true })).toEqual({ isArticle: false, isLong: true });
   });

@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import {
+  classifyTweetContentType,
   extractTimelineInstructions,
   extractSsrTimelineTweetsFromHtml,
+  isArticleTweet,
   parseTimelineInstructions,
+  parseTweetResult,
 } from '../src/main/client/parser.js';
 import { fetchTweetThreadViaHttpSsr } from '../src/main/client/index.js';
 
@@ -256,5 +259,48 @@ describe('x-web SSR & Timeline Schema Compatibility (v0.1.4)', () => {
       expect(tweets[0].text).toContain('🎬 [视频](https://video.twimg.com/amplify_video/2122489058601660416/vid/hd.mp4');
       expect(tweets[1].tweet_id).toBe('2122492466490433678');
     });
+  });
+
+  it('4. pure Retweet (RT @...) carrying an /i/article/ URL must be classified as retweet/short, NOT X Article', () => {
+    // 复现真实推文 https://x.com/Jackywine/status/2125466327645356515
+    const rawRt = {
+      rest_id: '2125466327645356515',
+      core: {
+        user_results: {
+          result: { rest_id: 'u10', core: { name: 'Jacky', screen_name: 'Jackywine' } },
+        },
+      },
+      counts: { favorite_count: 0, retweet_count: 50, reply_count: 0 },
+      details: {
+        created_at_ms: 1795585636000,
+        full_text: 'RT @AdrianPunk115: 小豆杀死了比赛，腾讯你拿什么比？ https://t.co/D8KlJsXss5',
+      },
+      legacy: {
+        entities: { urls: [{ expanded_url: 'https://x.com/i/article/2125453411449733120' }] },
+      },
+      url_entities: [
+        {
+          url: 'https://t.co/D8KlJsXss5',
+          expanded_url: 'https://x.com/i/article/2125453411449733120',
+          display_url: 'x.com/i/article/2125…',
+        },
+      ],
+    };
+
+    const parsed = parseTweetResult(rawRt);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.is_retweet).toBe(true);
+    expect(parsed?.retweeted_author).toBe('AdrianPunk115');
+    expect(parsed?.is_article).toBe(false);
+    expect(isArticleTweet(parsed!)).toBe(false);
+    expect(classifyTweetContentType(parsed!)).toBe('short');
+
+    // 即使旧库中已有历史脏数据 is_article: true，isArticleTweet 也应识别其为转发壳不误判为专栏
+    expect(
+      isArticleTweet({
+        ...parsed!,
+        is_article: true,
+      })
+    ).toBe(false);
   });
 });
