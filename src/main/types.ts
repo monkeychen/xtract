@@ -87,6 +87,7 @@ export interface DeleteFilter {
 }
 
 export type TweetSortBy = 'created_at' | 'fetched_at' | 'likes' | 'views';
+export type TweetContentTypeFilter = 'all' | TweetContentType;
 
 export interface TweetQueryOptions {
   limit?: number;
@@ -94,6 +95,7 @@ export interface TweetQueryOptions {
   minLikes?: number;
   minRetweets?: number;
   sourceType?: 'following' | 'recommended' | 'search' | 'trends' | 'user' | 'list' | 'legacy' | 'all';
+  contentType?: TweetContentTypeFilter;
   user?: string;
   query?: string;
   listId?: string;

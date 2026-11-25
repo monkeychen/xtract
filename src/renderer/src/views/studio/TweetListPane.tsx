@@ -1,7 +1,14 @@
 import React from 'react';
-import type { Tweet, TweetSortBy } from '../../types.js';
+import type { Tweet, TweetContentTypeFilter, TweetSortBy } from '../../types.js';
 import { classifyTweet, isTweetVideo, type CrawlProgress, type DataSource } from './logic.js';
 import { formatCount, formatRelativeTime, getTweetListDisplayTitle } from './formatters.js';
+
+const CONTENT_TYPE_OPTIONS: Array<{ value: TweetContentTypeFilter; label: string; fullLabel: string }> = [
+  { value: 'all', label: '全部', fullLabel: '全部类型' },
+  { value: 'article', label: '专栏', fullLabel: '专栏文章' },
+  { value: 'note', label: '长推', fullLabel: '长推文' },
+  { value: 'short', label: '短推', fullLabel: '短推文' },
+];
 
 export interface TweetListPaneProps {
   tweets: Tweet[];
@@ -15,9 +22,11 @@ export interface TweetListPaneProps {
   searchQuery: string;
   userHandle: string;
   sortBy: TweetSortBy;
+  contentTypeFilter: TweetContentTypeFilter;
   isLoading: boolean;
   crawlProgress: CrawlProgress | null;
   onSortByChange: (sortBy: TweetSortBy) => void;
+  onContentTypeFilterChange: (contentType: TweetContentTypeFilter) => void;
   onSelectTweet: (tweet: Tweet) => void;
   onToggleCheck: (tweetId: string, e: React.MouseEvent<HTMLInputElement>) => void;
   onToggleSelectAll: (checked: boolean) => void;
@@ -42,9 +51,11 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
   searchQuery,
   userHandle,
   sortBy,
+  contentTypeFilter,
   isLoading,
   crawlProgress,
   onSortByChange,
+  onContentTypeFilterChange,
   onSelectTweet,
   onToggleCheck,
   onToggleSelectAll,
@@ -52,19 +63,63 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
   onCrawl,
 }) => (
   <div className="studio-sidebar">
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: 'var(--paper-sunken)' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0 }}>
-            <input
-              type="checkbox"
-              id="check-all"
-              checked={allChecked}
-              onChange={(e) => onToggleSelectAll(e.target.checked)}
-            />
-            <span id="selected-count-label">
-              {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
-            </span>
-          </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+        <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--paper-sunken)' }}>
+          {/* 第 1 行：全选计数 + 数据源徽标与条数 */}
+          <div style={{ padding: '8px 14px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                id="check-all"
+                checked={allChecked}
+                onChange={(e) => onToggleSelectAll(e.target.checked)}
+              />
+              <span id="selected-count-label">
+                {checkedIds.size > 0 ? `已选 ${checkedIds.size} 篇` : '全选'}
+              </span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+              <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {dataSource === 'following' && '📡 关注流'}
+                {dataSource === 'recommended' && '✨ 推荐流'}
+                {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
+                {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
+                {dataSource === 'lists' && '📋 X 列表'}
+              </span>
+              <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)', flexShrink: 0 }}>
+                {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条`}
+              </span>
+            </div>
+          </div>
+          {/* 第 2 行：文章类型快捷筛选胶囊 + 排序切换 */}
+          <div style={{ padding: '0 14px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <div id="feed-type-filters" style={{ display: 'flex', alignItems: 'center', gap: '4px' }} role="group" aria-label="文章类型过滤">
+              {CONTENT_TYPE_OPTIONS.map((opt) => {
+                const isActive = contentTypeFilter === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    id={`chip-type-${opt.value}`}
+                    type="button"
+                    aria-pressed={isActive}
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      lineHeight: '1.4',
+                      borderRadius: '999px',
+                      border: `1px solid ${isActive ? 'var(--ink)' : 'var(--line)'}`,
+                      background: isActive ? 'var(--ink)' : 'var(--paper)',
+                      color: isActive ? 'var(--paper)' : 'var(--ink-soft)',
+                      fontWeight: isActive ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={() => onContentTypeFilterChange(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
             <select
               id="feed-sort-select"
               aria-label="排序方式"
@@ -79,6 +134,7 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
                 color: 'var(--ink-soft)',
                 cursor: 'pointer',
                 outline: 'none',
+                flexShrink: 0,
               }}
             >
               <option value="created_at">最新发布</option>
@@ -86,16 +142,6 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
               <option value="likes">点赞最多</option>
               <option value="views">浏览最多</option>
             </select>
-            <span id="feed-source-badge" style={{ fontSize: '11px', padding: '2px 6px', background: 'var(--paper)', borderRadius: '4px', border: '1px solid var(--line)', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {dataSource === 'following' && '📡 关注流'}
-              {dataSource === 'recommended' && '✨ 推荐流'}
-              {dataSource === 'search' && (searchQuery.trim() ? `🔍 搜: ${searchQuery.trim()}` : '🔍 全库推文')}
-              {dataSource === 'user' && (userHandle.trim() ? `👤 @${userHandle.trim().replace(/^@/, '')}` : '👤 全部博主')}
-              {dataSource === 'lists' && '📋 X 列表'}
-            </span>
-            <span id="feed-header-total" style={{ fontSize: '12px', color: 'var(--ink-faint)', flexShrink: 0 }}>
-              {streamFilter ? `${filteredTweets.length} / ${tweets.length} 条` : `${tweets.length} 条`}
-            </span>
           </div>
         </div>
 
@@ -237,28 +283,48 @@ export const TweetListPane: React.FC<TweetListPaneProps> = ({
           {filteredTweets.length === 0 && !isLoading && (
             <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--ink-soft)' }}>
               <div style={{ fontSize: '28px', marginBottom: '10px' }}>📭</div>
-              <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
-                {dataSource === 'user' && (userHandle.trim() ? `本地数据库暂无 @${userHandle.trim().replace(/^@/, '')} 的推文` : '请输入博主用户名查看其推文')}
-                {dataSource === 'search' && (searchQuery.trim() ? `本地数据库暂无与「${searchQuery.trim()}」相关的推文` : '本地数据库暂无推文')}
-                {dataSource === 'following' && '本地暂无关注流推文'}
-                {dataSource === 'recommended' && '本地暂无推荐流推文'}
-                {dataSource === 'lists' && '本地暂无该列表推文'}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
-                {dataSource === 'user' && (userHandle.trim() ? '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库' : '在上方输入框中输入博主用户名（如 @username），可检索本地或抓取线上最新推文')}
-                {dataSource === 'search' && (searchQuery.trim() ? '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库' : '在上方输入关键词检索本地推文，或输入后点击「搜索抓取」从 X 官方全网获取')}
-                {dataSource === 'following' && '点击右上角「抓取最新」，一键拉取关注流最新推文'}
-                {dataSource === 'recommended' && '点击右上角「抓取最新」，一键拉取推荐流 (For You) 最新推文'}
-                {dataSource === 'lists' && '点击右上角「抓取最新」，从指定列表拉取最新推文'}
-              </div>
-              {(dataSource === 'following' || dataSource === 'recommended' || dataSource === 'lists' || (dataSource === 'search' && searchQuery.trim()) || (dataSource === 'user' && userHandle.trim())) && (
-                <button
-                  className="cta-button"
-                  style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
-                  onClick={() => onCrawl(dataSource)}
-                >
-                  <span>立即从 X 抓取 ⚡</span>
-                </button>
+              {contentTypeFilter !== 'all' ? (
+                <>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                    当前筛选下暂无「{CONTENT_TYPE_OPTIONS.find((o) => o.value === contentTypeFilter)?.fullLabel}」
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
+                    可切换回「全部」查看该数据源下的其他内容类型
+                  </div>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
+                    onClick={() => onContentTypeFilterChange('all')}
+                  >
+                    <span>显示全部类型</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                    {dataSource === 'user' && (userHandle.trim() ? `本地数据库暂无 @${userHandle.trim().replace(/^@/, '')} 的推文` : '请输入博主用户名查看其推文')}
+                    {dataSource === 'search' && (searchQuery.trim() ? `本地数据库暂无与「${searchQuery.trim()}」相关的推文` : '本地数据库暂无推文')}
+                    {dataSource === 'following' && '本地暂无关注流推文'}
+                    {dataSource === 'recommended' && '本地暂无推荐流推文'}
+                    {dataSource === 'lists' && '本地暂无该列表推文'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--ink-faint)', marginBottom: '14px', lineHeight: '1.5' }}>
+                    {dataSource === 'user' && (userHandle.trim() ? '点击右上角「抓取推文」，一键从 X 实时抓取该博主主页最新内容落库' : '在上方输入框中输入博主用户名（如 @username），可检索本地或抓取线上最新推文')}
+                    {dataSource === 'search' && (searchQuery.trim() ? '点击右上角「搜索抓取」，从 X 官方全网检索最新推文并入库' : '在上方输入关键词检索本地推文，或输入后点击「搜索抓取」从 X 官方全网获取')}
+                    {dataSource === 'following' && '点击右上角「抓取最新」，一键拉取关注流最新推文'}
+                    {dataSource === 'recommended' && '点击右上角「抓取最新」，一键拉取推荐流 (For You) 最新推文'}
+                    {dataSource === 'lists' && '点击右上角「抓取最新」，从指定列表拉取最新推文'}
+                  </div>
+                  {(dataSource === 'following' || dataSource === 'recommended' || dataSource === 'lists' || (dataSource === 'search' && searchQuery.trim()) || (dataSource === 'user' && userHandle.trim())) && (
+                    <button
+                      className="cta-button"
+                      style={{ fontSize: '12px', padding: '6px 14px', margin: '0 auto' }}
+                      onClick={() => onCrawl(dataSource)}
+                    >
+                      <span>立即从 X 抓取 ⚡</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

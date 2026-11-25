@@ -20,14 +20,14 @@ interface StudioViewProps {
 export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery, jumpAction }) => {
   const {
     dataSource, crawlLimit, crawlProgress, customListId, isLoading, isSyncingLists,
-    minLikes, sortBy, openMenu, searchQuery, selectedList, streamFilter, totalDbCount, userHandle, userLists,
+    minLikes, sortBy, contentTypeFilter, openMenu, searchQuery, selectedList, streamFilter, totalDbCount, userHandle, userLists,
     tweets, filteredTweets, selectedTweet, exportPath, isDetailLoading, checkedIds, allChecked,
     deleteConfirmOpen, batchDeleteConfirmOpen, previewImage, setPreviewImage, toastMessage,
     showToast, handleSyncOnlineLists, loadLocalTweets, handleSwitchDataSource, handleCrawl,
     handleSearchChange, handleUserChange, handleStreamFilterChange, handleSelectTweet,
     handleLoadMore, toggleCheck, handleToggleSelectAll, handleDeleteSingle, handleBatchDelete,
     handleBatchExport, handleRevealInFinder, handleOpenInX, handleForceRefreshTweet,
-    setCrawlLimit, setMinLikes, handleSortByChange, setOpenMenu, setSelectedList, setCustomListId,
+    setCrawlLimit, setMinLikes, handleSortByChange, handleContentTypeFilterChange, setOpenMenu, setSelectedList, setCustomListId,
     setDeleteConfirmOpen, setBatchDeleteConfirmOpen, setCheckedIds,
   } = useStudioData({ initialSearchQuery, jumpAction });
 
@@ -101,9 +101,11 @@ export const StudioView: React.FC<StudioViewProps> = ({ initialSearchQuery, jump
           searchQuery={searchQuery}
           userHandle={userHandle}
           sortBy={sortBy}
+          contentTypeFilter={contentTypeFilter}
           isLoading={isLoading}
           crawlProgress={crawlProgress}
           onSortByChange={handleSortByChange}
+          onContentTypeFilterChange={handleContentTypeFilterChange}
           onSelectTweet={handleSelectTweet}
           onToggleCheck={toggleCheck}
           onToggleSelectAll={handleToggleSelectAll}

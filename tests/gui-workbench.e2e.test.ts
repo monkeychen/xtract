@@ -216,6 +216,15 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           if (opts?.minLikes) {
             result = result.filter((t) => t.like_count >= opts.minLikes);
           }
+          if (opts?.contentType && opts.contentType !== 'all') {
+            result = result.filter((t: any) => {
+              const isArt = Boolean(t.is_article || (t.text && t.text.startsWith('# ')));
+              const isNote = !isArt && Boolean(t.is_note_tweet || (t.text && t.text.length > 280));
+              if (opts.contentType === 'article') return isArt;
+              if (opts.contentType === 'note') return isNote;
+              return !isArt && !isNote;
+            });
+          }
           if (opts?.sortBy === 'likes') {
             result.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
           } else if (opts?.sortBy === 'views') {
@@ -250,6 +259,15 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
           }
           if (opts?.minLikes) {
             result = result.filter((t) => t.like_count >= opts.minLikes);
+          }
+          if (opts?.contentType && opts.contentType !== 'all') {
+            result = result.filter((t: any) => {
+              const isArt = Boolean(t.is_article || (t.text && t.text.startsWith('# ')));
+              const isNote = !isArt && Boolean(t.is_note_tweet || (t.text && t.text.length > 280));
+              if (opts.contentType === 'article') return isArt;
+              if (opts.contentType === 'note') return isNote;
+              return !isArt && !isNote;
+            });
           }
           return result.length;
         },
@@ -1254,5 +1272,34 @@ describe('GUI Workbench E2E Automated Tests (Real IPC & Zero-Mock Contract)', ()
     // Switch back to following tab for clean state
     await page.locator('#chip-source-following').click();
     await page.waitForTimeout(200);
+  });
+
+  it('Flow 24: Tweet List Content Type Filter pills (all / article / note / short)', async () => {
+    const typeGroup = page.locator('#feed-type-filters');
+    await expect(typeGroup.isVisible()).resolves.toBe(true);
+
+    // Filter by article -> IPC receives contentType: 'article' and persists in localStorage
+    await page.locator('#chip-type-article').click();
+    await page.waitForTimeout(300);
+    const listCallsArticle = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
+    expect(listCallsArticle[listCallsArticle.length - 1]?.contentType).toBe('article');
+    expect(await page.evaluate(() => window.localStorage.getItem('xtract:studio:contentType'))).toBe('article');
+
+    // Only articles remain in the list
+    const articleCount = await page.locator('#feed-list-container .feed-item').count();
+    expect(articleCount).toBeGreaterThanOrEqual(1);
+    const firstArticleText = await page.locator('#feed-list-container .feed-item').first().textContent();
+    expect(firstArticleText).toContain('专栏文章');
+
+    // Filter by short -> IPC receives contentType: 'short'
+    await page.locator('#chip-type-short').click();
+    await page.waitForTimeout(300);
+    const listCallsShort = await page.evaluate(() => (window as any).__recordedCalls.listCalls);
+    expect(listCallsShort[listCallsShort.length - 1]?.contentType).toBe('short');
+
+    // Restore 'all'
+    await page.locator('#chip-type-all').click();
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.localStorage.getItem('xtract:studio:contentType'))).toBe('all');
   });
 });

@@ -1,6 +1,7 @@
 import type {
   Tweet,
   TweetContentType,
+  TweetContentTypeFilter,
   TweetVideoItem,
   LocalVideoStatus,
   VideoDownloadResult,
@@ -16,6 +17,7 @@ import type { StreamEvent, AppConfigView, XtractAPI } from '../../preload/index'
 export type {
   Tweet,
   TweetContentType,
+  TweetContentTypeFilter,
   TweetVideoItem,
   LocalVideoStatus,
   VideoDownloadResult,

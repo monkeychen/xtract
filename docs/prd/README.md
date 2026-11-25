@@ -47,8 +47,8 @@
 
 | 指标 | 数值 |
 | :--- | :--- |
-| 自动化测试 | 371 项单元 / 集成 / E2E，0 Failed |
-| 端到端流程 | 23 条 Playwright 流程（真实浏览器） |
+| 自动化测试 | 373 项单元 / 集成 / E2E，0 Failed |
+| 端到端流程 | 24 条 Playwright 流程（真实浏览器） |
 | 静态类型 | 0 Error |
 | 代码规范 | ESLint 0 Error |
 | 生产构建 | 0 Error / 0 Warning |

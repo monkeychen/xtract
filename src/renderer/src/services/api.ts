@@ -1,6 +1,7 @@
 import type { StreamEvent, AppConfigView, XListInfo, LocalVideoStatus, VideoDownloadResult } from '../types';
 import type { Tweet, TrendTopic, DeleteFilter, DeleteResult, TweetQueryOptions } from '../types';
 import { MOCK_REPORTS, MOCK_TRENDS, MOCK_TWEETS } from '../types';
+import { classifyTweet } from '../views/studio/logic';
 
 class ApiService {
   private hasNativeApi(): boolean {
@@ -220,6 +221,14 @@ class ApiService {
     if (options.minLikes) {
       result = result.filter((t) => t.like_count >= (options.minLikes || 0));
     }
+    if (options.contentType && options.contentType !== 'all') {
+      result = result.filter((t) => {
+        const { isArticle, isLong } = classifyTweet(t);
+        if (options.contentType === 'article') return isArticle;
+        if (options.contentType === 'note') return !isArticle && isLong;
+        return !isArticle && !isLong;
+      });
+    }
     if (options.query) {
       const q = options.query.toLowerCase().trim();
       result = result.filter(
@@ -269,6 +278,14 @@ class ApiService {
     }
     if (options.minLikes) {
       result = result.filter((t) => t.like_count >= (options.minLikes || 0));
+    }
+    if (options.contentType && options.contentType !== 'all') {
+      result = result.filter((t) => {
+        const { isArticle, isLong } = classifyTweet(t);
+        if (options.contentType === 'article') return isArticle;
+        if (options.contentType === 'note') return !isArticle && isLong;
+        return !isArticle && !isLong;
+      });
     }
     if (options.query) {
       const q = options.query.toLowerCase().trim();

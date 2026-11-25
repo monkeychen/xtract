@@ -568,7 +568,20 @@ export class Storage {
       }
     }
 
-    // 3. 关键词全文模糊检索：智能命中推文 ID、URL 提取 ID、正文、作者名或 Handle
+    // 3. 按内容类型互斥筛选（优先级：article > note > short，并排除历史脏数据中纯 RT 转发壳）
+    if (options.contentType && options.contentType !== 'all') {
+      const isArticleSql = `(is_article = 1 AND NOT ((is_retweet = 1 OR text LIKE 'RT @%') AND text NOT LIKE '# %'))`;
+      const isNoteSql = `(is_note_tweet = 1 OR length(text) > 280)`;
+      if (options.contentType === 'article') {
+        whereClauses.push(isArticleSql);
+      } else if (options.contentType === 'note') {
+        whereClauses.push(`(NOT ${isArticleSql} AND ${isNoteSql})`);
+      } else if (options.contentType === 'short') {
+        whereClauses.push(`(NOT ${isArticleSql} AND NOT ${isNoteSql})`);
+      }
+    }
+
+    // 4. 关键词全文模糊检索：智能命中推文 ID、URL 提取 ID、正文、作者名或 Handle
     if (options.query && options.query.trim()) {
       const raw = options.query.trim();
       const matchTweetId = raw.match(/status\/(\d{5,})/) || raw.match(/^(\d{5,})$/);

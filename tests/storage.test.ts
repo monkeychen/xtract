@@ -896,6 +896,60 @@ describe('Storage Module', () => {
     expect(folList.map((t) => t.tweet_id)).toEqual(['fol_1']);
     expect(storage.countTweets({ sourceType: 'following' })).toBe(1);
   });
+
+  it('test_query_and_count_tweets_filter_by_content_type_mutually_exclusively', () => {
+    storage.saveTweets(
+      [
+        {
+          tweet_id: 'ct_article',
+          author_username: 'a1',
+          text: '# Deep Dive X Article\nFull body text here.',
+          created_at: '2026-10-03T10:00:00.000Z',
+          is_article: true,
+          like_count: 500,
+        },
+        {
+          tweet_id: 'ct_note',
+          author_username: 'a2',
+          text: '长推文内容 '.repeat(70),
+          created_at: '2026-10-03T09:00:00.000Z',
+          is_note_tweet: true,
+          like_count: 200,
+        },
+        {
+          tweet_id: 'ct_short',
+          author_username: 'a3',
+          text: '一条普通短推文',
+          created_at: '2026-10-03T08:00:00.000Z',
+          like_count: 50,
+        },
+        {
+          tweet_id: 'ct_rt_shell',
+          author_username: 'a4',
+          text: 'RT @a1: 转发了专栏 https://x.com/i/article/999999',
+          created_at: '2026-10-03T07:00:00.000Z',
+          is_retweet: true,
+          is_article: true, // 模拟历史脏数据，不应被归入 article
+          like_count: 10,
+        },
+      ],
+      'following'
+    );
+
+    expect(storage.queryTweets({ contentType: 'article' }).map((t) => t.tweet_id)).toEqual(['ct_article']);
+    expect(storage.countTweets({ contentType: 'article' })).toBe(1);
+
+    expect(storage.queryTweets({ contentType: 'note' }).map((t) => t.tweet_id)).toEqual(['ct_note']);
+    expect(storage.countTweets({ contentType: 'note' })).toBe(1);
+
+    expect(storage.queryTweets({ contentType: 'short' }).map((t) => t.tweet_id)).toEqual([
+      'ct_short',
+      'ct_rt_shell',
+    ]);
+    expect(storage.countTweets({ contentType: 'short' })).toBe(2);
+
+    expect(storage.countTweets({ contentType: 'all' })).toBe(4);
+  });
 });
 
 
