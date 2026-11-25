@@ -130,29 +130,45 @@ describe('Preload & IPC Communication Bridge', () => {
   });
 
   it('Preload getConfig should invoke CONFIG_GET channel', async () => {
-    registerIpcHandlers();
+    const origContentTypes = process.env.FETCH_CONTENT_TYPES;
+    const origOnlyLong = process.env.ONLY_LONG_TWEETS;
+    const origAuthorReplies = process.env.FETCH_AUTHOR_REPLIES;
+    delete process.env.FETCH_CONTENT_TYPES;
+    delete process.env.ONLY_LONG_TWEETS;
+    delete process.env.FETCH_AUTHOR_REPLIES;
 
-    const config = await xtractApiImplementation.getConfig();
-    expect(config).toBeDefined();
-    expect(typeof config.llmProvider).toBe('string');
-    expect(typeof config.hasXCredentials).toBe('boolean');
-    expect(typeof config.reasoningEnabled).toBe('boolean');
-    expect(typeof config.fetchAuthorReplies).toBe('boolean');
-    expect(config.fetchAuthorReplies).toBe(false);
-    expect(config.fetchContentTypes).toEqual(['article']);
-    expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
-    expect(typeof config.storageRoot).toBe('string');
-    expect(typeof config.dataDir).toBe('string');
-    expect(typeof config.articlesDir).toBe('string');
-    expect(typeof config.reportsDir).toBe('string');
-    expect(typeof config.configEnvPath).toBe('string');
-    expect(typeof config.appVersion).toBe('string');
-    expect(config.appVersion).toBe('0.1.3');
-    // 子目录由 path.join 生成，Windows 上是反斜杠——断言必须用同源构造而非字面斜杠模板串
-    expect(config.dataDir).toBe(path.join(config.storageRoot, 'data'));
-    expect(config.articlesDir).toBe(path.join(config.storageRoot, 'articles'));
-    expect(config.reportsDir).toBe(path.join(config.storageRoot, 'reports'));
-    expect(config.configEnvPath).toBe(path.join(config.storageRoot, 'config.env'));
+    try {
+      registerIpcHandlers();
+
+      const config = await xtractApiImplementation.getConfig();
+      expect(config).toBeDefined();
+      expect(typeof config.llmProvider).toBe('string');
+      expect(typeof config.hasXCredentials).toBe('boolean');
+      expect(typeof config.reasoningEnabled).toBe('boolean');
+      expect(typeof config.fetchAuthorReplies).toBe('boolean');
+      expect(config.fetchAuthorReplies).toBe(false);
+      expect(config.fetchContentTypes).toEqual(['article']);
+      expect(['low', 'medium', 'high']).toContain(config.reasoningEffort);
+      expect(typeof config.storageRoot).toBe('string');
+      expect(typeof config.dataDir).toBe('string');
+      expect(typeof config.articlesDir).toBe('string');
+      expect(typeof config.reportsDir).toBe('string');
+      expect(typeof config.configEnvPath).toBe('string');
+      expect(typeof config.appVersion).toBe('string');
+      expect(config.appVersion).toBe('0.1.4');
+      // 子目录由 path.join 生成，Windows 上是反斜杠——断言必须用同源构造而非字面斜杠模板串
+      expect(config.dataDir).toBe(path.join(config.storageRoot, 'data'));
+      expect(config.articlesDir).toBe(path.join(config.storageRoot, 'articles'));
+      expect(config.reportsDir).toBe(path.join(config.storageRoot, 'reports'));
+      expect(config.configEnvPath).toBe(path.join(config.storageRoot, 'config.env'));
+    } finally {
+      if (origContentTypes === undefined) delete process.env.FETCH_CONTENT_TYPES;
+      else process.env.FETCH_CONTENT_TYPES = origContentTypes;
+      if (origOnlyLong === undefined) delete process.env.ONLY_LONG_TWEETS;
+      else process.env.ONLY_LONG_TWEETS = origOnlyLong;
+      if (origAuthorReplies === undefined) delete process.env.FETCH_AUTHOR_REPLIES;
+      else process.env.FETCH_AUTHOR_REPLIES = origAuthorReplies;
+    }
   });
 
   it('Preload updateConfig should update reasoning, fetchAuthorReplies and storageRoot settings', async () => {
@@ -219,7 +235,7 @@ describe('Preload & IPC Communication Bridge', () => {
     expect(res).toBe('/Users/test/SelectedDirectory');
   });
 
-  it('CONFIG_GET 必须在开发态屏蔽 Electron 内核版本，永远返回业务版本 0.1.3', async () => {
+  it('CONFIG_GET 必须在开发态屏蔽 Electron 内核版本，永远返回业务版本 0.1.4', async () => {
     const electron = await import('electron');
     // 模拟开发态：未打包，app.getVersion() 返回 Electron 引擎版本
     (electron.app as any).isPackaged = false;
@@ -229,18 +245,18 @@ describe('Preload & IPC Communication Bridge', () => {
     registerIpcHandlers(undefined, { force: true });
 
     const config = await xtractApiImplementation.getConfig();
-    expect(config.appVersion).toBe('0.1.3');
+    expect(config.appVersion).toBe('0.1.4');
     expect(config.appVersion).not.toBe('42.11.8');
 
     // 模拟打包态：已打包，app.getVersion() 返回打包应用版本
     (electron.app as any).isPackaged = true;
-    (electron.app as any).getVersion = vi.fn(() => '0.1.3-packaged');
+    (electron.app as any).getVersion = vi.fn(() => '0.1.4-packaged');
 
     _resetRegisteredForTest();
     registerIpcHandlers(undefined, { force: true });
 
     const packagedConfig = await xtractApiImplementation.getConfig();
-    expect(packagedConfig.appVersion).toBe('0.1.3-packaged');
+    expect(packagedConfig.appVersion).toBe('0.1.4-packaged');
   });
 
   it('UT-7: IPC VIDEO_STATUS, VIDEO_DOWNLOAD, VIDEO_DOWNLOAD_CANCEL and AUTO_DOWNLOAD_VIDEOS config', async () => {

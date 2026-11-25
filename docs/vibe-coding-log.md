@@ -24,6 +24,7 @@
   - [坑 18：X Article 专栏内嵌推文卡片与分割线实体静默丢弃](#坑-18x-article-专栏内嵌推文卡片与分割线实体静默丢弃)
   - [坑 19：Node 24 全局 fetch 与项目依赖 undici v8 ProxyAgent 版本冲突](#坑-19node-24-全局-fetch-与项目依赖-undici-v8-proxyagent-版本冲突)
   - [坑 20：X 新版前端 x-web 切换 TanStack Router SSR 导致单篇 X Article 抓不到正文](#坑-20x-新版前端-x-web-切换-tanstack-router-ssr-导致单篇-x-article-抓不到正文)
+  - [坑 21：x-web 全站拒绝 HeadlessChrome (HTTP 403) 与时间线字段全面改版](#坑-21x-web-全站拒绝-headlesschrome-http-403-与时间线字段全面改版)
 - [四、多大模型与双轨计费认证的最佳实践](#四多大模型与双轨计费认证的最佳实践)
 - [五、交互设计与 Vibe Coding 哲学反思](#五交互设计与-vibe-coding-哲学反思)
 
@@ -285,6 +286,17 @@ flowchart TD
   1. 在 [`parser.ts`](file:///Users/chenzhian/workspace/ai/xtract/src/main/client/parser.ts) 新增 `extractSsrTweetPayloadsFromHtml` 与 `mergeRawTweetPayload`，解码 `$_TSR` 内联载荷（含 `\x3C` 转义）并按 `rest_id` 合并多段分片；`formatArticleContent` 与 `parseTweetResult` 全面双兼容新旧键名及 `MARKDOWN` / `ApiVideo(bit_rate)` / `media_entities2`；
   2. 在 [`XClient.fetchTweetThread`](file:///Users/chenzhian/workspace/ai/xtract/src/main/client/index.ts) 同时监听 HTML SSR 响应与 GraphQL 响应；遇无头 403 时显式提示并自动回退至可见 Chrome 窗口完成抓取。
 - **教训**：大厂前端架构迁移（CSR GraphQL → SSR Streaming Hydration）会让纯 XHR 拦截静默归零；单推抓取必须「HTML SSR + GraphQL 网络流」双通道兜底，并始终对真实线上链接做结构探针。
+
+### 坑 21：x-web 全站拒绝 HeadlessChrome (HTTP 403) 与时间线字段全面改版
+- **现象**：
+  1. `v0.1.3` 为单推同步加了「遇 403 切可见 Chrome 窗口」的临时兜底，导致桌面端点击同步 X Article 频繁弹窗；
+  2. 更严重的是关注流、X 列表、博主追踪、搜索全部共用 `launchBrowser(true)`，均直接报 `ERR_HTTP_RESPONSE_CODE_FAILURE`（HTTP 403）；而 `pnpm test` 离线 mock 测试全绿未能拦住；
+  3. 即便页面返回 200，新版 `x-web` 时间线载荷的 `instruction.type` 改为 `__typename`、`entryId` 改为 `entry_id`、`content.itemContent` 改为 `content.content`，且列表/博主/搜索首屏改为 SSR HTML 分片直出（`list_by_rest_id_v2` 拆成 4 段分片），旧解析器产出 0 条。
+- **解法**：
+  1. **单推 / X Article 同步**：改为纯 Node.js `undici.fetch` 直取 SSR HTML（`fetchTweetThreadViaHttpSsr`），0.7–1.2 秒直接拿到全文与内嵌推文，彻底删除可见 Chrome 弹窗；
+  2. **四维时间线与热搜**：新增 [`hidden-browser.ts`](file:///Users/chenzhian/workspace/ai/xtract/src/main/client/hidden-browser.ts)，在 Electron 运行时直接复用应用自带的隐藏窗口 `BrowserWindow({ show: false })` + CDP `webContents.debugger` 拦截网络流（零弹窗、零外部 Chrome 进程、原生正常浏览器环境）；
+  3. **解析层全量兼容**：`parseTimelineInstructions` 与 `extractTimelineInstructions` 兼容新旧两套时间线字段及 SSR HTML 首屏多片合并。
+- **教训**：遇到外部平台协议级变更（如全站拒收 `HeadlessChrome`），**必须立刻排查所有共用同一抓取通道的入口并逐条跑真机冒烟**，绝不能只修单点并依赖离线 mock 测试全绿就发版。
 
 ---
 

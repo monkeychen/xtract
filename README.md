@@ -1,6 +1,6 @@
 # 🗞️ Xtract - X (Twitter) Intelligence Radar & AI Digest
 
-[![Version](https://img.shields.io/badge/version-0.1.3-informational.svg)](docs/prd/v0.1.3.md)
+[![Version](https://img.shields.io/badge/version-0.1.4-informational.svg)](docs/prd/README.md)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
