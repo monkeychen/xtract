@@ -1,7 +1,7 @@
 ---
 doc_type: release
 version: v0.1.4
-status: draft
+status: approved
 date: 2026-11-25
 ---
 
